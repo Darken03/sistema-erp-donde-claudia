@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket #{{ venta.numero_venta }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 300px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        .text-center { text-align: center; }
+        .text-bold { font-weight: bold; }
+        .divider {
+            border-top: 1px dashed #000;
+            margin: 8px 0;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        table th, table td { padding: 3px 0; }
+        table th { text-align: left; }
+        .item-name { font-size: 11px; }
+        .total-section {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        @media print {
+            body { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="text-center">
+        <h3>BizMaster</h3>
+        <p>Ticket de Venta</p>
+    </div>
+    <div class="divider"></div>
+    <p><strong>Venta:</strong> {{ venta.numero_venta }}</p>
+    <p><strong>Fecha:</strong> {{ venta.fecha_venta|date:"d/m/Y H:i" }}</p>
+    <p><strong>Cajero:</strong> {{ venta.cajero.get_full_name|default:venta.cajero.username }}</p>
+    <p><strong>Pago:</strong> {{ venta.get_metodo_pago_display }}</p>
+    {% if venta.metodo_pago == 'mixto' %}
+    <p style="font-size:11px;">  Efectivo: ${{ venta.monto_recibido|floatformat:0 }}</p>
+    <p style="font-size:11px;">  Transferencia: ${{ venta.monto_transferencia|floatformat:0 }}</p>
+    {% endif %}
+    <div class="divider"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Cant</th>
+                <th>Precio</th>
+                <th style="text-align:right">Subt.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in detalles %}
+            <tr>
+                <td class="item-name" colspan="4">{{ d.producto.nombre }}{% if d.presentacion %} ({{ d.presentacion.nombre }}){% endif %}</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td>{{ d.cantidad|floatformat:"-3" }}</td>
+                <td>${{ d.precio_unitario|floatformat:0 }}</td>
+                <td style="text-align:right">${{ d.subtotal|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="divider"></div>
+    <table>
+        <tr class="total-section">
+            <td>TOTAL:</td>
+            <td style="text-align:right">${{ venta.total|floatformat:0 }}</td>
+        </tr>
+        {% if venta.metodo_pago == 'efectivo' %}
+        <tr>
+            <td>Efectivo:</td>
+            <td style="text-align:right">${{ venta.monto_recibido|floatformat:0 }}</td>
+        </tr>
+        <tr>
+            <td>Cambio:</td>
+            <td style="text-align:right">${{ venta.cambio|floatformat:0 }}</td>
+        </tr>
+        {% elif venta.metodo_pago == 'transferencia' %}
+        <tr>
+            <td>Transferencia:</td>
+            <td style="text-align:right">${{ venta.monto_transferencia|floatformat:0 }}</td>
+        </tr>
+        {% elif venta.metodo_pago == 'mixto' %}
+        <tr>
+            <td>Efectivo:</td>
+            <td style="text-align:right">${{ venta.monto_recibido|floatformat:0 }}</td>
+        </tr>
+        <tr>
+            <td>Transferencia:</td>
+            <td style="text-align:right">${{ venta.monto_transferencia|floatformat:0 }}</td>
+        </tr>
+        <tr>
+            <td>Cambio:</td>
+            <td style="text-align:right">${{ venta.cambio|floatformat:0 }}</td>
+        </tr>
+        {% endif %}
+    </table>
+    <div class="divider"></div>
+    <div class="text-center">
+        <p>Gracias por su compra!</p>
+    </div>
+    <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>

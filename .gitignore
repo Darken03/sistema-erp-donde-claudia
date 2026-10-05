@@ -1,0 +1,19 @@
+# Entorno
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Respaldos y paquetes
+*.backup
+*.backup_*
+*.zip
+
+# Archivos generados por collectstatic
+staticfiles/
+
+# Sistema / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

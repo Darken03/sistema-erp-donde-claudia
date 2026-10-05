@@ -1,0 +1,30 @@
+{# Foto del esperado por método: ventas del turno − gastos del turno #}
+<table class="table table-sm mb-0">
+    <tbody>
+        <tr>
+            <td>Ventas en efectivo <small class="text-muted">(recibido − vuelto)</small></td>
+            <td class="text-end mono">${{ resumen.ventas_efectivo|floatformat:2 }}</td>
+        </tr>
+        <tr>
+            <td>Gastos en efectivo</td>
+            <td class="text-end mono text-danger">−${{ resumen.gastos_efectivo|floatformat:2 }}</td>
+        </tr>
+        <tr class="fw-bold">
+            <td>Efectivo esperado <small class="text-muted">(+ fondo)</small></td>
+            <td class="text-end mono">${{ resumen.esperado_efectivo|floatformat:2 }} + fondo</td>
+        </tr>
+        <tr>
+            <td>Ventas por transferencia</td>
+            <td class="text-end mono">${{ resumen.ventas_transferencia|floatformat:2 }}</td>
+        </tr>
+        <tr>
+            <td>Gastos por transferencia</td>
+            <td class="text-end mono text-danger">−${{ resumen.gastos_transferencia|floatformat:2 }}</td>
+        </tr>
+        <tr class="fw-bold">
+            <td>Transferencia esperada</td>
+            <td class="text-end mono">${{ resumen.esperado_transferencia|floatformat:2 }}</td>
+        </tr>
+    </tbody>
+</table>
+<small class="text-muted">{{ resumen.num_ventas }} venta(s) en este turno · Total ${{ resumen.total_ventas|floatformat:2 }}</small>

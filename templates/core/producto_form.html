@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-box-seam me-2"></i>{{ titulo }}</h2>
+    <a href="{% if producto %}{% url 'core:producto_detalle' producto.pk %}{% else %}{% url 'core:producto_lista' %}{% endif %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<form method="post" enctype="multipart/form-data" autocomplete="off">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors.0 }}</div>
+    {% endif %}
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <!-- Información básica -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-card-text"></i></span>
+                        <div><h5>Información básica</h5><small>Identificación del producto</small></div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Código</label>
+                            {% if producto %}
+                                <input type="text" class="form-control mono" value="{{ producto.codigo }}" readonly>
+                            {% else %}
+                                <input type="text" class="form-control mono" value="Se genera solo" readonly disabled>
+                                <div class="form-text">Generado automáticamente</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Nombre *</label>
+                            {{ form.nombre }}
+                            {% if form.nombre.errors %}<div class="text-danger small mt-1">{{ form.nombre.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Descripción</label>
+                            {{ form.descripcion }}
+                            {% if form.descripcion.errors %}<div class="text-danger small mt-1">{{ form.descripcion.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Categoría</label>
+                            {{ form.categoria }}
+                            {% if form.categoria.errors %}<div class="text-danger small mt-1">{{ form.categoria.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Unidad de medida</label>
+                            {{ form.unidad_medida }}
+                            {% if form.unidad_medida.errors %}<div class="text-danger small mt-1">{{ form.unidad_medida.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Precios -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-tag"></i></span>
+                        <div><h5>Precios</h5><small>Compra, venta y margen</small></div>
+                        <span class="margen-pill ms-auto" id="margenPill">—</span>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Precio compra</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.precio_compra }}
+                            </div>
+                            {% if form.precio_compra.errors %}<div class="text-danger small mt-1">{{ form.precio_compra.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Precio venta</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.precio_venta }}
+                            </div>
+                            {% if form.precio_venta.errors %}<div class="text-danger small mt-1">{{ form.precio_venta.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Presentaciones de venta -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-basket"></i></span>
+                        <div><h5>Presentaciones de venta</h5><small>Precio manual por presentación · factor a unidad base</small></div>
+                    </div>
+                    <div class="alert alert-info py-2 small">
+                        Venda <strong>Cerdo</strong> por <strong>Libra / Media libra</strong> y
+                        <strong>Huevo</strong> por <strong>Unidad / Docena / Cartón 30 / Medio cartón</strong>.
+                        El stock siempre descuenta en unidad base (lb / und).
+                    </div>
+                    {{ formset.management_form }}
+                    {% if formset.non_form_errors %}<div class="alert alert-danger py-2 small">{{ formset.non_form_errors.0 }}</div>{% endif %}
+                    <div id="presRows" class="d-grid gap-2">
+                        {% for f in formset %}
+                        <div class="pres-row border rounded p-2" data-row>
+                            {% if f.instance.pk %}
+                                {# Borrado directo con la cruz ✕ (superior derecha). Sin checkbox visible. #}
+                                <button type="button" class="pres-del" data-del-url="{% url 'core:presentacion_eliminar' f.instance.pk %}" data-nombre="{{ f.instance.nombre }}" title="{% if f.tiene_venta_hoy %}No se puede borrar: tiene venta(s) hoy{% else %}Borrar {{ f.instance.nombre }}{% endif %}" {% if f.tiene_venta_hoy %}disabled{% endif %} aria-label="Borrar presentación">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                                {% if f.tiene_venta_hoy %}<span class="pres-lock badge">Con venta hoy · no borrable</span>{% endif %}
+                            {% else %}
+                                <button type="button" class="pres-del" data-new="1" title="Quitar fila" aria-label="Quitar fila">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            {% endif %}
+                            {% if f.instance.pk %}{{ f.id }}{% endif %}
+                            <div style="display:none;">{{ f.DELETE }}</div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small">Nombre *</label>
+                                    {{ f.nombre }}
+                                    {% if f.nombre.errors %}<div class="text-danger small">{{ f.nombre.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Factor *</label>
+                                    {{ f.factor }}
+                                    {% if f.factor.errors %}<div class="text-danger small">{{ f.factor.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Precio *</label>
+                                    {{ f.precio }}
+                                    {% if f.precio.errors %}<div class="text-danger small">{{ f.precio.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-2 d-flex flex-column justify-content-end gap-1">
+                                    <div class="form-check">
+                                        {{ f.es_default }} <label class="form-check-label small">Default</label>
+                                    </div>
+                                    <div class="form-check">
+                                        {{ f.activo }} <label class="form-check-label small">Activo</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="btnAddPres">
+                        <i class="bi bi-plus-lg me-1"></i> Agregar presentación
+                    </button>
+                    <div class="form-text">Factor: Libra=1, Media libra=0.5, Unidad=1, Docena=12, Cartón 30=30, Medio cartón=15. Precio siempre manual.</div>
+                </div>
+            </div>
+
+            <!-- Inventario -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-boxes"></i></span>
+                        <div><h5>Inventario</h5><small>{% if producto %}El stock solo cambia desde Ajustes{% else %}Stock con el que nace el producto{% endif %}</small></div>
+                    </div>
+                    <div class="row g-3">
+                        {% if producto %}
+                        <div class="col-md-6">
+                            <label class="form-label">Stock actual ({{ producto.get_unidad_medida_display }})</label>
+                            <div class="stock-box">
+                                <div><span class="stock-num">{{ producto.stock_fmt }}</span> <small class="text-muted">{{ producto.unidad_medida }}</small></div>
+                                <a href="{% url 'core:ajuste_inventario' %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-sliders me-1"></i>Ajustar
+                                </a>
+                            </div>
+                            <div class="form-text">Para modificarlo vaya al módulo de Ajustes.</div>
+                        </div>
+                        {% else %}
+                        <div class="col-md-6">
+                            <label class="form-label">Stock inicial (unidad base) *</label>
+                            {{ form.stock }}
+                            {% if form.stock.errors %}<div class="text-danger small mt-1">{{ form.stock.errors.0 }}</div>{% endif %}
+                            <div class="form-text">En lb para cerdo, en und para huevo. Admite 3 decimales.</div>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-6">
+                            <label class="form-label">Stock mínimo</label>
+                            {{ form.stock_minimo }}
+                            {% if form.stock_minimo.errors %}<div class="text-danger small mt-1">{{ form.stock_minimo.errors.0 }}</div>{% endif %}
+                            <div class="form-text">Avisa cuando el stock llegue aquí.</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-switch-box">
+                                <div class="form-check form-switch m-0">
+                                    {{ form.permite_decimal }}
+                                    <label class="form-check-label" for="{{ form.permite_decimal.id_for_label }}">Permite decimales (peso / fracciones, 3 decimales)</label>
+                                </div>
+                                <small class="text-muted">Actívelo para Cerdo (2.500 lb) y para Huevo si vende medio cartón (0.500).</small>
+                            </div>
+                            {% if form.permite_decimal.errors %}<div class="text-danger small mt-1">{{ form.permite_decimal.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Imagen -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-image"></i></span>
+                        <div><h5>Imagen</h5><small>Foto del producto</small></div>
+                    </div>
+                    {% if producto and producto.imagen_url %}
+                        <img id="imgPreview" src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" class="img-preview">
+                        <div id="imgPlaceholder" class="img-placeholder" style="display:none;">
+                            <i class="bi bi-image"></i><small>Sin imagen</small>
+                        </div>
+                    {% else %}
+                        <div id="imgPlaceholder" class="img-placeholder">
+                            <i class="bi bi-image"></i><small>Sin imagen</small>
+                        </div>
+                        <img id="imgPreview" src="" alt="" class="img-preview" style="display:none;">
+                    {% endif %}
+                    {# Input real oculto: es FileInput simple, ya no muestra URL ni checkbox "Borrar" #}
+                    <div style="display:none;">{{ form.imagen }}</div>
+                    {% if form.imagen.errors %}<div class="text-danger small mt-1">{{ form.imagen.errors.0 }}</div>{% endif %}
+                    <div class="d-grid gap-2 mt-2">
+                        <button type="button" class="btn btn-outline-primary" id="btnCambiarImg">
+                            <i class="bi bi-upload me-1"></i> <span id="btnCambiarTxt">{% if producto and producto.imagen_url %}Cambiar imagen{% else %}Subir imagen{% endif %}</span>
+                        </button>
+                        {% if producto and producto.imagen_url %}
+                        <button type="button" class="btn btn-outline-danger" id="btnEliminarImg">
+                            <i class="bi bi-trash me-1"></i> Eliminar imagen
+                        </button>
+                        {% endif %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnQuitarSel" style="display:none;">
+                            <i class="bi bi-x-circle me-1"></i> Quitar selección
+                        </button>
+                        <small class="text-muted text-center" id="fileName"></small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-toggle-on"></i></span>
+                        <div><h5>Estado</h5><small>Visibilidad en ventas</small></div>
+                    </div>
+                    <div class="form-switch-box">
+                        <div class="form-check form-switch m-0">
+                            {{ form.activo }}
+                            <label class="form-check-label" for="{{ form.activo.id_for_label }}">Producto activo</label>
+                        </div>
+                        <small class="text-muted">Si se desactiva, no aparece en el POS.</small>
+                    </div>
+                    {% if form.activo.errors %}<div class="text-danger small mt-1">{{ form.activo.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-3 d-flex gap-2 justify-content-end">
+            <a href="{% if producto %}{% url 'core:producto_detalle' producto.pk %}{% else %}{% url 'core:producto_lista' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-check-lg me-1"></i> Guardar
+            </button>
+        </div>
+    </div>
+</form>
+
+<style>
+.form-card-head { display:flex; align-items:center; gap:10px; margin-bottom:1rem; }
+.form-card-head .section-icon {
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background:var(--accent-tint); color:var(--accent);
+    display:inline-flex; align-items:center; justify-content:center; font-size:17px;
+}
+.form-card-head h5 { font-size:14px; font-weight:700; margin:0; color:var(--ink); }
+.form-card-head small { display:block; font-size:12px; color:var(--ink-3); font-weight:400; }
+.margen-pill {
+    font-family:var(--font-mono); font-size:12px; font-weight:700;
+    background:var(--soft); color:var(--ink-2);
+    border:1px solid var(--line); border-radius:99px; padding:4px 12px;
+}
+.margen-pill.up { background:var(--success-soft); color:var(--success-dark); border-color:transparent; }
+.margen-pill.down { background:var(--danger-soft); color:var(--danger-dark); border-color:transparent; }
+.input-group-text { background:var(--soft); border:1px solid var(--line); color:var(--ink-3); }
+.stock-box {
+    min-height:38px; border:1px solid var(--line); border-radius:8px;
+    padding:4px 4px 4px 12px; background:var(--soft);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.stock-num { font-family:var(--font-mono); font-size:18px; font-weight:700; color:var(--ink); }
+.form-switch-box {
+    min-height:38px; border:1px solid var(--line); border-radius:8px;
+    padding:8px 12px; background:var(--surface);
+    display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.form-switch-box .form-check-label { font-size:13px; font-weight:500; color:var(--ink); }
+.img-preview { width:100%; height:190px; object-fit:cover; border-radius:12px; border:1px solid var(--line); }
+.img-placeholder {
+    height:190px; border:1.5px dashed var(--line-strong); border-radius:12px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    color:var(--ink-3); background:var(--soft); font-size:12px;
+}
+.img-placeholder i { font-size:2rem; }
+.pres-row { position:relative; }
+.pres-del {
+    position:absolute; top:6px; right:6px; z-index:2;
+    width:26px; height:26px; border-radius:99px;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink-3);
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:13px; cursor:pointer; padding:0; line-height:1;
+}
+.pres-del:hover:not(:disabled) { background:var(--danger-soft); color:var(--danger-dark); border-color:#f3c2c2; }
+.pres-del:disabled { opacity:.45; cursor:not-allowed; }
+.pres-del.busy { opacity:.6; pointer-events:none; }
+.pres-lock {
+    position:absolute; top:8px; right:38px;
+    background:var(--warning, #fef3c7); color:#92400e;
+    font-size:10px; font-weight:700; border-radius:99px; padding:2px 8px;
+}
+html[data-theme="dark"] .pres-lock { background:rgba(245,158,11,.18); color:#fbbf24; }
+</style>
+
+<script>
+(function(){
+    var cInput = document.getElementById('{{ form.precio_compra.id_for_label }}');
+    var vInput = document.getElementById('{{ form.precio_venta.id_for_label }}');
+    var pill = document.getElementById('margenPill');
+    function margen(){
+        var c = parseFloat(cInput && cInput.value) || 0;
+        var v = parseFloat(vInput && vInput.value) || 0;
+        if (c > 0){
+            var pct = ((v - c) / c * 100);
+            pill.textContent = 'Margen ' + pct.toFixed(1) + '%';
+            pill.className = 'margen-pill ms-auto ' + (pct >= 0 ? 'up' : 'down');
+        } else {
+            pill.textContent = 'Margen —';
+            pill.className = 'margen-pill ms-auto';
+        }
+    }
+    if (cInput) cInput.addEventListener('input', margen);
+    if (vInput) vInput.addEventListener('input', margen);
+    margen();
+
+    var fileInput = document.querySelector('input[name="imagen"]');
+    var changeBtn = document.getElementById('btnCambiarImg');
+    var changeTxt = document.getElementById('btnCambiarTxt');
+    var quitBtn = document.getElementById('btnQuitarSel');
+    var nameEl = document.getElementById('fileName');
+    var img = document.getElementById('imgPreview');
+    var ph = document.getElementById('imgPlaceholder');
+    // Guarda la imagen original por si el usuario quita una selección nueva
+    var originalSrc = (img && img.src) ? img.src : '';
+    var hadImage = !!(img && img.getAttribute('src'));
+    if (changeBtn && fileInput){
+        changeBtn.addEventListener('click', function(){ fileInput.click(); });
+    }
+    function showPlaceholder(show){
+        if (img) img.style.display = show ? 'none' : '';
+        if (ph) ph.style.display = show ? '' : 'none';
+    }
+    if (fileInput){
+        fileInput.addEventListener('change', function(){
+            var f = this.files && this.files[0];
+            if (!f){
+                if (nameEl) nameEl.textContent = '';
+                if (quitBtn) quitBtn.style.display = 'none';
+                return;
+            }
+            if (nameEl) nameEl.textContent = f.name;
+            if (quitBtn) quitBtn.style.display = '';
+            var rd = new FileReader();
+            rd.onload = function(e){
+                if (!img || !ph) return;
+                img.src = e.target.result;
+                showPlaceholder(false);
+            };
+            rd.readAsDataURL(f);
+        });
+    }
+    if (quitBtn && fileInput){
+        quitBtn.addEventListener('click', function(){
+            fileInput.value = '';
+            if (nameEl) nameEl.textContent = '';
+            quitBtn.style.display = 'none';
+            if (hadImage && originalSrc){
+                if (img) img.src = originalSrc;
+                showPlaceholder(false);
+            } else {
+                if (img) img.removeAttribute('src');
+                showPlaceholder(true);
+            }
+        });
+    }
+    {% if producto %}
+    var delBtn = document.getElementById('btnEliminarImg');
+    if (delBtn){
+        delBtn.addEventListener('click', function(){
+            if (!confirm('¿Eliminar la imagen del producto?')) return;
+            var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+            delBtn.disabled = true;
+            delBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Eliminando...';
+            fetch('{% url "core:producto_imagen_eliminar" producto.pk %}', {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrf ? csrf.value : '', 'X-Requested-With': 'XMLHttpRequest'}
+            }).then(function(r){ return r.json().catch(function(){ return {ok: r.ok}; }); })
+            .then(function(data){
+                if (data && data.ok){
+                    // Borrado directo: actualiza la tarjeta sin recargar
+                    hadImage = false; originalSrc = '';
+                    if (fileInput) fileInput.value = '';
+                    if (nameEl) nameEl.textContent = '';
+                    if (quitBtn) quitBtn.style.display = 'none';
+                    if (img) img.removeAttribute('src');
+                    showPlaceholder(true);
+                    delBtn.remove();
+                    if (changeTxt) changeTxt.textContent = 'Subir imagen';
+                } else {
+                    delBtn.disabled = false;
+                    delBtn.innerHTML = '<i class="bi bi-trash me-1"></i> Eliminar imagen';
+                    alert('No se pudo eliminar la imagen.');
+                }
+            }).catch(function(){
+                delBtn.disabled = false;
+                delBtn.innerHTML = '<i class="bi bi-trash me-1"></i> Eliminar imagen';
+                alert('No se pudo eliminar la imagen.');
+            });
+        });
+    }
+    {% endif %}
+    // Presentaciones: clonar última fila vacía usando el management_form
+    var presBox = document.getElementById('presRows');
+    function presTotalInput(){ return document.querySelector('input[name$="-TOTAL_FORMS"]'); }
+    function presPrefix(){
+        var t = presTotalInput();
+        return t ? t.name.replace('-TOTAL_FORMS', '') : 'presentaciones';
+    }
+    function reindexPresRows(){
+        var t = presTotalInput();
+        if (!t || !presBox) return;
+        var prefix = presPrefix();
+        var rows = presBox.querySelectorAll('[data-row]');
+        rows.forEach(function(row, i){
+            row.querySelectorAll('input, select, textarea').forEach(function(el){
+                if (el.name) el.name = el.name.replace(new RegExp(prefix + '-\\d+'), prefix + '-' + i);
+                if (el.id) el.id = el.id.replace(/_\d+_/, '_' + i + '_');
+            });
+        });
+        t.value = rows.length;
+    }
+    function removePresRow(row){
+        row.remove();
+        reindexPresRows();
+    }
+    if (presBox){
+        presBox.addEventListener('click', function(ev){
+            var btn = ev.target.closest ? ev.target.closest('.pres-del') : null;
+            if (!btn || btn.disabled) return;
+            var row = btn.closest('[data-row]');
+            if (!row) return;
+            // Fila nueva sin guardar: quitar del DOM directamente
+            if (btn.hasAttribute('data-new')){
+                removePresRow(row);
+                return;
+            }
+            var url = btn.getAttribute('data-del-url');
+            var nombre = btn.getAttribute('data-nombre') || 'esta presentación';
+            if (!url){ removePresRow(row); return; }
+            if (!confirm('¿Borrar "' + nombre + '" directamente?')) return;
+            var csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+            btn.classList.add('busy');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            fetch(url, {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrf ? csrf.value : '', 'X-Requested-With': 'XMLHttpRequest'}
+            }).then(function(r){ return r.json().then(function(d){ return {st: r.status, d: d}; }); })
+            .then(function(res){
+                if (res.st === 200 && res.d && res.d.ok){
+                    removePresRow(row);
+                } else {
+                    btn.classList.remove('busy');
+                    btn.innerHTML = '<i class="bi bi-x-lg"></i>';
+                    alert((res.d && res.d.error) || 'No se pudo borrar la presentación.');
+                }
+            }).catch(function(){
+                btn.classList.remove('busy');
+                btn.innerHTML = '<i class="bi bi-x-lg"></i>';
+                alert('No se pudo borrar la presentación.');
+            });
+        });
+    }
+    var addPres = document.getElementById('btnAddPres');
+    if (addPres){
+        addPres.addEventListener('click', function(){
+            var totalInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
+            if (!totalInput) return;
+            var prefix = totalInput.name.replace('-TOTAL_FORMS', '');
+            var idx = parseInt(totalInput.value, 10);
+            var rows = document.querySelectorAll('#presRows [data-row]');
+            if (!rows.length) return;
+            var last = rows[rows.length - 1];
+            var clone = last.cloneNode(true);
+            clone.querySelectorAll('input, select, textarea').forEach(function(el){
+                if (el.name) el.name = el.name.replace(prefix + '-' + (idx - 1), prefix + '-' + idx);
+                if (el.id) el.id = el.id.replace('_' + (idx - 1) + '_', '_' + idx + '_');
+                if (el.type === 'checkbox') el.checked = false;
+                else el.value = '';
+                // El clon es una fila NUEVA: sin id persistido
+                if (el.name && /-id$/.test(el.name)) el.value = '';
+            });
+            // La fila clonada siempre es nueva: cruz que solo quita la fila
+            var lock = clone.querySelector('.pres-lock');
+            if (lock) lock.remove();
+            var xbtn = clone.querySelector('.pres-del');
+            if (xbtn){
+                xbtn.removeAttribute('data-del-url');
+                xbtn.removeAttribute('data-nombre');
+                xbtn.removeAttribute('disabled');
+                xbtn.setAttribute('data-new', '1');
+                xbtn.setAttribute('title', 'Quitar fila');
+                xbtn.classList.remove('busy');
+                xbtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+            }
+            document.getElementById('presRows').appendChild(clone);
+            totalInput.value = idx + 1;
+        });
+    }
+})();
+</script>
+{% endblock %}

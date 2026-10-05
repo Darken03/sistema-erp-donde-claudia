@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Eliminar Deudor - BizMaster{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Eliminar Deudor</h2>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 text-center">
+                <p class="lead">¿Está seguro que desea eliminar al siguiente deudor?</p>
+                <p><strong>Deudor:</strong> {{ deudor.nombre_completo }}</p>
+                <p><strong>CI:</strong> {{ deudor.ci|default:'-' }}</p>
+                <form method="post" class="d-flex justify-content-center gap-2 mt-3">
+                    {% csrf_token %}
+                    <a href="{% url 'core:deudor_detalle' deudor.pk %}" class="btn btn-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i> Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

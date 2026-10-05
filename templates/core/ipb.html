@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block title %}IPB - Inventario Parcial del Dia - BizMaster{% endblock %}
+
+{% block content %}
+<style>
+/* ===== IPB: salidas sin venta (no alteran la lectura de la tabla) ===== */
+.ipb-legend { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.ipb-legend .sw { display:inline-block; width:14px; height:14px; border-radius:4px; margin-right:6px; vertical-align:-2px; border:1px solid rgba(0,0,0,.12); }
+.ipb-legend .sw-don { background:#d9f5e3; }
+.ipb-legend .sw-deu { background:#f0e2c8; }
+#ipbTable tbody tr.row-donado > td { background-color:#e9f9ef !important; }
+#ipbTable tbody tr.row-donado > td:first-child { box-shadow:inset 4px 0 0 #2fae5e; }
+#ipbTable tbody tr.row-deuda > td { background-color:#faf0dc !important; }
+#ipbTable tbody tr.row-deuda > td:first-child { box-shadow:inset 4px 0 0 #b45309; }
+#ipbTable tbody tr.row-donado.row-deuda > td {
+  background:linear-gradient(180deg,#e9f9ef 0 50%,#faf0dc 50% 100%) !important;
+}
+#ipbTable tbody tr.row-donado.row-deuda > td:first-child { box-shadow:inset 4px 0 0 #2fae5e; }
+.pill-don { background:#d9f5e3; color:#1e7a44; font-weight:700; border-radius:99px; padding:1px 8px; font-size:10.5px; white-space:nowrap; }
+.pill-deu { background:#f0e2c8; color:#7c4a12; font-weight:700; border-radius:99px; padding:1px 8px; font-size:10.5px; white-space:nowrap; }
+html[data-theme="dark"] #ipbTable tbody tr.row-donado > td { background-color:rgba(47,174,94,.16) !important; }
+html[data-theme="dark"] #ipbTable tbody tr.row-deuda > td { background-color:rgba(180,83,9,.20) !important; }
+/* Fila mixta (donado + deuda): en oscuro el degradado claro del modo claro
+   ganaba por especificidad y dejaba texto blanco sobre fondo crema/verde
+   (ilegible). Se pisa con un degradado oscuro translúcido. */
+html[data-theme="dark"] #ipbTable tbody tr.row-donado.row-deuda > td {
+  background:linear-gradient(180deg,rgba(47,174,94,.16) 0 50%,rgba(180,83,9,.22) 50% 100%) !important;
+}
+html[data-theme="dark"] #ipbTable tbody tr.row-donado.row-deuda > td:first-child { box-shadow:inset 4px 0 0 #2fae5e; }
+html[data-theme="dark"] .pill-don { background:rgba(47,174,94,.22); color:#7be2a8; }
+html[data-theme="dark"] .pill-deu { background:rgba(180,83,9,.28); color:#f5c97b; }
+</style>
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-clipboard2-data me-2"></i>IPB - Inventario Parcial del Dia</h2>
+</div>
+
+<!-- Selector de fecha -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Fecha</label>
+                <input type="date" name="fecha" class="form-control" value="{{ fecha|date:'Y-m-d' }}" id="fechaInput">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                    <i class="bi bi-search me-1"></i> Consultar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="irAHoy()">
+                    <i class="bi bi-calendar-day me-1"></i> Hoy
+                </button>
+            </div>
+            {% if request.user.perfil.es_admin %}
+            <div class="col-md-2">
+                <button type="button" class="btn btn-success btn-sm w-100" onclick="imprimirIPB()">
+                    <i class="bi bi-printer me-1"></i> Imprimir
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'core:venta_crear' %}?fecha={{ fecha|date:'Y-m-d' }}" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-plus-circle me-1"></i> Venta de este día
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Resumen general -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Stock Inicial</h6>
+                <h3 class="mb-0">{{ resumen.total_stock_inicial }}</h3>
+                <small class="text-muted">{{ resumen.total_productos }} productos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Entradas</h6>
+                <h3 class="mb-0 text-warning">{{ resumen.total_entradas }}</h3>
+                <small class="text-muted">unidades recibidas</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Ventas</h6>
+                <h3 class="mb-0 text-success">{{ resumen.total_ventas }}</h3>
+                <small class="text-muted">{{ resumen.productos_movimiento }} productos con movimiento</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Stock Final</h6>
+                <h3 class="mb-0 text-info">{{ resumen.total_stock_final }}</h3>
+                <small class="text-muted">en almacen</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Resumen financiero -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Ingresos por Ventas</h6>
+                <h3 class="mb-0 text-success">${{ resumen.total_ingreso|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Gastos del Dia</h6>
+                <h3 class="mb-0 text-danger">${{ resumen.total_gastos|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Neto en Caja</h6>
+                <h3 class="mb-0">${{ resumen.total_recaudado|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Ganancia del Dia</h6>
+                <h3 class="mb-0 {% if resumen.total_ganancia > 0 %}text-success{% elif resumen.total_ganancia < 0 %}text-danger{% endif %}">${{ resumen.total_ganancia|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leyenda de salidas sin venta -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="ipb-legend small text-muted">
+            <strong class="me-1">Leyenda:</strong>
+            <span><span class="sw sw-don"></span>Verde claro = se donó hoy{% if resumen.productos_donados %} ({{ resumen.productos_donados }} prod., {{ resumen.total_donado }} u.){% endif %}</span>
+            <span><span class="sw sw-deu"></span>Marrón claro = se entregó en deuda hoy{% if resumen.productos_en_deuda %} ({{ resumen.productos_en_deuda }} prod., {{ resumen.total_en_deuda }} u.){% endif %}</span>
+            <span class="ms-auto">La fila se tiñe suave + insignia 🎁/🧾 para no tapar los números.</span>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla detalle por producto -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-table me-2"></i>Detalle por Producto</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0" id="ipbTable">
+                <thead>
+                    <tr>
+                        <th>Codigo</th>
+                        <th>Producto</th>
+                        <th class="text-center">Stock Inicial</th>
+                        <th class="text-center">+ Entradas</th>
+                        <th class="text-center">- Ventas</th>
+                        <th class="text-center">= Stock Final</th>
+                        <th class="text-end">P. Venta</th>
+                        <th class="text-end">Costo Unit.</th>
+                        <th class="text-end">Ingreso</th>
+                        <th class="text-end">Ganancia</th>
+                        <th class="text-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reporte %}
+                    <tr class="{% if r.agotado %}table-danger{% endif %}{% if r.tiene_donacion %} row-donado{% endif %}{% if r.tiene_deuda %} row-deuda{% endif %}">
+                        <td><small>{{ r.producto.codigo }}</small></td>
+                        <td>
+                            <small class="fw-bold">{{ r.producto.nombre }}</small>
+                            <small class="text-muted d-block">{{ r.categoria.nombre|default:'' }}</small>
+                            {% if r.tiene_donacion %}<span class="pill-don">🎁 Donado {{ r.donado_fmt }}</span>{% endif %}
+                            {% if r.tiene_deuda %}<span class="pill-deu">🧾 En deuda {{ r.en_deuda_fmt }}</span>{% endif %}
+                        </td>
+                        <td class="text-center">{{ r.stock_inicial_fmt }}</td>
+                        <td class="text-center">
+                            {% if r.entradas > 0 %}
+                                <span class="badge bg-warning">+{{ r.entradas_fmt }}</span>
+                            {% else %}
+                                <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.ventas > 0 %}
+                                <span class="badge bg-success">{{ r.ventas_fmt }}</span>
+                            {% else %}
+                                <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.stock_final == 0 and r.ventas > 0 %}
+                                <span class="badge bg-danger">{{ r.stock_final_fmt }}</span>
+                            {% elif r.stock_final == 0 %}
+                                <span class="badge bg-secondary">{{ r.stock_final_fmt }}</span>
+                            {% else %}
+                                {{ r.stock_final_fmt }}
+                            {% endif %}
+                        </td>
+                        <td class="text-end">${{ r.precio_venta|floatformat:2 }}</td>
+                        <td class="text-end">${{ r.precio_compra|floatformat:2 }}</td>
+                        <td class="text-end" {% if r.mix_txt %}title="{{ r.mix_txt }}"{% endif %}>${{ r.ingreso|floatformat:2 }}{% if r.mix_txt %}<small class="text-muted d-block" style="font-size:10px;">{{ r.mix_txt|truncatechars:48 }}</small>{% endif %}</td>
+                        <td class="text-end">
+                            <span class="{% if r.ganancia > 0 %}text-success{% elif r.ganancia < 0 %}text-danger{% endif %}">
+                                ${{ r.ganancia|floatformat:2 }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if r.agotado %}
+                                <span class="badge bg-danger">Agotado</span>
+                            {% elif r.tiene_donacion and r.tiene_deuda %}
+                                <span class="badge bg-success">Con ventas</span>
+                                <span class="pill-don">🎁</span> <span class="pill-deu">🧾</span>
+                            {% elif r.tiene_donacion %}
+                                <span class="pill-don">🎁 Donado</span>
+                            {% elif r.tiene_deuda %}
+                                <span class="pill-deu">🧾 En deuda</span>
+                            {% elif r.ventas > 0 %}
+                                <span class="badge bg-success">Con ventas</span>
+                            {% elif r.entradas > 0 %}
+                                <span class="badge bg-info">Solo entradas</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Sin movimiento</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-4">No hay productos registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="fw-bold">
+                    <tr>
+                        <td colspan="2">TOTALES</td>
+                        <td class="text-center">{{ resumen.total_stock_inicial }}</td>
+                        <td class="text-center">{{ resumen.total_entradas }}</td>
+                        <td class="text-center">{{ resumen.total_ventas }}</td>
+                        <td class="text-center">{{ resumen.total_stock_final }}</td>
+                        <td class="text-end text-muted">-</td>
+                        <td class="text-end text-muted">-</td>
+                        <td class="text-end">${{ resumen.total_ingreso|floatformat:2 }}</td>
+                        <td class="text-end {% if resumen.total_ganancia > 0 %}text-success{% elif resumen.total_ganancia < 0 %}text-danger{% endif %}">${{ resumen.total_ganancia|floatformat:2 }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function irAHoy() {
+    const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    const fechaInput = document.getElementById('fechaInput');
+    fechaInput.value = hoy;
+    // Envía el formulario para mostrar el IPB de hoy
+    fechaInput.form.submit();
+}
+
+function imprimirIPB() {
+    const fechaInput = document.getElementById('fechaInput');
+    if (!fechaInput) return;
+    const fecha = fechaInput.value;
+    if (!fecha) {
+        alert('Seleccione una fecha');
+        return;
+    }
+    const url = '{% url "core:ipb_impresion" %}?fecha=' + encodeURIComponent(fecha);
+    window.open(url, '_blank');
+}
+</script>
+{% endblock %}

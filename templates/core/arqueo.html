@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+
+{% block title %}Arqueo de Turno - BizMaster{% endblock %}
+{% block topbar_text %}Arqueo de Turno{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-calculator me-2"></i>Arqueo de turno</h2>
+    <a href="{% url 'core:mi_panel' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Mi panel
+    </a>
+</div>
+
+<!-- Pasos -->
+<ul class="nav nav-pills mb-4 gap-2">
+    <li class="nav-item"><span class="nav-link {% if paso == '1' %}active{% endif %}">1 · Fondo y esperado</span></li>
+    <li class="nav-item"><span class="nav-link {% if paso == '2' %}active{% endif %}">2 · Conteo y diferencia</span></li>
+    <li class="nav-item"><span class="nav-link {% if paso == 'espera' %}active{% endif %}">3 · Declarado</span></li>
+</ul>
+
+{% if paso == '1' %}
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="form-card-head">
+                    <span class="section-icon"><i class="bi bi-cash-stack"></i></span>
+                    <div><h5>Paso 1 · Fondo inicial</h5><small>¿Con cuánto efectivo abrió la caja?</small></div>
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="fondo">
+                    <label class="form-label">Fondo inicial (CUP) *</label>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="fondo_inicial" class="form-control text-end fw-bold mono" step="0.01" min="0" value="{{ arqueo.fondo_inicial }}" required>
+                    </div>
+                    <div class="form-text mb-3">Se suma al esperado en efectivo.</div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        Guardar y pasar al conteo <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="form-card-head">
+                    <span class="section-icon"><i class="bi bi-pc-display"></i></span>
+                    <div><h5>Lo que dice el sistema</h5><small>Ventas del turno − gastos del turno</small></div>
+                </div>
+                {% include 'core/arqueo_esperado.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif paso == '2' %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="form-card-head">
+            <span class="section-icon"><i class="bi bi-pc-display"></i></span>
+            <div><h5>Esperado (foto del paso 1)</h5><small>Fondo ${{ arqueo.fondo_inicial|floatformat:2 }} incluido en efectivo</small></div>
+        </div>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <div class="esp-box"><small>Efectivo esperado</small><strong id="espEf">${{ arqueo.esperado_efectivo|floatformat:2 }}</strong></div>
+            </div>
+            <div class="col-md-6">
+                <div class="esp-box"><small>Transferencia esperada</small><strong id="espTr">${{ arqueo.esperado_transferencia|floatformat:2 }}</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" id="declararForm">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="declarar">
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-cash-coin"></i></span>
+                        <div><h5>Paso 2 · Cuenta el efectivo</h5><small>Anota cuántos billetes y monedas hay</small></div>
+                        <span class="ms-auto fw-bold fs-5 mono" id="totalEf">$0.00</span>
+                    </div>
+                    <div class="denom-grid">
+                        {% for key, lbl in denominaciones %}
+                        <div class="denom-row">
+                            <span class="denom-lbl">{{ lbl }}</span>
+                            <div class="qty-step">
+                                <button type="button" class="btn btn-outline-secondary" onclick="denStep('{{ key }}', -1)">−</button>
+                                <input type="number" id="denom_{{ key }}" name="denom_{{ key }}" value="0" min="0" step="1" inputmode="numeric" oninput="denCalc()">
+                                <button type="button" class="btn btn-outline-secondary" onclick="denStep('{{ key }}', 1)">+</button>
+                            </div>
+                            <span class="denom-sub mono" id="sub_{{ key }}">$0</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-bank"></i></span>
+                        <div><h5>Transferencia contada</h5><small>Según el teléfono / banco</small></div>
+                    </div>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="contado_transferencia" id="contTr" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0" oninput="denCalc()">
+                    </div>
+                </div>
+            </div>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 text-center" id="difBox">
+                    <small class="text-muted d-block">DIFERENCIA TOTAL</small>
+                    <div class="dif-val" id="difVal">$0.00</div>
+                    <div class="small" id="difDet"></div>
+                </div>
+            </div>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <label class="form-label">Motivo <span class="text-muted fw-normal" id="motLbl">(obligatorio si descuadra)</span></label>
+                    <input type="text" name="observacion" id="obsInput" class="form-control" placeholder="Ej: faltan $50, se rompió un pomo...">
+                    <button type="submit" class="btn btn-success btn-lg w-100 mt-3">
+                        <i class="bi bi-check-circle me-1"></i> Declarar arqueo
+                    </button>
+                    <a href="/arqueo/?paso=1" class="btn btn-outline-secondary w-100 mt-2">Volver al paso 1</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+(function(){
+    // Valor en CUP de cada denominación: la clave es el valor ('5M' = moneda $5).
+    var VALS = {};
+    {% for key, lbl in denominaciones %}
+    VALS['{{ key }}'] = parseInt('{{ key }}'.replace(/M$/, ''), 10) || 0;
+    {% endfor %}
+    var ESP_EF = parseFloat('{{ arqueo.esperado_efectivo }}') || 0;
+    var ESP_TR = parseFloat('{{ arqueo.esperado_transferencia }}') || 0;
+    var money = function(n){ return '$' + (Number(n) || 0).toFixed(2); };
+    window.denStep = function(k, d){
+        var el = document.getElementById('denom_' + k);
+        var v = (parseInt(el.value, 10) || 0) + d;
+        if (v < 0) v = 0;
+        el.value = v;
+        denCalc();
+    };
+    window.denCalc = function(){
+        var tot = 0;
+        Object.keys(VALS).forEach(function(k){
+            var el = document.getElementById('denom_' + k);
+            var q = parseInt(el.value, 10) || 0;
+            if (q < 0){ q = 0; el.value = 0; }
+            var s = q * VALS[k];
+            tot += s;
+            document.getElementById('sub_' + k).textContent = '$' + s;
+        });
+        document.getElementById('totalEf').textContent = money(tot);
+        var tr = parseFloat(document.getElementById('contTr').value) || 0;
+        var dEf = tot - ESP_EF, dTr = tr - ESP_TR, dTot = dEf + dTr;
+        var box = document.getElementById('difBox');
+        var val = document.getElementById('difVal');
+        val.textContent = (dTot > 0 ? '+' : '') + money(dTot).replace('$-', '-$');
+        document.getElementById('difDet').textContent = 'Ef: ' + money(dEf) + ' · Tr: ' + money(dTr);
+        box.className = 'card-body p-4 text-center ' + (dTot === 0 ? 'dif-ok' : (dTot > 0 ? 'dif-sobra' : 'dif-falta'));
+        var obs = document.getElementById('obsInput');
+        obs.required = (dTot !== 0);
+        document.getElementById('motLbl').textContent = (dTot !== 0) ? '(obligatorio: hay diferencia)' : '(obligatorio si descuadra)';
+    };
+    document.getElementById('declararForm').addEventListener('submit', function(e){
+        var tr = parseFloat(document.getElementById('contTr').value);
+        if (isNaN(tr) || tr < 0){ e.preventDefault(); alert('Transferencia contada inválida.'); }
+    });
+    denCalc();
+})();
+</script>
+
+{% elif paso == 'espera' %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4 text-center">
+        <i class="bi bi-hourglass-split fs-1 text-warning d-block mb-2"></i>
+        <h4>Arqueo declarado</h4>
+        <p class="text-muted">En espera de confirmación del admin. Con esto se cerrará tu turno.</p>
+        <div class="dif-val {% if arqueo.diferencia_total == 0 %}text-success{% elif arqueo.diferencia_total > 0 %}text-warning{% else %}text-danger{% endif %}">
+            {% if arqueo.diferencia_total > 0 %}+{% endif %}${{ arqueo.diferencia_total|floatformat:2 }}
+        </div>
+        <small class="text-muted">Diferencia total (contado − esperado)</small>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm"><div class="card-body p-4">
+            <h6 class="text-muted">Efectivo</h6>
+            <div>Esperado: <strong class="mono">${{ arqueo.esperado_efectivo|floatformat:2 }}</strong></div>
+            <div>Contado: <strong class="mono">${{ arqueo.contado_efectivo|floatformat:2 }}</strong></div>
+            <div>Diferencia: <strong class="mono {% if arqueo.diferencia_efectivo == 0 %}text-success{% else %}text-danger{% endif %}">${{ arqueo.diferencia_efectivo|floatformat:2 }}</strong></div>
+        </div></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm"><div class="card-body p-4">
+            <h6 class="text-muted">Transferencia</h6>
+            <div>Esperada: <strong class="mono">${{ arqueo.esperado_transferencia|floatformat:2 }}</strong></div>
+            <div>Contada: <strong class="mono">${{ arqueo.contado_transferencia|floatformat:2 }}</strong></div>
+            <div>Diferencia: <strong class="mono {% if arqueo.diferencia_transferencia == 0 %}text-success{% else %}text-danger{% endif %}">${{ arqueo.diferencia_transferencia|floatformat:2 }}</strong></div>
+        </div></div>
+    </div>
+</div>
+{% if arqueo.observacion %}<div class="alert alert-info mt-3"><strong>Motivo:</strong> {{ arqueo.observacion }}</div>{% endif %}
+<div class="card border-0 shadow-sm mt-3">
+    <div class="card-body p-4 text-center">
+        <p class="text-muted mb-3">¿Te equivocaste contando? Anula esta declaración y cuenta de nuevo.</p>
+        <form method="post" onsubmit="return confirm('Se anulará esta declaración y volverás al paso 2. ¿Continuar?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="recontar">
+            <button type="submit" class="btn btn-warning">
+                <i class="bi bi-arrow-repeat me-1"></i> Recontar dinero
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.form-card-head { display:flex; align-items:center; gap:10px; margin-bottom:1rem; }
+.form-card-head .section-icon {
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background:var(--accent-tint); color:var(--accent);
+    display:inline-flex; align-items:center; justify-content:center; font-size:17px;
+}
+.form-card-head h5 { font-size:14px; font-weight:700; margin:0; color:var(--ink); }
+.form-card-head small { display:block; font-size:12px; color:var(--ink-3); font-weight:400; }
+.nav-pills .nav-link { border:1px solid var(--line); color:var(--ink-3); font-size:13px; }
+.nav-pills .nav-link.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.esp-box { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+.esp-box small { color:var(--ink-3); font-weight:700; text-transform:uppercase; font-size:11px; }
+.esp-box strong { font-family:var(--font-mono); font-size:18px; color:var(--ink); }
+.denom-grid { display:grid; gap:8px; }
+.denom-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:6px 10px; }
+.denom-lbl { font-size:13px; font-weight:600; color:var(--ink); }
+.denom-sub { font-size:13px; font-weight:700; color:var(--accent); min-width:64px; text-align:right; }
+.qty-step { display:flex; align-items:stretch; }
+.qty-step .btn { flex:0 0 34px; padding:0; }
+.qty-step input { width:64px; text-align:center; font-family:var(--font-mono); font-weight:700; border:1px solid var(--line); border-radius:8px; margin:0 4px; min-height:34px; background:var(--surface); color:var(--ink); }
+.dif-val { font-family:var(--font-mono); font-size:2.2rem; font-weight:700; }
+#difBox { border-radius:16px; }
+#difBox.dif-ok { background:var(--success-soft); }
+#difBox.dif-ok .dif-val { color:var(--success-dark); }
+#difBox.dif-sobra { background:#fef3c7; }
+#difBox.dif-sobra .dif-val { color:#92400e; }
+#difBox.dif-falta { background:var(--danger-soft); }
+#difBox.dif-falta .dif-val { color:var(--danger-dark); }
+html[data-theme="dark"] #difBox.dif-sobra { background:rgba(245,158,11,.16); }
+html[data-theme="dark"] #difBox.dif-sobra .dif-val { color:#fbbf24; }
+</style>
+{% endblock %}

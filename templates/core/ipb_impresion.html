@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>IPB - {{ fecha|date:"d/m/Y" }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm 1cm 1.5cm 1cm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                bottom: 0.6cm; left: 1cm; right: 1cm; height: 1cm;
+            }
+        }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #1f1f2c; line-height: 1.35; margin: 0; padding: 0; }
+        /* ===== Encabezado ===== */
+        .brand-box { background-color: #6f53d9; color: #ffffff; font-size: 22pt; font-weight: bold; text-align: center; width: 54px; height: 54px; }
+        .brand-name { font-size: 17pt; font-weight: bold; color: #1f1f2c; }
+        .brand-sub { font-size: 8pt; color: #8d8da0; letter-spacing: 1px; }
+        .report-title { font-size: 11pt; font-weight: bold; color: #6f53d9; }
+        .date-big { font-size: 19pt; font-weight: bold; color: #6f53d9; text-align: right; }
+        .printed { font-size: 7.5pt; color: #8d8da0; text-align: right; }
+        .bar { background-color: #6f53d9; color: #ffffff; font-size: 8.5pt; font-weight: bold; }
+        /* ===== KPIs ===== */
+        .kpi { border: 1px solid #e6e6ec; text-align: center; }
+        .kpi-label { font-size: 7.5pt; color: #8d8da0; font-weight: bold; }
+        .kpi-value { font-size: 14pt; font-weight: bold; color: #1f1f2c; }
+        .kpi-sub { font-size: 7.5pt; color: #8d8da0; }
+        /* ===== Tabla ===== */
+        .grid { border: 1px solid #e6e6ec; }
+        .grid th { background-color: #6f53d9; color: #ffffff; font-size: 7.5pt; font-weight: bold; padding: 6px 4px; text-align: left; }
+        .grid th.c { text-align: center; }
+        .grid th.r { text-align: right; }
+        .grid td { padding: 5px 4px; font-size: 8pt; border-bottom: 1px solid #f0f0f5; vertical-align: top; }
+        .grid td.c { text-align: center; }
+        .grid td.r { text-align: right; }
+        /* Detalle del mix de presentaciones bajo el ingreso: letra pequeña,
+           en xhtml2pdf <font size="6"> es GIGANTE (escala HTML 1-7), por eso
+           se veía "1 x Media libra" enorme. Usar clase con pt explícitos. */
+        .mix-txt { font-size: 6.5pt; color: #8d8da0; line-height: 1.25; }
+        .row-alt td { background-color: #f7f5ff; }
+        .mono { font-family: Helvetica, Arial, sans-serif; }
+        .sku { font-size: 7.5pt; font-family: Courier, monospace; color: #54546a; }
+        .note { font-size: 7pt; color: #8d8da0; }
+        .b { font-weight: bold; }
+        .green { color: #1e7a44; }
+        .red { color: #a83232; }
+        .muted { color: #8d8da0; }
+        .pill { font-size: 7pt; font-weight: bold; padding: 2px 6px; }
+        .pill-green { background-color: #eaf7ef; color: #1e7a44; }
+        .pill-red { background-color: #fdecec; color: #a83232; }
+        .pill-blue { background-color: #e0f2fe; color: #0369a1; }
+        .pill-grey { background-color: #f3f3f7; color: #54546a; }
+        .pill-amber { background-color: #fef3c7; color: #92400e; }
+        .row-don td { background-color: #e9f9ef; }
+        .row-deu td { background-color: #faf0dc; }
+        .row-amb td { background-color: #f3ecdc; }
+        .pill-don { background-color: #d9f5e3; color: #1e7a44; font-size: 7pt; font-weight: bold; padding: 2px 6px; }
+        .pill-deu { background-color: #f0e2c8; color: #7c4a12; font-size: 7pt; font-weight: bold; padding: 2px 6px; }
+        .legend { font-size: 7.5pt; color: #54546a; border: 1px solid #e6e6ec; }
+        /* ===== Totales ===== */
+        .totals td { padding: 5px 8px; font-size: 8.5pt; border-bottom: 1px solid #f0f0f5; }
+        .totals-label { color: #54546a; }
+        .totals-val { text-align: right; font-weight: bold; }
+        .grand { background-color: #f5f3fd; border: 1px solid #ece9fb; }
+        .grand td { padding: 8px; font-size: 10pt; font-weight: bold; }
+        .alert-box { background-color: #fffbeb; border: 1px solid #f59e0b; color: #92400e; font-size: 8.5pt; }
+        #footerContent { font-size: 7pt; color: #8d8da0; text-align: center; border-top: 1px solid #e6e6ec; padding-top: 4px; }
+    </style>
+</head>
+<body>
+
+    <!-- ===== CABECERA (tabla, compatible con xhtml2pdf) ===== -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="58" valign="middle">
+                <table cellpadding="0" cellspacing="0"><tr><td class="brand-box">B</td></tr></table>
+            </td>
+            <td valign="middle">
+                <div class="brand-name">BizMaster ERP</div>
+                <div class="brand-sub">SISTEMA DE GESTION EMPRESARIAL</div>
+                <div class="report-title">Inventario Parcial del Dia</div>
+            </td>
+            <td width="220" valign="middle">
+                <div class="date-big">{{ fecha|date:"d/m/Y" }}</div>
+                <div class="printed">Impreso: {{ ahora|date:"d/m/Y H:i" }}</div>
+                <div class="printed">{{ resumen.total_productos }} producto(s) en reporte</div>
+            </td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <table width="100%" cellpadding="6" cellspacing="0">
+        <tr>
+            <td class="bar" width="60%">INVENTARIO PARCIAL DEL DIA &nbsp;·&nbsp; {{ fecha|date:"l, d F Y" }}</td>
+            <td class="bar" align="right">Stock Final: {{ resumen.total_stock_final }} u. &nbsp;·&nbsp; Ganancia: ${{ resumen.total_ganancia|floatformat:2 }}</td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <!-- ===== KPIs ===== -->
+    <table width="100%" cellpadding="8" cellspacing="6">
+        <tr>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">STOCK INICIAL</div>
+                <div class="kpi-value">{{ resumen.total_stock_inicial }}</div>
+                <div class="kpi-sub">unidades</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">MOVIMIENTO</div>
+                <div class="kpi-value">+{{ resumen.total_entradas }} / -{{ resumen.total_ventas }}</div>
+                <div class="kpi-sub">entradas / ventas</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">INGRESOS</div>
+                <div class="kpi-value green">${{ resumen.total_ingreso|floatformat:2 }}</div>
+                <div class="kpi-sub">por ventas del dia</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">GANANCIA NETA</div>
+                <div class="kpi-value green">${{ resumen.total_ganancia|floatformat:2 }}</div>
+                <div class="kpi-sub">gastos: ${{ resumen.total_gastos|floatformat:2 }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <table width="100%" cellpadding="6" cellspacing="0">
+        <tr><td class="legend">LEYENDA: fila <b>verde claro</b> = se donó hoy{% if resumen.productos_donados %} ({{ resumen.productos_donados }} prod.){% endif %} &nbsp;·&nbsp; fila <b>marrón claro</b> = se entregó en deuda hoy{% if resumen.productos_en_deuda %} ({{ resumen.productos_en_deuda }} prod.){% endif %} &nbsp;·&nbsp; insignias 🎁 / 🧾 indican la cantidad.</td></tr>
+    </table>
+
+    <br/>
+
+    <!-- ===== TABLA DE PRODUCTOS ===== -->
+    <table class="grid" width="100%" cellpadding="0" cellspacing="0" repeat="1">
+        <thead>
+            <tr>
+                <th width="9%">CODIGO</th>
+                <th width="20%">PRODUCTO</th>
+                <th width="8%">CAT.</th>
+                <th width="6%" class="c">STK INI</th>
+                <th width="6%" class="c">+ENT</th>
+                <th width="6%" class="c">-VEN</th>
+                <th width="6%" class="c">STK FIN</th>
+                <th width="9%" class="r">P. VENTA</th>
+                <th width="9%" class="r">COSTO</th>
+                <th width="9%" class="r">INGRESO</th>
+                <th width="9%" class="r">GANANCIA</th>
+                <th width="9%" class="c">ESTADO</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in reporte %}
+            <tr class="{% if r.tiene_donacion and r.tiene_deuda %}row-amb{% elif r.tiene_donacion %}row-don{% elif r.tiene_deuda %}row-deu{% elif forloop.counter|divisibleby:2 %}row-alt{% endif %}">
+                <td class="sku">{{ r.producto.codigo }}</td>
+                <td><b>{{ r.producto.nombre|truncatechars:24 }}</b>{% if r.tiene_donacion %}<br/><font class="pill-don">DONADO {{ r.donado_fmt }}</font>{% endif %}{% if r.tiene_deuda %}<br/><font class="pill-deu">DEUDA {{ r.en_deuda_fmt }}</font>{% endif %}</td>
+                <td><font color="#8d8da0">{{ r.categoria.nombre|default:"N/A"|truncatechars:10 }}</font></td>
+                <td class="c mono">{{ r.stock_inicial_fmt }}</td>
+                <td class="c mono">{% if r.entradas > 0 %}+{{ r.entradas_fmt }}{% else %}<font color="#8d8da0">0</font>{% endif %}</td>
+                <td class="c mono">{% if r.ventas > 0 %}{{ r.ventas_fmt }}{% else %}<font color="#8d8da0">0</font>{% endif %}</td>
+                <td class="c mono b">{{ r.stock_final_fmt }}</td>
+                <td class="r mono">${{ r.precio_venta|floatformat:2 }}</td>
+                <td class="r mono">${{ r.precio_compra|floatformat:2 }}</td>
+                <td class="r mono" valign="top">${{ r.ingreso|floatformat:2 }}{% if r.mix_txt %}<br/><span class="mix-txt">{{ r.mix_txt|truncatechars:48 }}</span>{% endif %}</td>
+                <td class="r mono">
+                    {% if r.ganancia > 0 %}<font color="#1e7a44">+${{ r.ganancia|floatformat:2 }}</font>
+                    {% elif r.ganancia < 0 %}<font color="#a83232">${{ r.ganancia|floatformat:2 }}</font>
+                    {% else %}<font color="#8d8da0">$0.00</font>{% endif %}
+                </td>
+                <td class="c">
+                    {% if r.agotado %}<font class="pill pill-red">AGOTADO</font>
+                    {% elif r.tiene_donacion and r.tiene_deuda %}<font class="pill-don">DONADO</font> <font class="pill-deu">DEUDA</font>
+                    {% elif r.tiene_donacion %}<font class="pill-don">DONADO</font>
+                    {% elif r.tiene_deuda %}<font class="pill-deu">EN DEUDA</font>
+                    {% elif r.ventas > 0 %}<font class="pill pill-green">VENDIDO</font>
+                    {% elif r.entradas > 0 %}<font class="pill pill-blue">ENTRADA</font>
+                    {% else %}<font class="pill pill-grey">SIN MOV.</font>{% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="12" align="center"><font color="#8d8da0">No hay productos registrados</font></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br/>
+
+    <!-- ===== TOTALES ===== -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="55%" valign="top">
+                {% if resumen.productos_sin_stock > 0 %}
+                <table width="100%" cellpadding="8" cellspacing="0">
+                    <tr><td class="alert-box"><b>Atencion:</b> {{ resumen.productos_sin_stock }} producto(s) agotado(s) despues de las ventas del dia.</td></tr>
+                </table>
+                <br/>
+                {% endif %}
+                <table width="100%" cellpadding="0" cellspacing="0" class="totals">
+                    <tr><td class="totals-label">Total stock inicial</td><td class="totals-val mono">{{ resumen.total_stock_inicial }} u.</td></tr>
+                    <tr><td class="totals-label">Total entradas</td><td class="totals-val mono">+{{ resumen.total_entradas }} u.</td></tr>
+                    <tr><td class="totals-label">Total ventas</td><td class="totals-val mono">-{{ resumen.total_ventas }} u.</td></tr>
+                    <tr><td class="totals-label">Total stock final</td><td class="totals-val mono">{{ resumen.total_stock_final }} u.</td></tr>
+                    <tr><td class="totals-label">Productos con movimiento</td><td class="totals-val mono">{{ resumen.productos_movimiento }}</td></tr>
+                </table>
+            </td>
+            <td width="3%"></td>
+            <td width="42%" valign="top">
+                <table width="100%" cellpadding="0" cellspacing="0" class="totals">
+                    <tr><td class="totals-label">Total ingresos</td><td class="totals-val mono"><font color="#1e7a44">${{ resumen.total_ingreso|floatformat:2 }}</font></td></tr>
+                    <tr><td class="totals-label">Total gastos</td><td class="totals-val mono"><font color="#a83232">${{ resumen.total_gastos|floatformat:2 }}</font></td></tr>
+                </table>
+                <br/>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr class="grand">
+                        <td width="50%">GANANCIA NETA</td>
+                        <td width="50%" align="right" class="mono">${{ resumen.total_ganancia|floatformat:2 }}</td>
+                    </tr>
+                </table>
+                <br/>
+                <span class="note">Ingresos = total cobrado (respeta precios por presentación). Ganancia = ingresos - costo de lo vendido.</span>
+            </td>
+        </tr>
+    </table>
+
+    <div id="footerContent">
+        BizMaster ERP &nbsp;·&nbsp; Sistema de Gestion Empresarial &nbsp;·&nbsp; IPB {{ fecha|date:"d/m/Y" }} &nbsp;·&nbsp; Pagina <pdf:pagenumber /> de <pdf:pagecount />
+    </div>
+
+</body>
+</html>

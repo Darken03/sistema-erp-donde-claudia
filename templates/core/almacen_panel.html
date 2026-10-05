@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}Almacén - BizMaster{% endblock %}
+{% block topbar_text %}Almacén{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-warehouse me-2"></i>Almacén</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'core:almacen_entrada_crear' %}" class="btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i> Nueva Entrada
+        </a>
+        <a href="{% url 'core:almacen_traslado_crear' %}" class="btn btn-primary">
+            <i class="bi bi-truck me-1"></i> Trasladar al POS
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm border-start border-primary border-4 h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Productos</h6>
+                <h3 class="mb-0">{{ total_productos }}</h3>
+                <small class="text-muted">con existencias</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm border-start border-info border-4 h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Valor</h6>
+                <h3 class="mb-0 text-info">${{ valor_almacen|floatformat:2 }}</h3>
+                <small class="text-muted">a costo</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <a href="{% url 'core:almacen_entrada_lista' %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Entradas hoy</h6>
+                    <h3 class="mb-0">{{ entradas_hoy }}</h3>
+                    <small class="text-muted">registros</small>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3 col-6">
+        <a href="{% url 'core:almacen_traslado_lista' %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm border-start border-warning border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Traslados hoy</h6>
+                    <h3 class="mb-0">{{ traslados_hoy }}</h3>
+                    <small class="text-muted">al punto de venta</small>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-grid me-2"></i>Gestionar</h5>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'core:almacen_stock' %}" class="btn btn-outline-primary text-start">
+                        <i class="bi bi-boxes me-2"></i> Existencias
+                    </a>
+                    <a href="{% url 'core:almacen_entrada_lista' %}" class="btn btn-outline-success text-start">
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Entradas al almacén
+                    </a>
+                    <a href="{% url 'core:almacen_traslado_lista' %}" class="btn btn-outline-warning text-start">
+                        <i class="bi bi-truck me-2"></i> Traslados al punto de venta
+                    </a>
+                    <a href="{% url 'core:almacen_movimientos' %}" class="btn btn-outline-secondary text-start">
+                        <i class="bi bi-clock-history me-2"></i> Auditoría
+                    </a>
+                </div>
+                <p class="text-muted small mt-3 mb-0">
+                    El traslado al punto de venta genera la entrada que se ve en el IPB.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-0">
+                <div class="p-4 pb-2 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-activity me-2"></i>Movimientos recientes</h5>
+                    <a href="{% url 'core:almacen_movimientos' %}" class="btn btn-sm btn-outline-secondary">Ver todos</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th class="text-end">Cantidad</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for m in recientes %}
+                            <tr>
+                                <td><small>{{ m.fecha|date:"d/m H:i" }}</small></td>
+                                <td><small>{{ m.producto.nombre }}</small></td>
+                                <td>
+                                    {% if m.tipo == 'entrada' %}<span class="badge bg-success">Entrada</span>
+                                    {% elif m.tipo == 'traslado' %}<span class="badge bg-warning text-dark">Traslado</span>
+                                    {% else %}<span class="badge bg-secondary">Ajuste</span>{% endif %}
+                                </td>
+                                <td class="text-end"><small class="fw-bold mono">{{ m.cantidad_fmt }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-4">Sin movimientos todavía.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

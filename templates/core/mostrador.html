@@ -1,0 +1,393 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mostrador — Donde Clau</title>
+<link rel="icon" href="{% static 'img/logo-donde-clau.png' %}">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; }
+  body {
+    min-height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    background:#0b1026; color:#fff;
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+  }
+  /* ===== Fondo aurora animado ===== */
+  .bg { position:fixed; inset:0; z-index:0; overflow:hidden;
+    background:linear-gradient(120deg,#141b4d 0%,#0b1026 45%,#160f33 100%);
+    background-size:220% 220%; animation:bgShift 22s ease-in-out infinite alternate; }
+  .bg::after { content:""; position:absolute; inset:0;
+    background-image:radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px);
+    background-size:26px 26px; }
+  .orb { position:absolute; border-radius:50%; filter:blur(90px); opacity:.5; }
+  .orb.o1 { width:44vmax; height:44vmax; left:-12vmax; top:-14vmax;
+    background:radial-gradient(circle,#4f46e5,transparent 65%); animation:drift1 26s ease-in-out infinite alternate; }
+  .orb.o2 { width:38vmax; height:38vmax; right:-10vmax; top:22vh;
+    background:radial-gradient(circle,#7c3aed,transparent 65%); animation:drift2 32s ease-in-out infinite alternate; }
+  .orb.o3 { width:30vmax; height:30vmax; left:30vw; bottom:-16vmax;
+    background:radial-gradient(circle,#b45309,transparent 65%); opacity:.32; animation:drift1 38s ease-in-out infinite alternate-reverse; }
+  @keyframes bgShift { from { background-position:0% 40%; } to { background-position:100% 60%; } }
+  @keyframes drift1 { from { transform:translate(0,0) scale(1); } to { transform:translate(6vmax,4vmax) scale(1.12); } }
+  @keyframes drift2 { from { transform:translate(0,0) scale(1.05); } to { transform:translate(-5vmax,-5vmax) scale(.95); } }
+
+  header, main, footer { position:relative; z-index:1; }
+
+  /* ===== Cabecera cristal ===== */
+  .cd-header {
+    display:flex; align-items:center; gap:24px; padding:20px 40px;
+    background:rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.12);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  }
+  .logo-ring { position:relative; width:76px; height:76px; flex-shrink:0; display:grid; place-items:center; }
+  .logo-ring::before { content:""; position:absolute; inset:0; border-radius:22px;
+    background:conic-gradient(from 0deg,#8b5cf6,#38bdf8,#34d399,#fbbf24,#f97316,#8b5cf6);
+    animation:spin 7s linear infinite; }
+  .logo-ring::after { content:""; position:absolute; inset:3px; border-radius:19px; background:#0e1330; }
+  .logo-ring img { position:relative; z-index:1; width:62px; height:62px; object-fit:contain; border-radius:15px; background:#fff; padding:4px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .store-info { flex:1; min-width:0; }
+  .store-name { font-size:32px; font-weight:800; letter-spacing:-.5px;
+    background:linear-gradient(90deg,#fff,#c4b5fd 60%,#fff); background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    animation:shine 6s linear infinite; }
+  @keyframes shine { to { background-position:200% center; } }
+  .tagline { font-size:13.5px; opacity:.65; margin-top:4px; }
+  .clock { text-align:center; }
+  .clock .time { font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:1px; }
+  .clock .date { font-size:12px; opacity:.6; text-transform:capitalize; }
+  .payable { text-align:right; padding:10px 22px; border-radius:18px; min-width:230px;
+    background:rgba(0,0,0,.28); border:1px solid rgba(251,191,36,.35);
+    box-shadow:0 0 34px -6px rgba(251,191,36,.35), inset 0 1px 0 rgba(255,255,255,.12); }
+  .payable .lbl { font-size:11px; letter-spacing:2px; opacity:.75; text-transform:uppercase; }
+  .payable .val { font-size:42px; font-weight:800; font-variant-numeric:tabular-nums; display:inline-block;
+    background:linear-gradient(135deg,#fde68a,#fbbf24 45%,#f97316); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .payable .val.bump { animation:totalBump .55s cubic-bezier(.34,1.5,.64,1); }
+  .screen-tag { font-size:11px; opacity:.55; margin-top:2px; }
+
+  /* ===== Contenido ===== */
+  .cd-content { flex:1; display:flex; flex-direction:column; padding:28px 40px 20px; overflow:hidden; min-height:0; }
+  .cd-scroll { flex:1; overflow-y:auto; min-height:0; scrollbar-width:thin; padding:4px 2px 10px; }
+  .empty { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:30px 20px; }
+  .rings { position:relative; width:170px; height:170px; display:grid; place-items:center; margin-bottom:10px; }
+  .rings span { position:absolute; inset:0; border-radius:50%; border:2px solid rgba(139,92,246,.5); animation:ring 2.8s ease-out infinite; }
+  .rings span:nth-child(2){ animation-delay:.9s; } .rings span:nth-child(3){ animation-delay:1.8s; }
+  @keyframes ring { from { transform:scale(.45); opacity:1; } to { transform:scale(1.15); opacity:0; } }
+  .rings .core { position:relative; width:104px; height:104px; border-radius:32px; display:grid; place-items:center; font-size:52px;
+    background:linear-gradient(135deg,rgba(139,92,246,.35),rgba(56,189,248,.2));
+    border:1px solid rgba(255,255,255,.2); box-shadow:0 0 50px -8px rgba(139,92,246,.6);
+    animation:float 3.4s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform:translateY(0);} 50% { transform:translateY(-12px);} }
+  .empty h2 { font-size:27px; font-weight:700; opacity:.92; margin:14px 0 8px; }
+  .empty p { font-size:15.5px; opacity:.6; }
+
+  .cd-item {
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+    padding:16px 22px; margin-bottom:13px; border-radius:18px;
+    background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    animation:cardIn .5s cubic-bezier(.22,1.2,.36,1) backwards;
+  }
+  @keyframes cardIn { from { opacity:0; transform:translateY(26px) scale(.98); } to { opacity:1; transform:none; } }
+  /* Fila sin cambios: no repite animación (evita brincos al refrescar) */
+  .cd-item.static { animation:none; }
+  .cd-item.is-new { border-color:rgba(52,211,153,.75);
+    box-shadow:0 0 0 0 rgba(52,211,153,.5), 0 10px 30px -12px rgba(0,0,0,.6);
+    animation:cardIn .5s cubic-bezier(.22,1.2,.36,1) backwards, newGlow 1.8s ease-out; }
+  @keyframes newGlow {
+    0% { box-shadow:0 0 0 0 rgba(52,211,153,.55); background-color:rgba(52,211,153,.16); }
+    100% { box-shadow:0 0 0 26px rgba(52,211,153,0); background-color:transparent; }
+  }
+  .cd-item.is-changed { border-color:rgba(251,191,36,.7); animation:changedPulse .8s ease-out; }
+  @keyframes changedPulse {
+    0% { transform:scale(1); background-color:rgba(251,191,36,.14); }
+    35% { transform:scale(1.014); background-color:rgba(251,191,36,.22); }
+    100% { transform:scale(1); background-color:transparent; }
+  }
+  .item-left { display:flex; align-items:center; gap:16px; min-width:0; }
+  .avatar { width:54px; height:54px; flex-shrink:0; border-radius:17px; display:grid; place-items:center;
+    font-size:23px; font-weight:800; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.4);
+    border:1px solid rgba(255,255,255,.25); box-shadow:inset 0 1px 0 rgba(255,255,255,.3); overflow:hidden; }
+  .avatar img { width:100%; height:100%; object-fit:cover; }
+  .cd-item.is-new .avatar { animation:iconPop .55s cubic-bezier(.34,1.8,.64,1); }
+  @keyframes iconPop { 0% { transform:scale(.4) rotate(-14deg);} 60% { transform:scale(1.18) rotate(4deg);} 100% { transform:scale(1);} }
+  .item-name { font-size:20px; font-weight:700; word-break:break-word; }
+  .item-sub { display:flex; align-items:center; gap:8px; margin-top:5px; font-size:13px; opacity:.85; flex-wrap:wrap; }
+  .pill { font-size:11.5px; font-weight:700; padding:2px 10px; border-radius:99px;
+    background:rgba(139,92,246,.28); border:1px solid rgba(139,92,246,.55); }
+  .qty { font-variant-numeric:tabular-nums; }
+  .qty strong { font-size:15px; }
+  .item-price { font-size:25px; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums;
+    background:linear-gradient(135deg,#93c5fd,#c4b5fd); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .item-price.tick { animation:priceTick .5s ease-out; }
+  @keyframes priceTick { 0% { transform:scale(1);} 40% { transform:scale(1.2);} 100% { transform:scale(1);} }
+  @keyframes totalBump { 0% { transform:scale(1);} 35% { transform:scale(1.13);} 100% { transform:scale(1);} }
+
+  /* ===== Aviso de producto añadido ===== */
+  #addedToast {
+    position:fixed; top:118px; left:50%; transform:translateX(-50%) translateY(-16px); z-index:6;
+    display:none; align-items:center; gap:10px; padding:12px 22px; border-radius:99px;
+    background:linear-gradient(135deg,#10b981,#059669); font-weight:700; font-size:16px;
+    box-shadow:0 12px 40px -8px rgba(16,185,129,.7); border:1px solid rgba(255,255,255,.3);
+    max-width:min(90vw,560px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  #addedToast.show { display:inline-flex; animation:toastIn 2.6s ease-out forwards; }
+  @keyframes toastIn {
+    0% { opacity:0; transform:translateX(-50%) translateY(-18px) scale(.9); }
+    10% { opacity:1; transform:translateX(-50%) translateY(0) scale(1.02); }
+    16% { transform:translateX(-50%) translateY(0) scale(1); }
+    82% { opacity:1; transform:translateX(-50%) translateY(0); }
+    100% { opacity:0; transform:translateX(-50%) translateY(-14px); }
+  }
+
+  /* ===== Gracias + confeti ===== */
+  .thanks { display:none; text-align:center; padding:26px 20px; margin-bottom:14px; border-radius:20px;
+    background:linear-gradient(135deg,rgba(16,185,129,.30),rgba(16,185,129,.08));
+    border:1px solid rgba(52,211,153,.6); box-shadow:0 0 60px -12px rgba(52,211,153,.6); }
+  .thanks.show { display:block; animation:thanksPop .65s cubic-bezier(.34,1.5,.64,1); }
+  @keyframes thanksPop { 0% { opacity:0; transform:scale(.85);} 60% { opacity:1; transform:scale(1.03);} 100% { transform:scale(1);} }
+  .thanks .check { width:74px; height:74px; margin:0 auto 10px; border-radius:50%; display:grid; place-items:center;
+    font-size:38px; background:linear-gradient(135deg,#10b981,#34d399); box-shadow:0 0 40px rgba(52,211,153,.7);
+    animation:iconPop .6s cubic-bezier(.34,1.8,.64,1); }
+  .thanks h3 { font-size:24px; }
+  .thanks p { opacity:.8; margin-top:4px; font-size:14.5px; }
+  #confetti { position:fixed; inset:0; z-index:5; pointer-events:none; overflow:hidden; }
+  #confetti i { position:absolute; top:-4vh; display:block; border-radius:2px; animation:fall linear forwards; }
+  @keyframes fall { to { transform:translateY(112vh) rotate(720deg); opacity:.9; } }
+
+  /* ===== Pie ===== */
+  .cd-footer { display:flex; align-items:center; justify-content:center; gap:14px;
+    padding:16px 40px; font-size:15px;
+    background:rgba(0,0,0,.30); border-top:1px solid rgba(255,255,255,.12);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+  .live { width:9px; height:9px; border-radius:50%; background:#34d399; box-shadow:0 0 12px #34d399; animation:pulse 2s infinite; }
+  .live.off { background:#f87171; box-shadow:none; animation:none; }
+  @keyframes pulse { 0%,100% { opacity:.4;} 50% { opacity:1;} }
+  .eq { display:none; align-items:flex-end; gap:3px; height:18px; }
+  .eq.on { display:inline-flex; }
+  .eq b { width:4px; border-radius:2px; background:linear-gradient(180deg,#34d399,#38bdf8); animation:eq 1s ease-in-out infinite; }
+  .eq b:nth-child(1){ height:60%; animation-delay:0s; } .eq b:nth-child(2){ height:100%; animation-delay:.15s; }
+  .eq b:nth-child(3){ height:40%; animation-delay:.3s; } .eq b:nth-child(4){ height:80%; animation-delay:.45s; }
+  @keyframes eq { 0%,100% { transform:scaleY(.4);} 50% { transform:scaleY(1);} }
+
+  @media (max-width:768px) {
+    .cd-header { flex-wrap:wrap; justify-content:center; text-align:center; padding:16px; gap:12px; }
+    .store-info { flex-basis:100%; order:2; } .store-name { font-size:23px; }
+    .clock { display:none; } .payable { min-width:0; width:100%; } .payable .val { font-size:30px; }
+    .cd-content { padding:16px 14px 10px; } .cd-item { padding:13px 15px; }
+    .item-name { font-size:16.5px; } .item-price { font-size:19px; } .avatar { width:44px; height:44px; font-size:19px; }
+    .cd-footer { padding:12px; font-size:13.5px; }
+  }
+</style>
+</head>
+<body>
+  <div class="bg"><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+  <div id="confetti"></div>
+  <div id="addedToast"></div>
+
+  <header class="cd-header">
+    <div class="logo-ring"><img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau"></div>
+    <div class="store-info">
+      <div class="store-name">Bienvenido a Donde Clau</div>
+      <div class="tagline">Gracias por su compra · Sus productos aparecen aquí en vivo</div>
+    </div>
+    <div class="clock"><div class="time" id="clockTime">--:--</div><div class="date" id="clockDate"></div></div>
+    <div class="payable">
+      <div class="lbl">Total a pagar</div>
+      <div class="val" id="totalTop">$0</div>
+      <div class="screen-tag">Pantalla {{ pantalla|default:1 }}</div>
+    </div>
+  </header>
+
+  <main class="cd-content">
+    <div class="thanks" id="thanksBox">
+      <div class="check">✓</div>
+      <h3>¡Venta completada!</h3>
+      <p>Gracias por su compra, vuelva pronto 🎉</p>
+    </div>
+    <div class="cd-scroll" id="scroll">
+      <div class="empty" id="emptyBox">
+        <div class="rings"><span></span><span></span><span></span><div class="core">🛒</div></div>
+        <h2>Esperando productos…</h2>
+        <p>Lo que el cajero añada al carrito aparecerá aquí automáticamente.</p>
+      </div>
+      <div id="itemsBox"></div>
+    </div>
+  </main>
+
+  <footer class="cd-footer">
+    <span class="live" id="liveDot"></span>
+    <span class="eq" id="eqBars"><b></b><b></b><b></b><b></b></span>
+    <span id="footMsg">Gracias por su preferencia</span>
+  </footer>
+
+<script>
+(function(){
+  var ESTADO_URL = '{% url "core:mostrador_estado" %}?pantalla={{ pantalla|default:1 }}';
+  var itemsBox = document.getElementById('itemsBox');
+  var emptyBox = document.getElementById('emptyBox');
+  var thanksBox = document.getElementById('thanksBox');
+  var totalTop = document.getElementById('totalTop');
+  var footMsg = document.getElementById('footMsg');
+  var liveDot = document.getElementById('liveDot');
+  var eqBars = document.getElementById('eqBars');
+  var confettiBox = document.getElementById('confetti');
+  var addedToast = document.getElementById('addedToast');
+  var toastTimer = null;
+  var money = function(n){ return '$' + Math.round(Number(n) || 0); };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var keyOf = function(it){ return (it.nombre || '') + '|' + (it.presentacion || ''); };
+  var AV_HUES = [265, 210, 160, 25, 330, 190, 0, 285];
+  var avatarBg = function(name){
+    var h = 0, s = String(name || '?');
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997;
+    var hue = AV_HUES[h % AV_HUES.length];
+    return 'linear-gradient(135deg,hsl(' + hue + ',70%,55%),hsl(' + ((hue + 45) % 360) + ',70%,42%))';
+  };
+  var initials = function(name){
+    var w = String(name || '?').trim().split(/\s+/).slice(0, 2);
+    return w.map(function(x){ return x.charAt(0); }).join('').toUpperCase() || '?';
+  };
+  var prevMap = {};
+  var shownTotal = 0;
+  var totalAnim = null;
+  var thanksTimer = null;
+  var lastSig = '';   // firma del último estado pintado: si no cambia, no se re-renderiza
+
+  /* Reloj en vivo */
+  function tickClock(){
+    try {
+      var d = new Date();
+      var hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+      document.getElementById('clockTime').textContent = hh + ':' + mm;
+      document.getElementById('clockDate').textContent = d.toLocaleDateString('es-DO', {weekday:'long', day:'numeric', month:'long'});
+    } catch(e){}
+  }
+  tickClock(); setInterval(tickClock, 10000);
+
+  /* Total con conteo animado + rebote */
+  function animarTotal(hasta){
+    hasta = Number(hasta) || 0;
+    var desde = shownTotal;
+    if (desde === hasta){ totalTop.textContent = money(hasta); return; }
+    if (totalAnim) cancelAnimationFrame(totalAnim);
+    var t0 = null, DUR = 650;
+    totalTop.classList.remove('bump'); void totalTop.offsetWidth; totalTop.classList.add('bump');
+    var paso = function(t){
+      if (!t0) t0 = t;
+      var k = Math.min(1, (t - t0) / DUR);
+      var v = desde + (hasta - desde) * (k < .5 ? 2*k*k : -1 + (4 - 2*k)*k);
+      totalTop.textContent = money(v);
+      if (k < 1) totalAnim = requestAnimationFrame(paso);
+      else { totalTop.textContent = money(hasta); shownTotal = hasta; totalAnim = null; }
+    };
+    totalAnim = requestAnimationFrame(paso);
+  }
+
+  /* Al terminar los 10 s del "gracias", regresar a "Esperando productos" */
+  function volverAEspera(){
+    thanksBox.classList.remove('show');
+    itemsBox.innerHTML = '';
+    prevMap = {};
+    if (emptyBox) emptyBox.style.display = '';
+    eqBars.classList.remove('on');
+    animarTotal(0);
+    footMsg.textContent = 'Gracias por su preferencia';
+  }
+  /* Lluvia de confeti al completar la venta */
+  function lanzarConfeti(){
+    var colores = ['#8b5cf6','#38bdf8','#34d399','#fbbf24','#f97316','#f472b6','#fff'];
+    confettiBox.innerHTML = '';
+    for (var i = 0; i < 80; i++){
+      var p = document.createElement('i');
+      var sz = 6 + Math.random() * 8;
+      p.style.left = (Math.random() * 100) + 'vw';
+      p.style.width = sz + 'px'; p.style.height = (sz * (Math.random() < .5 ? 1 : 1.8)) + 'px';
+      p.style.background = colores[i % colores.length];
+      p.style.animationDuration = (2.2 + Math.random() * 1.8) + 's';
+      p.style.animationDelay = (Math.random() * .5) + 's';
+      confettiBox.appendChild(p);
+    }
+    setTimeout(function(){ confettiBox.innerHTML = ''; }, 5200);
+  }
+
+  function render(items, total, mensaje){
+    /* Si nada cambió desde el último poll, no tocar el DOM:
+       así el refresh no reinicia animaciones ni "brincan" los productos. */
+    var sig = mensaje + '|' + String(total) + '|' + JSON.stringify(items || []);
+    if (sig === lastSig) return;
+    lastSig = sig;
+    if (mensaje === 'completado'){
+      itemsBox.innerHTML = '';
+      prevMap = {};
+      if (emptyBox) emptyBox.style.display = 'none';
+      thanksBox.classList.add('show');
+      eqBars.classList.remove('on');
+      animarTotal(0);
+      lanzarConfeti();
+      footMsg.textContent = '¡Venta completada, gracias por su compra!';
+      clearTimeout(thanksTimer);
+      thanksTimer = setTimeout(volverAEspera, 10000);
+      return;
+    }
+    thanksBox.classList.remove('show');
+    clearTimeout(thanksTimer);
+    if (!items || !items.length){
+      itemsBox.innerHTML = '';
+      prevMap = {};
+      if (emptyBox) emptyBox.style.display = '';
+      eqBars.classList.remove('on');
+      animarTotal(0);
+      footMsg.textContent = 'Gracias por su preferencia';
+      return;
+    }
+    if (emptyBox) emptyBox.style.display = 'none';
+    eqBars.classList.add('on');
+    var html = '', nextMap = {}, recien = [];
+    items.forEach(function(it, idx){
+      var k = keyOf(it);
+      var antes = prevMap[k];
+      var cls = 'cd-item static';
+      if (!antes){ cls = 'cd-item is-new'; recien.push(it.nombre); }
+      else if (String(antes.cantidad) !== String(it.cantidad) || String(antes.subtotal) !== String(it.subtotal)) cls = 'cd-item is-changed';
+      nextMap[k] = {cantidad: it.cantidad, subtotal: it.subtotal};
+      var sub = (it.presentacion ? '<span class="pill">' + esc(it.presentacion) + '</span>' : '')
+        + '<span class="qty">Cant. <strong>' + esc(it.cantidad) + '</strong></span>';
+      var av = it.imagen ? '<div class="avatar"><img src="' + esc(it.imagen) + '" alt="" loading="lazy" onerror="this.remove()"></div>'
+                         : '<div class="avatar" style="background:' + avatarBg(it.nombre) + '">' + esc(initials(it.nombre)) + '</div>';
+      html += '<div class="' + cls + '" style="animation-delay:' + (idx * 0.06) + 's">'
+        + '<div class="item-left">' + av
+        + '<div><div class="item-name">' + esc(it.nombre) + '</div>'
+        + '<div class="item-sub">' + sub + '</div></div></div>'
+        + '<div class="item-price' + ((!antes || String(antes.subtotal) !== String(it.subtotal)) ? ' tick' : '') + '">' + money(it.subtotal) + '</div></div>';
+    });
+    prevMap = nextMap;
+    itemsBox.innerHTML = html;
+    animarTotal(total);
+    if (recien.length){
+      var txt = recien.length === 1 ? '＋ ' + recien[0] + ' añadido' : '＋ ' + recien.length + ' productos añadidos';
+      addedToast.textContent = txt;
+      addedToast.classList.remove('show'); void addedToast.offsetWidth; addedToast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function(){ addedToast.classList.remove('show'); }, 2700);
+    }
+    footMsg.textContent = items.length + (items.length === 1 ? ' producto en el carrito' : ' productos en el carrito');
+  }
+
+  function poll(){
+    fetch(ESTADO_URL, {cache:'no-store'}).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      liveDot.classList.remove('off');
+      return r.json();
+    }).then(function(d){
+      if (d) render(d.items || [], d.total || 0, d.mensaje || 'vacio');
+    }).catch(function(){ liveDot.classList.add('off'); });
+  }
+  poll();
+  setInterval(poll, 1000);
+})();
+</script>
+</body>
+</html>

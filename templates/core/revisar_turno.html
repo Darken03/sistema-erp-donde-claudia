@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}Revisar Turno - BizMaster{% endblock %}
+{% block topbar_text %}Revisar Turno{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-clipboard2-check me-2"></i>Revisar turno · {{ empleado }}</h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'core:arqueos_admin' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Arqueos
+        </a>
+        <a href="{% url 'core:empleado_turnos' empleado.pk %}" class="btn btn-outline-secondary">Turnos</a>
+    </div>
+</div>
+
+<div class="alert {% if turno.abierto %}alert-primary{% else %}alert-secondary{% endif %}">
+    Apertura: <strong>{{ turno.fecha_apertura|date:"d/m/Y H:i" }}</strong> ·
+    Ventas: <strong>{{ resumen.num_ventas }}</strong> · Total: <strong class="mono">${{ resumen.total_ventas|floatformat:2 }}</strong> ·
+    Estado: <strong>{% if turno.abierto %}Abierto{% else %}Cerrado {{ turno.fecha_cierre|date:"d/m H:i" }}{% endif %}</strong>
+</div>
+
+{% if turno.abierto %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <h5><i class="bi bi-list-check me-2"></i>Requisitos para cerrar</h5>
+        {% if bloqueos %}
+        <div class="alert alert-danger mb-0">
+            <strong>Este turno aún no se puede cerrar:</strong>
+            <ul class="mb-0 mt-1">
+                {% for b in bloqueos %}<li>{{ b }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="alert alert-success mb-0">
+            <i class="bi bi-check-circle me-1"></i>
+            Todo decidido: al confirmar la decisión del dinero se cierra el turno.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ============ BLOQUE 1: DINERO ============ -->
+<h5 class="mb-3"><i class="bi bi-cash-coin me-1"></i>Dinero del turno</h5>
+{% if arqueo %}
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm"><div class="card-body">
+            <h6 class="text-muted">Efectivo</h6>
+            <div>Esperado: <strong class="mono">${{ arqueo.esperado_efectivo|floatformat:2 }}</strong> <small class="text-muted">(fondo ${{ arqueo.fondo_inicial|floatformat:2 }} incl.)</small></div>
+            <div>Contado: <strong class="mono">${{ arqueo.contado_efectivo|floatformat:2 }}</strong></div>
+            <div>Diferencia: <strong class="mono {% if arqueo.diferencia_efectivo == 0 %}text-success{% else %}text-danger{% endif %}">${{ arqueo.diferencia_efectivo|floatformat:2 }}</strong></div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm"><div class="card-body">
+            <h6 class="text-muted">Transferencia</h6>
+            <div>Esperada: <strong class="mono">${{ arqueo.esperado_transferencia|floatformat:2 }}</strong></div>
+            <div>Contada: <strong class="mono">${{ arqueo.contado_transferencia|floatformat:2 }}</strong></div>
+            <div>Diferencia: <strong class="mono {% if arqueo.diferencia_transferencia == 0 %}text-success{% else %}text-danger{% endif %}">${{ arqueo.diferencia_transferencia|floatformat:2 }}</strong></div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm"><div class="card-body text-center {% if arqueo.diferencia_total == 0 %}dif-ok{% elif arqueo.diferencia_total > 0 %}dif-sobra{% else %}dif-falta{% endif %}">
+            <small class="d-block">DIFERENCIA TOTAL</small>
+            <div class="dif-val">{% if arqueo.diferencia_total > 0 %}+{% endif %}${{ arqueo.diferencia_total|floatformat:2 }}</div>
+            {% if arqueo.observacion %}<div class="mt-2"><strong>Motivo del empleado:</strong> {{ arqueo.observacion }}</div>{% endif %}
+        </div></div>
+    </div>
+</div>
+
+{% if arqueo.estado == 'declarado' and turno.abierto %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <h5>¿Qué hacemos con la diferencia?</h5>
+        <form method="post" action="{% url 'core:arqueo_confirmar' turno.pk %}">
+            {% csrf_token %}
+            <div class="d-grid gap-2 mb-3">
+                {% for val, lbl in decisiones_arqueo %}
+                <label class="dec-opt">
+                    <input type="radio" name="decision" value="{{ val }}" class="form-check-input" {% if val == 'aceptar' and arqueo.diferencia_total == 0 %}checked{% elif val == 'gasto' and arqueo.diferencia_total < 0 %}checked{% elif val == 'sobrante_caja' and arqueo.diferencia_total > 0 %}checked{% endif %}>
+                    <span>
+                        <strong>{{ lbl }}</strong>
+                        {% if val == 'aceptar' and arqueo.diferencia_total == 0 %}<span class="badge bg-success ms-1">recomendado</span>{% endif %}
+                        {% if val == 'gasto' and arqueo.diferencia_total < 0 %}<span class="badge bg-success ms-1">recomendado</span>{% endif %}
+                        {% if val == 'sobrante_caja' and arqueo.diferencia_total > 0 %}<span class="badge bg-success ms-1">recomendado</span>{% endif %}
+                        <small class="text-muted d-block">
+                            {% if val == 'aceptar' %}Se cierra dejando constancia en el motivo. Úsalo si cuadra o la diferencia es mínima.{% endif %}
+                            {% if val == 'gasto' %}Crea un gasto de caja por el faltante (visible en IPB y gastos). Solo para faltante.{% endif %}
+                            {% if val == 'descontar' %}Queda anotado como pendiente a descontar en nómina. Describe el acuerdo en la nota.{% endif %}
+                            {% if val == 'sobrante_caja' %}El sobrante queda en caja para el próximo fondo.{% endif %}
+                        </small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            <label class="form-label">Nota de la decisión</label>
+            <input type="text" name="decision_nota" class="form-control mb-3" placeholder="Ej: se descuenta $50 del salario del viernes...">
+            {% if bloqueos_fisico %}
+            <div class="alert alert-danger">
+                <strong>Falta el físico:</strong>
+                <ul class="mb-0 mt-1">
+                    {% for b in bloqueos_fisico %}<li>{{ b }}</li>{% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            <button type="submit" class="btn btn-success btn-lg" onclick="return confirm('¿Confirmar decisión y cerrar el turno?');">
+                <i class="bi bi-check-circle me-1"></i> Confirmar y cerrar turno
+            </button>
+            {% endif %}
+        </form>
+        <form method="post" action="{% url 'core:arqueo_recontar' turno.pk %}" class="mt-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning" onclick="return confirm('¿Anular la declaración y pedir que cuenten el dinero de nuevo? Se puede pedir tantas veces como haga falta.');">
+                <i class="bi bi-arrow-repeat me-1"></i> Pedir reconteo de dinero
+            </button>
+        </form>
+    </div>
+</div>
+{% elif arqueo.estado == 'confirmado' %}
+<div class="alert alert-success">Decisión aplicada: <strong>{{ arqueo.get_decision_display }}</strong>{% if arqueo.decision_nota %} · {{ arqueo.decision_nota }}{% endif %}</div>
+{% else %}
+<div class="alert alert-secondary">El empleado aún no declara el arqueo ({{ arqueo.get_estado_display }}).</div>
+{% endif %}
+{% else %}
+<div class="alert alert-warning">Este turno no tiene arqueo iniciado. Puedes cerrarlo desde Empleados, pero quedará marcado como "sin arqueo".</div>
+{% endif %}
+
+<!-- ============ BLOQUE 2: FÍSICO ============ -->
+<h5 class="mb-3 mt-4"><i class="bi bi-box-seam me-1"></i>Físico del mercado (conteos ciegos)</h5>
+{% for c in conteos %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h5 class="mb-0">Conteo #{{ c.pk }} ·
+                {% if c.estado == 'abierto' %}<span class="badge bg-warning">Aún contando</span>
+                {% else %}<span class="badge bg-success">Cerrado {{ c.fecha_cierre|date:"d/m H:i" }}</span>{% endif %}
+                {% if c.estado == 'cerrado' %}
+                    {% if c.num_diferencias %}<span class="badge bg-danger">{{ c.num_diferencias }} diferencia(s)</span>
+                    {% else %}<span class="badge bg-success">cuadra todo</span>{% endif %}
+                {% endif %}
+                {% if c.decision %}<span class="badge bg-secondary">{{ c.get_decision_display }}</span>{% endif %}
+            </h5>
+            <a href="{% url 'core:conteo_comparar' c.pk %}" class="btn btn-sm btn-outline-primary">Ver detalle</a>
+        </div>
+        {% if c.estado == 'cerrado' %}
+        <div class="table-responsive mb-3">
+            <table class="table table-sm mb-0">
+                <thead class="table-light"><tr><th>Producto</th><th class="text-center">Sistema</th><th class="text-center">Contado</th><th class="text-center">Dif.</th></tr></thead>
+                <tbody>
+                    {% for l in c.lineas.all %}
+                    {% if l.diferencia and l.diferencia != 0 %}
+                    <tr>
+                        <td>{{ l.producto.codigo }} · {{ l.producto.nombre }}</td>
+                        <td class="text-center mono">{{ l.stock_sistema }}</td>
+                        <td class="text-center mono fw-bold">{{ l.cantidad }}</td>
+                        <td class="text-center"><span class="badge {% if l.diferencia > 0 %}bg-warning{% else %}bg-danger{% endif %}">{% if l.diferencia > 0 %}+{% endif %}{{ l.diferencia }}</span></td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not c.decision %}
+        <form method="post" action="{% url 'core:conteo_decidir' c.pk %}">
+            {% csrf_token %}
+            <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label">Nota (opcional)</label>
+                    <input type="text" name="decision_nota" class="form-control" placeholder="Ej: se ajusta, la merma fue un pomo roto...">
+                </div>
+                <div class="col-md-7 d-flex gap-2 flex-wrap">
+                    <button type="submit" name="accion" value="ajustar" class="btn btn-success" onclick="return confirm('¿Llevar el sistema a lo contado en {{ c.num_diferencias }} producto(s)?');">
+                        <i class="bi bi-arrow-repeat me-1"></i>Ajustar sistema
+                    </button>
+                    <button type="submit" name="accion" value="recontar" class="btn btn-warning" onclick="return confirm('¿Reabrir a ciegas para reconteo?');">Pedir reconteo</button>
+                    <button type="submit" name="accion" value="aceptar" class="btn btn-outline-secondary">Aceptar sin ajustar</button>
+                </div>
+            </div>
+            <div class="form-text mt-2"><strong>Recomendación:</strong> si el conteo es confiable, <strong>Ajustar sistema</strong> (genera movimientos de ajuste visibles en kardex e IPB). Si sospechas mal conteo, <strong>Pedir reconteo</strong>. Si la diferencia ya está explicada, <strong>Aceptar sin ajustar</strong>.</div>
+        </form>
+        {% else %}
+        <div class="alert alert-secondary mb-0">Decisión: <strong>{{ c.get_decision_display }}</strong>{% if c.decision_nota %} · {{ c.decision_nota }}{% endif %}</div>
+        {% endif %}
+        {% else %}
+        <small class="text-muted">El empleado todavía está contando a ciegas.</small>
+        {% endif %}
+    </div>
+</div>
+{% empty %}
+<div class="alert alert-secondary">Este turno no tiene conteos de productos.</div>
+{% endfor %}
+
+<style>
+.dif-val { font-family:var(--font-mono); font-size:2rem; font-weight:700; }
+.dif-ok { background:var(--success-soft); } .dif-ok .dif-val { color:var(--success-dark); }
+.dif-sobra { background:#fef3c7; } .dif-sobra .dif-val { color:#92400e; }
+.dif-falta { background:var(--danger-soft); } .dif-falta .dif-val { color:var(--danger-dark); }
+html[data-theme="dark"] .dif-sobra { background:rgba(245,158,11,.16); }
+html[data-theme="dark"] .dif-sobra .dif-val { color:#fbbf24; }
+.dec-opt { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; background:var(--surface); }
+.dec-opt:hover { border-color:var(--accent); }
+.dec-opt:has(input:checked) { border-color:var(--accent); background:var(--accent-tint); }
+</style>
+{% endblock %}

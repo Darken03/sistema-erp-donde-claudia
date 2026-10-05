@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Conteos Ciegos - BizMaster{% endblock %}
+{% block topbar_text %}Conteo Ciego{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Conteos ciegos del turno</h2>
+    <a href="{% url 'core:mi_panel' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Mi panel
+    </a>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-eye-slash me-1"></i>
+    Anota lo que <strong>cuentes físicamente</strong> sin mirar el sistema. Al cerrar el conteo se congela el stock y se compara <strong>producto por producto</strong>.
+</div>
+
+{% if turno %}
+<form method="post" class="mb-4">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Iniciar nuevo conteo
+    </button>
+</form>
+{% endif %}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Estado</th>
+                        <th>Iniciado</th>
+                        <th>Cerrado</th>
+                        <th class="text-center">Diferencias</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in conteos %}
+                    <tr>
+                        <td><strong>Conteo #{{ c.pk }}</strong></td>
+                        <td>
+                            {% if c.estado == 'abierto' %}<span class="badge bg-warning">Abierto</span>
+                            {% else %}<span class="badge bg-success">Cerrado</span>{% endif %}
+                        </td>
+                        <td class="text-muted small">{{ c.fecha_creacion|date:"d/m H:i" }}</td>
+                        <td class="text-muted small">{{ c.fecha_cierre|date:"d/m H:i"|default:"—" }}</td>
+                        <td class="text-center">
+                            {% if c.estado == 'cerrado' %}
+                                {% if c.num_diferencias %}<span class="badge bg-danger">{{ c.num_diferencias }}</span>
+                                {% else %}<span class="badge bg-success">0 · cuadra</span>{% endif %}
+                            {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if c.estado == 'abierto' %}
+                            <a href="{% url 'core:conteo_contar' c.pk %}" class="btn btn-sm btn-primary">Contar</a>
+                            {% else %}
+                            <a href="{% url 'core:conteo_comparar' c.pk %}" class="btn btn-sm btn-outline-primary">Comparar</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No hay conteos en este turno</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

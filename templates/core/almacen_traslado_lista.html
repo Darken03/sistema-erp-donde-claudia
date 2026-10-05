@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Traslados al Punto de Venta - BizMaster{% endblock %}
+{% block topbar_text %}Almacén · Traslados{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-truck me-2"></i>Traslados al Punto de Venta</h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'core:almacen_panel' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Almacén
+        </a>
+        <a href="{% url 'core:almacen_traslado_crear' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Nuevo Traslado
+        </a>
+    </div>
+</div>
+
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Cada traslado descuenta del almacén, suma al punto de venta y genera la entrada que se ve en el IPB.
+    Los traslados no se pueden borrar.
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label">Fecha</label>
+                <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>No. Traslado</th>
+                        <th>Fecha</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Costo</th>
+                        <th>Entrada IPB</th>
+                        <th>Registrado por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in traslados %}
+                    <tr>
+                        <td><small class="fw-bold">{{ t.numero_traslado }}</small></td>
+                        <td>{{ t.fecha_traslado|date:"d/m/Y H:i" }}</td>
+                        <td>{{ t.producto.nombre }}</td>
+                        <td><span class="badge bg-warning text-dark">{{ t.cantidad_fmt }}</span></td>
+                        <td class="mono">${{ t.costo_unitario|floatformat:2 }}</td>
+                        <td>
+                            {% if t.entrada_generada %}
+                            <small class="fw-bold">{{ t.entrada_generada.numero_entrada }}</small>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td><small>{{ t.registrado_por.get_full_name|default:t.registrado_por.username }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            No hay traslados en esta fecha.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

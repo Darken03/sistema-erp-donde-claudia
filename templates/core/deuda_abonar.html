@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Registrar Abono - BizMaster{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Registrar Abono</h2>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="alert alert-info">
+                    <div><strong>{{ deuda.numero_deuda }}</strong> · {{ deuda.deudor.nombre_completo }}</div>
+                    <div class="mt-1">Monto: <strong>${{ deuda.monto|floatformat:2 }}</strong> ·
+                    Abonado: <strong>${{ deuda.calc_abonado|floatformat:2 }}</strong></div>
+                    <div class="mt-1">Saldo pendiente: <strong class="text-danger">${{ deuda.calc_saldo|floatformat:2 }}</strong></div>
+                    {% if deuda.motivo_display != '-' %}<div class="mt-1"><small>Motivo: {{ deuda.motivo_display }}</small></div>{% endif %}
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Monto a abonar *</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="monto" class="form-control text-end" step="0.01" min="0.01" max="{{ deuda.calc_saldo }}" required placeholder="0.00" autofocus>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Método</label>
+                        <select name="metodo" class="form-select">
+                            <option value="efectivo">Efectivo</option>
+                            <option value="transferencia">Transferencia</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nota (opcional)</label>
+                        <input type="text" name="nota" class="form-control" placeholder="Ej: pago parcial...">
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <a href="{% url 'core:deudor_detalle' deuda.deudor.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-lg me-1"></i> Registrar Abono
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

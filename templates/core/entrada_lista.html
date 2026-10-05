@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Entradas de Productos - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-box-arrow-in-down me-2"></i>Entradas de Productos</h2>
+    <span class="badge bg-secondary">Historial de solo lectura</span>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    La entrada directa al punto de venta se eliminó. El flujo actual es
+    <strong>almacén → traslado</strong>: los traslados aparecen aquí con proveedor
+    <span class="badge bg-warning text-dark">Almacén</span>.
+</div>
+
+<!-- Filtros -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label">Fecha</label>
+                <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resumen -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm border-start border-success border-4 h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Total Entradas</h6>
+                <h3 class="mb-0">{{ resumen_cantidad }}</h3>
+                <small class="text-muted">registros del día</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm border-start border-info border-4 h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Costo Total</h6>
+                <h3 class="mb-0 text-info">${{ resumen_total|floatformat:2 }}</h3>
+                <small class="text-muted">&nbsp;</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de entradas -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>No. Entrada</th>
+                        <th>Fecha</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Costo Unitario</th>
+                        <th>Costo Total</th>
+                        <th>Proveedor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in entradas %}
+                    <tr>
+                        <td><small class="fw-bold">{{ e.numero_entrada }}</small></td>
+                        <td>{{ e.fecha_entrada|date:"d/m/Y H:i" }}</td>
+                        <td>{{ e.producto.nombre }}</td>
+                        <td><span class="badge bg-success">+{{ e.cantidad_fmt }}</span></td>
+                        <td>${{ e.costo_unitario|floatformat:2 }}</td>
+                        <td>${{ e.costo_total|floatformat:2 }}</td>
+                        <td>
+                            {% if e.proveedor == 'Almacén' %}
+                            <span class="badge bg-warning text-dark" title="{{ e.descripcion|default:'' }}">Almacén</span>
+                            {% elif e.proveedor %}{{ e.proveedor }}{% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            No hay entradas en esta fecha.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

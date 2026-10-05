@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if es_definitivo %}Eliminar definitivamente{% else %}Desactivar{% endif %} Producto - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="bi bi-trash me-2 text-danger"></i>
+        {% if es_definitivo %}Eliminar definitivamente{% else %}Desactivar producto{% endif %}
+    </h2>
+    <a href="{% url 'core:producto_lista' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        {% if producto.imagen %}
+            <img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" class="rounded mb-3" width="120" height="120" style="object-fit:cover;">
+        {% endif %}
+        <h4>{{ producto.nombre }}</h4>
+        <p class="text-muted">{{ producto.codigo }} ·
+            {% if producto.activo %}<span class="badge bg-success">Activo</span>{% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
+        </p>
+
+        {% if es_definitivo %}
+            <div class="alert alert-danger text-start mx-auto" style="max-width:640px;">
+                <h6 class="alert-heading"><i class="bi bi-exclamation-octagon-fill me-2"></i>Paso 2 de 2: borrado DEFINITIVO en cascada</h6>
+                <p class="mb-2">Este producto ya está <strong>desactivado</strong>. Si continúas, se borrará <strong>para siempre</strong> junto con todo su historial. Esta acción <strong>no se puede deshacer</strong>.</p>
+                {% if relacionados %}
+                    <p class="mb-1">Se eliminarán también estos registros ligados:</p>
+                    <ul class="mb-2">
+                        {% for nombre, total in relacionados %}
+                        <li>{{ nombre }}: <strong>{{ total }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="mb-2">No tiene historial ligado: solo se borrará el producto.</p>
+                {% endif %}
+                <p class="mb-0 small">Nota: las ventas que queden vacías (sin ningún otro producto) también se eliminarán para no dejar tickets huérfanos.</p>
+            </div>
+            <form method="post" class="mx-auto" style="max-width:440px;">
+                {% csrf_token %}
+                <label for="confirmacion" class="form-label fw-bold">Para confirmar, escribe <span class="badge bg-danger">ELIMINAR</span> en el recuadro:</label>
+                <input type="text" name="confirmacion" id="confirmacion" class="form-control text-center fw-bold mb-3"
+                       placeholder="ELIMINAR" autocomplete="off" autofocus>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="submit" id="btnEliminar" class="btn btn-danger" disabled>
+                        <i class="bi bi-trash me-1"></i> Sí, eliminar para siempre
+                    </button>
+                    <a href="{% url 'core:producto_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+            <script>
+            (function(){
+                var inp = document.getElementById('confirmacion');
+                var btn = document.getElementById('btnEliminar');
+                function check(){ btn.disabled = (inp.value.trim().toUpperCase() !== 'ELIMINAR'); }
+                inp.addEventListener('input', check); check();
+            })();
+            </script>
+        {% else %}
+            <div class="alert alert-warning text-start mx-auto" style="max-width:640px;">
+                <h6 class="alert-heading"><i class="bi bi-pause-circle me-2"></i>Paso 1 de 2: desactivar (no se borra nada todavía)</h6>
+                <p class="mb-2">El producto dejará de aparecer en el POS, pero se conserva todo su historial (ventas, entradas, deudas, movimientos…).</p>
+                {% if relacionados %}
+                    <p class="mb-1">Historial que se conserva por ahora:</p>
+                    <ul class="mb-2">
+                        {% for nombre, total in relacionados %}
+                        <li>{{ nombre }}: <strong>{{ total }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="mb-2">No tiene historial: si lo deseas podrás borrarlo del todo en el paso 2.</p>
+                {% endif %}
+                <p class="mb-0">El próximo paso será eliminarlo <strong>definitivamente en cascada</strong> (tendrás que escribir ELIMINAR).</p>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-pause-circle me-1"></i> Sí, desactivar por ahora
+                    </button>
+                    <a href="{% url 'core:producto_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
