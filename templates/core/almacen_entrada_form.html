@@ -30,6 +30,41 @@
                     <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
                     {% endfor %}
                 </select>
+                <div class="prod-grid" id="productoGrid" role="listbox" aria-label="Productos">
+                    {% for p in productos %}
+                    <button type="button" class="prod-card" role="option" aria-selected="false" data-id="{{ p.id }}" data-text="{{ p.codigo }} {{ p.nombre }}">
+                        <span class="prod-img">
+                            {% if p.imagen_url %}
+                            <img src="{{ p.imagen_url }}" alt="" loading="lazy" onerror="this.remove()">
+                            {% else %}
+                            <span class="prod-initial">{{ p.nombre|slice:":1"|upper }}</span>
+                            {% endif %}
+                        </span>
+                        <span class="prod-name">{{ p.nombre }}</span>
+                        <span class="prod-code mono">{{ p.codigo }}</span>
+                        <span class="prod-meta">${{ p.precio_compra|floatformat:2 }} · <span data-exist-for="{{ p.id }}">0</span> {{ p.unidad_medida }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <small class="text-muted" id="productoCount"></small>
+                    {% if request.user.perfil.es_admin %}
+                    <small class="text-muted">¿No existe? Créelo y volverá aquí con el producto ya seleccionado.</small>
+                    {% else %}
+                    <small class="text-muted">¿No existe? Pida al administrador que lo cree.</small>
+                    {% endif %}
+                </div>
+                {% if request.user.perfil.es_admin %}
+                <div class="alert alert-warning py-2 mt-2 mb-0" id="productoEmpty" style="display:none;">
+                    Sin coincidencias para esa búsqueda.
+                    <a href="{{ next_crear|default:'/productos/crear/' }}" class="alert-link">Crear el producto aquí</a>
+                    y volverá a esta entrada para seleccionarlo.
+                </div>
+                {% else %}
+                <div class="alert alert-warning py-2 mt-2 mb-0" id="productoEmpty" style="display:none;">
+                    Sin coincidencias para esa búsqueda.
+                </div>
+                {% endif %}
             </div>
             {% elif almacen_actual %}
             <input type="hidden" name="almacen" value="{{ almacen_actual.pk }}">
