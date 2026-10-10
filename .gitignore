@@ -3,7 +3,9 @@ venv/
 __pycache__/
 *.py[cod]
 *$py.class
-
+db.sqlite3
+db.sqlite3-*
+*.sqlite3
 # Respaldos y paquetes
 *.backup
 *.backup_*
@@ -17,4 +19,3 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
-db.sqlite3
