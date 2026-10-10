@@ -1,7 +1,11 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.urls import reverse
-from .models import ConfiguracionTienda, PerfilUsuario
+from decimal import Decimal
+from .models import (
+    ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
+    Almacen, AlmacenStock,
+)
 from .views import modo_actual
 
 
@@ -62,3 +66,136 @@ class TestModoBase(TestCase):
         set_modo('multi_pos')
         html = self.client.get('/dashboard/').content.decode()
         self.assertIn('Puntos de venta', html)
+
+
+class TestSoloPos(TestCase):
+    """Modo solo-POS (spec §3): entradas directas solo admin + ocultamiento
+    de datos de almacén sin borrarlos + almacenero redirige al POS."""
+
+    def setUp(self):
+        self.admin = _usuario('solo_admin', 'admin')
+        self.cajero = _usuario('solo_cajero', 'cajero')
+        self.alm = _usuario('solo_alm', 'almacenero')
+        self.prod = Producto.objects.create(
+            nombre='Café', unidad_medida='unidades', precio_compra=10,
+            precio_venta=20, stock=Decimal('0'), permite_decimal=False,
+            visible_pos=False)
+        self.almacen = Almacen.objects.create(nombre='Almacén Test')
+        self.stock_alm = AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.almacen, cantidad=Decimal('30'))
+
+    def _post_entrada_directa(self, cantidad='5'):
+        return self.client.post(reverse('core:entrada_crear'), {
+            'producto': self.prod.pk, 'cantidad': cantidad,
+            'costo_unitario': '12', 'proveedor': 'Proveedor Y',
+            'descripcion': 'compra directa',
+        })
+
+    def test_entradas_directas_y_datos_ocultos_no_borrados(self):
+        set_modo('solo_pos')
+        # Admin crea entrada directa: suma a Producto.stock y publica en POS.
+        self.client.login(username='solo_admin', password='x12345')
+        r = self._post_entrada_directa()
+        self.assertEqual(r.status_code, 302)
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('5'))
+        self.assertTrue(self.prod.visible_pos)
+        ent = EntradaProducto.objects.get(producto=self.prod)
+        self.assertEqual(ent.cantidad, Decimal('5'))
+        # Proveedor libre: NO se usa el marcador de traslados ('Almacén').
+        self.assertEqual(ent.proveedor, 'Proveedor Y')
+        # Cajero no puede crear entradas directas.
+        self.client.login(username='solo_cajero', password='x12345')
+        n = EntradaProducto.objects.count()
+        r = self._post_entrada_directa()
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EntradaProducto.objects.count(), n)
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('5'))
+        # Al volver a un modo con almacén, todo reaparece intacto.
+        set_modo('pos_almacenes')
+        st = AlmacenStock.objects.get(
+            producto=self.prod, almacen=self.almacen)
+        self.assertEqual(st.cantidad, Decimal('30'))
+
+    def test_entrada_eliminar_revierte_stock_solo_admin_solo_pos(self):
+        set_modo('solo_pos')
+        self.client.login(username='solo_admin', password='x12345')
+        self._post_entrada_directa()
+        ent = EntradaProducto.objects.get(producto=self.prod)
+        r = self.client.post(
+            reverse('core:entrada_eliminar', args=[ent.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(
+            EntradaProducto.objects.filter(pk=ent.pk).exists())
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('0'))
+        # Cajero no puede eliminar: la entrada y el stock quedan intactos.
+        self._post_entrada_directa()
+        ent2 = EntradaProducto.objects.get(producto=self.prod)
+        self.client.login(username='solo_cajero', password='x12345')
+        r = self.client.post(
+            reverse('core:entrada_eliminar', args=[ent2.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(
+            EntradaProducto.objects.filter(pk=ent2.pk).exists())
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('5'))
+
+    def test_vistas_almacen_redirigen_en_solo_pos(self):
+        set_modo('solo_pos')
+        self.client.login(username='solo_admin', password='x12345')
+        for name in ('core:almacen_panel', 'core:almacen_stock',
+                     'core:almacen_entrada_lista',
+                     'core:almacen_traslado_lista',
+                     'core:almacen_movimientos'):
+            r = self.client.get(reverse(name))
+            self.assertEqual(r.status_code, 302, name)
+        # Entradas directas bloqueadas fuera de solo-POS (sin borrar nada).
+        set_modo('pos_almacenes')
+        n = EntradaProducto.objects.count()
+        r = self._post_entrada_directa()
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(EntradaProducto.objects.count(), n)
+
+    def test_entrada_lista_gestion_solo_en_solo_pos(self):
+        self.client.login(username='solo_admin', password='x12345')
+        set_modo('solo_pos')
+        html = self.client.get(
+            reverse('core:entrada_lista')).content.decode()
+        self.assertIn('Nueva Entrada', html)
+        r = self.client.get(reverse('core:entrada_crear'))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'Registrar Entrada')
+        set_modo('pos_almacenes')
+        html = self.client.get(
+            reverse('core:entrada_lista')).content.decode()
+        self.assertNotIn('Nueva Entrada', html)
+
+    def test_almacenero_redirige_al_pos_con_aviso_en_solo_pos(self):
+        set_modo('solo_pos')
+        self.client.login(username='solo_alm', password='x12345')
+        r = self.client.get(
+            reverse('core:redireccion_rol'), follow=True)
+        self.assertEqual(r.redirect_chain[-1][0], '/pos/')
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('cajero' in m for m in msgs),
+            f'se esperaba aviso de reasignar a cajero, hubo: {msgs}')
+        # El rol queda sin pantallas de almacén.
+        html = r.content.decode()
+        self.assertNotIn('Almacén', html)
+        # Toda URL de almacén lo lleva al POS (sin 500).
+        r2 = self.client.get(reverse('core:almacen_stock'))
+        self.assertEqual(r2.status_code, 302)
+        self.assertTrue(r2.url.endswith('/pos/'))
+
+    def test_empleado_form_sugiere_cajero_en_solo_pos(self):
+        self.client.login(username='solo_admin', password='x12345')
+        set_modo('solo_pos')
+        r = self.client.get(reverse('core:empleado_crear'))
+        self.assertEqual(r.status_code, 200)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('cajero' in m for m in msgs),
+            f'se esperaba sugerencia de cajero, hubo: {msgs}')

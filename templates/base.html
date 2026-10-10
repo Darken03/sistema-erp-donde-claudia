@@ -119,7 +119,8 @@
                         </a>
                     </li>
                     {% elif request.user.perfil.es_almacenero %}
-                    {# Almacenero: solo el almacén (oculto en modo solo-POS) #}
+                    {# Almacenero: solo el almacén (en solo-POS queda sin
+                       pantallas: opera en el POS hasta reasignarlo a cajero) #}
                     {% if MODO != 'solo_pos' %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'almacen_panel' %}active{% endif %}" href="{% url 'core:almacen_panel' %}">
@@ -144,6 +145,12 @@
                     <li class="nav-item">
                         <a class="nav-link {% if 'almacen_movimiento' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:almacen_movimientos' %}">
                             <i class="bi bi-clock-history me-2"></i> Auditoría
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pos' %}active{% endif %}" href="{% url 'core:pos' %}">
+                            <i class="bi bi-cart3 me-2"></i> Punto de Venta
                         </a>
                     </li>
                     {% endif %}

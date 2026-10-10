@@ -5,15 +5,29 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-box-arrow-in-down me-2"></i>Entradas de Productos</h2>
+    {% if puede_gestionar %}
+    <a href="{% url 'core:entrada_crear' %}" class="btn btn-success">
+        <i class="bi bi-plus-circle me-1"></i> Nueva Entrada
+    </a>
+    {% else %}
     <span class="badge bg-secondary">Historial de solo lectura</span>
+    {% endif %}
 </div>
 
+{% if puede_gestionar %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    Modo solo-POS: la entrada es <strong>directa al punto de venta</strong>
+    (suma al stock y queda visible en el POS de inmediato).
+</div>
+{% else %}
 <div class="alert alert-info">
     <i class="bi bi-info-circle me-1"></i>
     La entrada directa al punto de venta se eliminó. El flujo actual es
     <strong>almacén → traslado</strong>: los traslados aparecen aquí con proveedor
     <span class="badge bg-warning text-dark">Almacén</span>.
 </div>
+{% endif %}
 
 <!-- Filtros -->
 <div class="card border-0 shadow-sm mb-4">
@@ -68,6 +82,7 @@
                         <th>Costo Unitario</th>
                         <th>Costo Total</th>
                         <th>Proveedor</th>
+                        {% if puede_gestionar %}<th>Acciones</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -84,10 +99,21 @@
                             <span class="badge bg-warning text-dark" title="{{ e.descripcion|default:'' }}">Almacén</span>
                             {% elif e.proveedor %}{{ e.proveedor }}{% else %}-{% endif %}
                         </td>
+                        {% if puede_gestionar %}
+                        <td>
+                            <form method="post" action="{% url 'core:entrada_eliminar' e.id %}" class="d-inline"
+                                  onsubmit="return confirm('¿Eliminar esta entrada? Se revertira el stock.')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar entrada">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="{% if puede_gestionar %}8{% else %}7{% endif %}" class="text-center text-muted py-4">
                             No hay entradas en esta fecha.
                         </td>
                     </tr>

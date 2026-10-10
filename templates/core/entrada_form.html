@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block title %}Nueva Entrada Directa - BizMaster{% endblock %}
+{% block topbar_text %}Inventario · Nueva Entrada Directa{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-box-arrow-in-down me-2"></i>Nueva Entrada Directa</h2>
+    <a href="{% url 'core:entrada_lista' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    La mercancía entra <strong>directo al punto de venta</strong> (modo solo-POS):
+    suma al stock y queda visible en el POS de inmediato.
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label" for="id_producto">Producto *</label>
+                <select name="producto" id="id_producto" class="form-select" required>
+                    <option value="">Seleccione un producto...</option>
+                    {% for p in productos %}
+                    <option value="{{ p.id }}" data-unidad="{{ p.unidad_medida }}">{{ p.codigo }} - {{ p.nombre }} ({{ p.stock_fmt }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="id_cantidad">Cantidad * <span class="text-muted fw-normal" id="unidadLbl"></span></label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-hash"></i></span>
+                        <input type="number" name="cantidad" id="id_cantidad" class="form-control" min="0" step="0.001" value="1" required>
+                    </div>
+                    <div class="form-text">Admite 3 decimales (ej. 2.500 lb).</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="id_costo">Costo unitario ($)</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="costo_unitario" id="id_costo" class="form-control mono" step="0.01" min="0" value="0">
+                    </div>
+                    <div class="form-text">Si es mayor a 0, actualiza el costo del producto.</div>
+                </div>
+            </div>
+            <div class="alert alert-light border mt-3 mb-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-muted small">COSTO TOTAL</span>
+                <span class="fs-4 fw-bold mono text-success" id="totalPreview">$0.00</span>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="id_proveedor">Proveedor <span class="text-muted fw-normal">(opcional)</span></label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-truck"></i></span>
+                    <input type="text" name="proveedor" id="id_proveedor" class="form-control" placeholder="Nombre del proveedor">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="id_descripcion">Descripción <span class="text-muted fw-normal">(opcional)</span></label>
+                <textarea name="descripcion" id="id_descripcion" class="form-control" rows="2" placeholder="Notas sobre la entrada..."></textarea>
+            </div>
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="bi bi-check-circle me-1"></i> Registrar Entrada
+                </button>
+                <a href="{% url 'core:entrada_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function(){
+    var sel = document.getElementById('id_producto');
+    var cant = document.getElementById('id_cantidad');
+    var costo = document.getElementById('id_costo');
+    function pintarUnidad(){
+        var opt = sel.options[sel.selectedIndex];
+        document.getElementById('unidadLbl').textContent =
+            (opt && opt.value) ? '· ' + (opt.getAttribute('data-unidad') || '') : '';
+    }
+    function total(){
+        var c = parseFloat(cant.value) || 0, p = parseFloat(costo.value) || 0;
+        document.getElementById('totalPreview').textContent = '$' + (c * p).toFixed(2);
+    }
+    sel.addEventListener('change', pintarUnidad);
+    cant.addEventListener('input', total);
+    costo.addEventListener('input', total);
+    pintarUnidad(); total();
+})();
+</script>
+{% endblock %}

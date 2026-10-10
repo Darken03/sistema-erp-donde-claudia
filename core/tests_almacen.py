@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.test import TestCase
 from django.contrib.auth.models import User
-from django.urls import reverse, NoReverseMatch
+from django.urls import reverse
 from .models import (
     Empleado, PerfilUsuario, Producto,
     EntradaProducto, AlmacenStock, AlmacenEntrada,
@@ -106,11 +106,19 @@ class AlmacenTest(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertTrue(r.url.endswith('/almacen/'))
 
-    def test_entrada_directa_al_pos_eliminada_pero_historial_visible(self):
-        with self.assertRaises(NoReverseMatch):
-            reverse('core:entrada_crear')
-        with self.assertRaises(NoReverseMatch):
-            reverse('core:entrada_eliminar', args=[1])
+    def test_entrada_directa_solo_en_solo_pos_historial_visible(self):
+        # Spec §3 (modos de operación): la entrada directa existe solo en
+        # modo solo-POS. En el modo actual (pos_almacenes) crear/eliminar
+        # redirigen sin tocar nada, pero el historial sigue visible.
+        self.client.login(username='adminA', password='x12345')
+        self.assertEqual(
+            self.client.get(reverse('core:entrada_crear')).status_code, 302)
+        n_entradas = EntradaProducto.objects.count()
+        self.assertEqual(self.client.post(reverse('core:entrada_crear'), {
+            'producto': self.prod.pk, 'cantidad': '5',
+            'costo_unitario': '10', 'proveedor': 'Proveedor X',
+        }).status_code, 302)
+        self.assertEqual(EntradaProducto.objects.count(), n_entradas)
         EntradaProducto.objects.create(
             numero_entrada='ENT-000001', producto=self.prod,
             cantidad=Decimal('5'), costo_unitario=Decimal('10'))

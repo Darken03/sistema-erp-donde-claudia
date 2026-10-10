@@ -84,6 +84,13 @@ def redireccion_rol(request):
         if perfil.es_admin:
             return redirect('core:dashboard')
         elif perfil.es_almacenero:
+            if modo_actual() == 'solo_pos':
+                # Spec §3: en solo-POS el almacenero queda sin pantallas.
+                messages.warning(
+                    request,
+                    'El rol almacenero no tiene pantallas en el modo solo-POS: '
+                    'se sugiere reasignarlo a cajero.')
+                return redirect('core:pos')
             return redirect('core:almacen_panel')
         else:
             return redirect('core:pos')
@@ -701,6 +708,11 @@ def empleado_crear(request):
             return redirect('core:empleado_lista')
     else:
         form = EmpleadoForm()
+        if modo_actual() == 'solo_pos':
+            messages.warning(
+                request,
+                'En el modo solo-POS el rol almacenero no tiene pantallas: '
+                'se sugiere asignar cajero.')
     return render(request, 'core/empleado_form.html', {'form': form, 'titulo': 'Crear Empleado'})
 
 
@@ -715,6 +727,11 @@ def empleado_editar(request, pk):
             return redirect('core:empleado_lista')
     else:
         form = EmpleadoForm(instance=empleado, user_instance=empleado.user)
+        if modo_actual() == 'solo_pos':
+            messages.warning(
+                request,
+                'En el modo solo-POS el rol almacenero no tiene pantallas: '
+                'se sugiere asignar cajero.')
     return render(request, 'core/empleado_form.html', {
         'form': form,
         'titulo': 'Editar Empleado',
@@ -1195,8 +1212,12 @@ def pos(request):
     # Verificar si es cajero y si tiene turno abierto
     try:
         perfil = request.user.perfil
-        if perfil.es_almacenero and not perfil.es_admin and modo_actual() != 'solo_pos':
-            return redirect('core:almacen_panel')
+        if perfil.es_almacenero and not perfil.es_admin:
+            if modo_actual() != 'solo_pos':
+                return redirect('core:almacen_panel')
+            # En solo-POS el almacenero queda sin pantallas y opera en el
+            # POS (el aviso de reasignarlo a cajero se da en
+            # redireccion_rol): sigue al render del POS.
         if perfil.es_cajero:
             try:
                 empleado = request.user.empleado
@@ -2423,7 +2444,7 @@ def gasto_eliminar(request, pk):
 def entrada_lista(request):
     hoy = ahora_servidor().date()
     fecha_str = request.GET.get('fecha', '')
-    
+
     if fecha_str:
         try:
             fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -2433,19 +2454,126 @@ def entrada_lista(request):
         fecha = hoy
 
     entradas = EntradaProducto.objects.filter(fecha_entrada__date=fecha).select_related('producto').order_by('-fecha_entrada')
-    
+
     resumen = entradas.aggregate(
         total=Sum('costo_total'),
         cantidad=Count('id'),
     )
+
+    try:
+        es_admin = request.user.perfil.es_admin
+    except Exception:
+        es_admin = False
+    # Spec §3: crear/eliminar entradas directas solo admin en solo-POS.
+    # En los demás modos el historial sigue visible pero de solo lectura.
+    puede_gestionar = es_admin and modo_actual() == 'solo_pos'
 
     context = {
         'entradas': entradas,
         'fecha': fecha.strftime('%Y-%m-%d'),
         'resumen_total': float(resumen['total'] or 0),
         'resumen_cantidad': resumen['cantidad'] or 0,
+        'puede_gestionar': puede_gestionar,
     }
     return render(request, 'core/entrada_lista.html', context)
+
+
+@requiere_modo('solo_pos')
+@requiere_admin
+def entrada_crear(request):
+    """Entrada directa al punto de venta (solo admin en modo solo-POS).
+
+    Suma a `Producto.stock` y lo deja `visible_pos=True` de inmediato
+    (entra directo al mostrador). El proveedor es libre: el marcador
+    `ALMACEN_PROVEEDOR` NO aplica (ese es solo de traslados).
+    """
+    productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('nombre')
+
+    if request.method == 'POST':
+        producto_id = request.POST.get('producto')
+        try:
+            cantidad = Decimal(str(request.POST.get('cantidad', '0')))
+        except Exception:
+            cantidad = Decimal('0')
+        try:
+            costo_unitario = Decimal(str(request.POST.get('costo_unitario', '0')))
+        except Exception:
+            costo_unitario = Decimal('0')
+        proveedor = request.POST.get('proveedor', '').strip()
+        descripcion = request.POST.get('descripcion', '').strip()
+
+        if not producto_id or cantidad <= 0:
+            messages.error(request, 'Seleccione un producto y cantidad mayor a 0 (admite 3 decimales, ej. 2.500 lb).')
+            return redirect('core:entrada_crear')
+
+        producto = get_object_or_404(Producto, pk=producto_id)
+
+        if costo_unitario > 0:
+            producto.precio_compra = costo_unitario
+            producto.save(update_fields=['precio_compra'])
+            producto.refresh_from_db()
+
+        numero_entrada = EntradaProducto.generar_numero()
+        entrada = EntradaProducto.objects.create(
+            numero_entrada=numero_entrada,
+            producto=producto,
+            cantidad=cantidad,
+            costo_unitario=costo_unitario,
+            proveedor=proveedor,
+            descripcion=descripcion,
+        )
+
+        if not producto.visible_pos:
+            producto.visible_pos = True
+        _registrar_movimiento(producto, 'entrada', cantidad, request.user, entrada.id, f'Entrada #{numero_entrada}')
+
+        _sincronizar_inventario_dia(ahora_servidor().date())
+
+        messages.success(request, f'Entrada {numero_entrada} registrada. {"%g" % float(cantidad)} {producto.unidad_medida} agregados a {producto.nombre}.')
+        return redirect('core:entrada_lista')
+
+    return render(request, 'core/entrada_form.html', {'productos': productos})
+
+
+@requiere_modo('solo_pos')
+@requiere_admin
+@require_POST
+def entrada_eliminar(request, pk):
+    """Elimina una entrada directa revirtiendo su stock (solo admin en
+    modo solo-POS). Las entradas generadas por traslados del almacén no
+    se tocan aquí (se gestionan cancelando el traslado)."""
+    entrada = get_object_or_404(EntradaProducto, pk=pk)
+    if entrada.traslados_almacen.exists():
+        messages.error(
+            request,
+            f'La entrada {entrada.numero_entrada} viene de un traslado del '
+            'almacén: cancélelo desde Traslados en un modo con almacén.')
+        return redirect('core:entrada_lista')
+    numero = entrada.numero_entrada
+    cantidad = entrada.cantidad
+    fecha = entrada.fecha_entrada.date()
+    with transaction.atomic():
+        producto = Producto.objects.select_for_update().get(pk=entrada.producto_id)
+        if producto.stock < cantidad:
+            messages.error(
+                request,
+                f'No se puede eliminar. Stock actual ({"%g" % float(producto.stock)}) '
+                f'menor que cantidad de entrada ({"%g" % float(cantidad)}).')
+            return redirect('core:entrada_lista')
+        producto.stock -= cantidad
+        producto.save(update_fields=['stock'])
+        MovimientoInventario.objects.filter(
+            producto=producto,
+            referencia_id=entrada.id,
+            tipo='entrada'
+        ).delete()
+        entrada.delete()
+    _sincronizar_inventario_dia(fecha)
+    messages.success(
+        request,
+        f'Entrada {numero} eliminada. Se revirtieron {"%g" % float(cantidad)} '
+        f'unidades del stock de {producto.nombre}.')
+    return redirect('core:entrada_lista')
 
 
 # ============================================================

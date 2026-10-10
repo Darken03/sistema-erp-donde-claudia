@@ -61,8 +61,11 @@ urlpatterns = [
     path('gastos/crear/', views.gasto_crear, name='gasto_crear'),
     path('gastos/<int:pk>/editar/', views.gasto_editar, name='gasto_editar'),
     path('gastos/<int:pk>/eliminar/', views.gasto_eliminar, name='gasto_eliminar'),
-    # Entradas (historial de solo lectura: el flujo actual es almacén -> traslado)
+    # Entradas (historial de solo lectura: el flujo actual es almacén -> traslado;
+    # en modo solo-POS el admin crea/elimina entradas directas al POS)
     path('entradas/', views.entrada_lista, name='entrada_lista'),
+    path('entradas/crear/', views.entrada_crear, name='entrada_crear'),
+    path('entradas/<int:pk>/eliminar/', views.entrada_eliminar, name='entrada_eliminar'),
     # Almacén (admin + almacenero)
     path('almacen/', views.almacen_panel, name='almacen_panel'),
     path('almacen/existencias/', views.almacen_stock, name='almacen_stock'),
