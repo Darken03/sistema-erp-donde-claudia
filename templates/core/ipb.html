@@ -37,6 +37,12 @@ html[data-theme="dark"] .pill-deu { background:rgba(180,83,9,.28); color:#f5c97b
     <span class="badge bg-primary mt-2"><i class="bi bi-shop me-1"></i>{{ pos_actual.nombre }} · stock de {{ pos_actual.almacen.nombre }}</span>
     <small class="text-muted d-block mt-1">Calculado sobre las existencias del almacén del POS (no sobre el stock global del producto).</small>
     {% endif %}
+    {% if pos_actual and not es_hoy %}
+    <div class="alert alert-warning mt-2 mb-0" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i><strong>Stock vivo:</strong>
+        las ventas e ingresos son del {{ fecha|date:"d/m/Y" }}, pero el stock mostrado es el actual del almacén (no el histórico de esa fecha).
+    </div>
+    {% endif %}
 </div>
 
 <!-- Selector de fecha -->

@@ -64,7 +64,7 @@
             <td valign="middle">
                 <div class="brand-name">BizMaster ERP</div>
                 <div class="brand-sub">SISTEMA DE GESTION EMPRESARIAL</div>
-                <div class="report-title">Reporte de Ventas {% if periodo == 'mes' %}del Mes{% elif periodo == 'ano' %}del Año{% else %}del Día{% endif %}{% if empleado_filtro %} · {{ empleado_filtro }}{% endif %}</div>
+                <div class="report-title">Reporte de Ventas {% if periodo == 'mes' %}del Mes{% elif periodo == 'ano' %}del Año{% else %}del Día{% endif %}{% if empleado_filtro %} · {{ empleado_filtro }}{% endif %}{% if punto_venta %} · {{ punto_venta.nombre }}{% endif %}</div>
             </td>
             <td width="220" valign="middle">
                 <div class="date-big">{{ fecha|date:"d/m/Y" }}</div>
@@ -78,7 +78,7 @@
 
     <table width="100%" cellpadding="6" cellspacing="0">
         <tr>
-            <td class="bar" width="60%">REPORTE DE VENTAS &nbsp;·&nbsp; {% if periodo == 'mes' %}{{ fecha|date:"F Y" }}{% elif periodo == 'ano' %}Año {{ fecha|date:"Y" }}{% else %}{{ fecha|date:"l, d F Y" }}{% endif %}</td>
+            <td class="bar" width="60%">REPORTE DE VENTAS &nbsp;·&nbsp; {% if periodo == 'mes' %}{{ fecha|date:"F Y" }}{% elif periodo == 'ano' %}Año {{ fecha|date:"Y" }}{% else %}{{ fecha|date:"l, d F Y" }}{% endif %}{% if punto_venta %} &nbsp;·&nbsp; POS {{ punto_venta.nombre }}{% endif %}</td>
             <td class="bar" align="right">Total: ${{ monto_total|floatformat:2 }} &nbsp;·&nbsp; Ganancia: ${{ ganancia_total|floatformat:2 }}</td>
         </tr>
     </table>

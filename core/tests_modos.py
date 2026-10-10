@@ -3,12 +3,17 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from decimal import Decimal
+from datetime import timedelta
+from unittest import mock
 import json
+from django.template.loader import render_to_string
 from .models import (
     ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
     Almacen, AlmacenStock, AlmacenTraslado, Empleado, Turno, PuntoVenta, Venta,
 )
-from .views import modo_actual
+from .views import (
+    modo_actual, ahora_servidor, FECHA_INICIO_SISTEMA, _obtener_datos_ipb,
+)
 
 
 def set_modo(modo):
@@ -639,3 +644,141 @@ class TestReportesPorPos(TestCase):
             reverse('core:arqueos_admin') + f'?pos={self.pos1.pk}').content.decode()
         self.assertIn('rep_cajero1', a1)
         self.assertNotIn('rep_cajero2', a1)
+
+
+def _foto_nivel():
+    """Foto de todo el nivel de datos sensible a los modos de operación."""
+    return {
+        'productos': sorted(
+            (p.pk, p.nombre, str(p.stock), p.visible_pos, p.activo)
+            for p in Producto.objects.all()),
+        'entradas': sorted(
+            (e.producto_id, str(e.cantidad)) for e in EntradaProducto.objects.all()),
+        'almacenes': sorted(
+            (a.pk, a.nombre) for a in Almacen.objects.all()),
+        'stocks': sorted(
+            (s.producto_id, s.almacen_id, str(s.cantidad))
+            for s in AlmacenStock.objects.all()),
+        'traslados': AlmacenTraslado.objects.count(),
+        'puntos_venta': sorted(
+            (p.pk, p.nombre, p.almacen_id, p.activo)
+            for p in PuntoVenta.objects.all()),
+        'empleados_pos': sorted(
+            (e.pk, e.punto_venta_id) for e in Empleado.objects.all()),
+        'turnos': sorted(
+            (t.pk, t.empleado_id, t.punto_venta_id, t.abierto)
+            for t in Turno.objects.all()),
+        'ventas': Venta.objects.count(),
+    }
+
+
+class TestIdaYVuelta(TestCase):
+    """Task 6 (humo ida y vuelta): cambiar de modo nunca borra ni altera datos."""
+
+    def test_ida_y_vuelta_conserva_todo(self):
+        set_modo('pos_almacenes')
+        _usuario('rt_admin', 'admin')
+        cajero = _usuario('rt_cajero', 'cajero')
+        emp = Empleado.objects.create(user=cajero, salario=0, activo=True)
+        prod = Producto.objects.create(
+            nombre='Café RT', unidad_medida='unidades', precio_compra=10,
+            precio_venta=20, stock=Decimal('7'), permite_decimal=False,
+            visible_pos=True)
+        alm = Almacen.objects.create(nombre='Almacén RT')
+        AlmacenStock.objects.create(
+            producto=prod, almacen=alm, cantidad=Decimal('30'))
+        pos = PuntoVenta.objects.create(nombre='Caja RT', almacen=alm)
+        self.client.login(username='rt_admin', password='x12345')
+        self.client.post(
+            reverse('core:turno_abrir', args=[emp.pk]),
+            {'punto_venta': pos.pk})
+        antes = _foto_nivel()
+        self.assertTrue(antes['productos'])
+        self.assertTrue(antes['stocks'])
+        self.assertTrue(antes['turnos'])
+
+        set_modo('solo_pos')
+        set_modo('pos_almacenes')
+
+        self.assertEqual(_foto_nivel(), antes)
+        self.assertEqual(modo_actual(), 'pos_almacenes')
+
+
+class TestAvisoIpbPosFechaPasada(TestCase):
+    """Mejora candidata 1: el IPB por POS de un día pasado avisa que el
+    stock mostrado es el vivo (actual), no el histórico de esa fecha."""
+
+    def setUp(self):
+        _usuario('av_admin', 'admin')
+        self.alm = Almacen.objects.create(nombre='Almacén AV')
+        self.pos = PuntoVenta.objects.create(
+            nombre='Caja AV', almacen=self.alm)
+        set_modo('multi_pos')
+        self.client.login(username='av_admin', password='x12345')
+        hoy = ahora_servidor().date()
+        ayer = hoy - timedelta(days=1)
+        self.pasada = max(ayer, FECHA_INICIO_SISTEMA)
+        self.hoy_str = hoy.isoformat()
+
+    def test_avisa_stock_vivo_en_fecha_pasada_por_pos(self):
+        r = self.client.get(
+            reverse('core:ipb') + f'?pos={self.pos.pk}&fecha={self.pasada}')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('stock vivo', r.content.decode().lower())
+
+    def test_sin_aviso_en_hoy_ni_en_ipb_global(self):
+        r = self.client.get(
+            reverse('core:ipb') + f'?pos={self.pos.pk}&fecha={self.hoy_str}')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('stock vivo', r.content.decode().lower())
+        g = self.client.get(reverse('core:ipb') + f'?fecha={self.pasada}')
+        self.assertEqual(g.status_code, 200)
+        self.assertNotIn('stock vivo', g.content.decode().lower())
+
+
+class TestPdfEtiquetaPos(TestCase):
+    """Mejora candidata 2: los PDFs filtrados por POS etiquetan el POS."""
+
+    def setUp(self):
+        _usuario('pdf_admin', 'admin')
+        self.alm = Almacen.objects.create(nombre='Almacén PDF')
+        self.pos = PuntoVenta.objects.create(
+            nombre='Caja PDF 1', almacen=self.alm)
+        set_modo('multi_pos')
+        self.client.login(username='pdf_admin', password='x12345')
+        self.hoy = ahora_servidor().date()
+
+    def test_ipb_pdf_menciona_pos(self):
+        ctx = _obtener_datos_ipb(self.hoy, punto_venta=self.pos)
+        html = render_to_string('core/ipb_impresion.html', ctx)
+        self.assertIn('Caja PDF 1', html)
+
+    def test_ipb_pdf_vista_200_con_filtro(self):
+        r = self.client.get(
+            reverse('core:ipb_impresion')
+            + f'?fecha={self.hoy.isoformat()}&pos={self.pos.pk}')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('application/pdf', r['Content-Type'])
+
+    def test_venta_pdf_recibe_pos_en_contexto(self):
+        with mock.patch(
+                'core.views.render_to_string',
+                return_value='<html></html>') as m:
+            r = self.client.get(
+                reverse('core:venta_impresion')
+                + f'?fecha={self.hoy.isoformat()}&pos={self.pos.pk}')
+        self.assertEqual(r.status_code, 200)
+        ctx = m.call_args[0][1]
+        self.assertIsNotNone(ctx.get('punto_venta'))
+        self.assertEqual(ctx['punto_venta'].pk, self.pos.pk)
+
+    def test_venta_pdf_template_muestra_pos(self):
+        html = render_to_string('core/venta_impresion.html', {
+            'fecha': self.hoy, 'ahora': ahora_servidor(),
+            'ventas': [], 'monto_total': 0, 'total_efectivo': 0,
+            'total_transferencia': 0, 'total_ventas': 0,
+            'ganancia_total': 0, 'ticket_promedio': 0, 'total_items': 0,
+            'ranking': [], 'periodo': 'dia', 'empleado_filtro': '',
+            'punto_venta': self.pos,
+        })
+        self.assertIn('Caja PDF 1', html)

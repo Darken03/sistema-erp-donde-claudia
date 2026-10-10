@@ -2691,6 +2691,7 @@ def venta_impresion(request, fecha=None):
         'ranking': ranking,
         'periodo': periodo,
         'empleado_filtro': empleado_filtro,
+        'punto_venta': pos_imp,
     }
     
     html_string = render_to_string('core/venta_impresion.html', context)
