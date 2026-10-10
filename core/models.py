@@ -362,6 +362,11 @@ class Venta(models.Model):
     numero_venta = models.CharField(max_length=20, unique=True)
     cajero = models.ForeignKey(User, on_delete=models.PROTECT, related_name='ventas')
     turno = models.ForeignKey(Turno, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
+    # Spec multi-POS §5 (trazabilidad): POS donde se vendió. Nullable
+    # (historia previa y modos sin POS). Task 5 filtra IPB/ventas por aquí.
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='ventas')
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     descuento = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1384,6 +1389,7 @@ class AlmacenMovimiento(models.Model):
     TIPO_CHOICES = [
         ('entrada', 'Entrada'),
         ('traslado', 'Traslado al POS'),
+        ('venta', 'Venta POS multi-POS'),
         ('ajuste', 'Ajuste'),
     ]
 

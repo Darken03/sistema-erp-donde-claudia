@@ -530,6 +530,21 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
 
     <!-- Productos -->
     <section class="pos-products-sec">
+      {% if es_multi_pos %}
+      {# Task 4 (multi-POS): origen visible del stock. El POS no tiene stock
+         propio: vende y descuenta del almacén asignado. La cola offline
+         (bizm_offline_queue_v1) no cambia: el payload lleva los mismos
+         items (id/presentación/cantidad) y el servidor lo atribuye al POS
+         del turno al sincronizar. #}
+      <div style="margin:8px 14px 0;padding:8px 12px;border-radius:10px;font-size:12.5px;display:flex;align-items:center;gap:8px;{% if bloqueo_pos %}background:var(--danger-soft-2);border:1px solid #fecaca;color:var(--danger-dark);{% else %}background:var(--accent-tint);border:1px solid var(--accent-soft);color:var(--accent);{% endif %}">
+        <i class="bi {% if bloqueo_pos %}bi-exclamation-triangle{% else %}bi-shop{% endif %}"></i>
+        {% if bloqueo_pos %}
+        <span><strong>Sin punto de venta asignado.</strong> Abra el turno seleccionando el punto de venta para vender.</span>
+        {% else %}
+        <span>Vendiendo en <strong>{{ pos_actual.nombre }}</strong> · stock de <strong>{{ almacen_origen.nombre }}</strong></span>
+        {% endif %}
+      </div>
+      {% endif %}
       <div class="pos-search-row">
         <div class="pos-search-wrap">
           <i class="bi bi-search"></i>
@@ -1186,6 +1201,10 @@ async function buscarProductos(){
     const fd = new FormData(); fd.append('q', q); fd.append('categoria', cat);
     const r = await fetch(URL_BUSCAR, {method:'POST', headers:{'X-CSRFToken':CSRF_TOKEN}, body:fd});
     const d = await r.json();
+    /* Task 4 (multi-POS): sin POS asignado el servidor bloquea con 400 +
+       mensaje (sin campo `productos`). Se muestra el aviso en vez de caer
+       al fallback offline con caché de otro POS/almacén. */
+    if (d.error){ toast(d.error, 'danger'); grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-exclamation-triangle" style="font-size:2.5rem;"></i><p class="mt-2">' + esc(d.error) + '</p></div>'; return; }
     if (!d.productos.length){ grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-search" style="font-size:2.5rem;"></i><p class="mt-2">No se encontraron productos</p></div>'; return; }
     grid.innerHTML = d.productos.map(p=>{
       POS_CATALOG[p.id] = {

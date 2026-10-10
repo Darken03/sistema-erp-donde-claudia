@@ -3,9 +3,10 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from decimal import Decimal
+import json
 from .models import (
     ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
-    Almacen, AlmacenStock, Empleado, Turno, PuntoVenta,
+    Almacen, AlmacenStock, Empleado, Turno, PuntoVenta, Venta,
 )
 from .views import modo_actual
 
@@ -395,3 +396,117 @@ class TestPuntoVentaUI(TestCase):
         r = self.client.post(reverse('core:configuracion'), {
             'form_kind': 'pos_toggle', 'pos_id': pos.pk})
         self.assertIn('tab=almacenes', r.url)
+
+
+class TestVentasMultiPos(TestCase):
+    """Modo multi-POS (spec §5): el POS vende del AlmacenStock asignado.
+
+    Sin stock propio del POS: catálogo = existencias del almacén del
+    turno; la venta descuenta ese almacén (+ `AlmacenMovimiento`) y
+    guarda `Venta.punto_venta`; `Producto.stock` no se toca.
+    """
+
+    def setUp(self):
+        self.admin = _usuario('vmp_admin', 'admin')
+        cajero = _usuario('vmp_cajero', 'cajero')
+        self.empleado = Empleado.objects.create(
+            user=cajero, salario=0, activo=True)
+        self.almacen1 = Almacen.objects.create(nombre='Almacén VMP 1')
+        self.almacen2 = Almacen.objects.create(nombre='Almacén VMP 2')
+        self.pos1 = PuntoVenta.objects.create(
+            nombre='Caja VMP 1', almacen=self.almacen1)
+        self.prod = Producto.objects.create(
+            nombre='Pan VMP', unidad_medida='unidades', precio_compra=10,
+            precio_venta=20, stock=Decimal('0'), permite_decimal=False,
+            visible_pos=False)
+        AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.almacen1,
+            cantidad=Decimal('10'))
+        AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.almacen2,
+            cantidad=Decimal('5'))
+
+    def _abrir_turno_pos1(self):
+        self.client.login(username='vmp_admin', password='x12345')
+        self.client.post(
+            reverse('core:turno_abrir', args=[self.empleado.pk]),
+            {'punto_venta': self.pos1.pk})
+        self.client.logout()
+
+    def _vender(self, cantidad='2', monto_recibido=50):
+        self.client.login(username='vmp_cajero', password='x12345')
+        return self.client.post(
+            reverse('core:pos_procesar'),
+            data=json.dumps({
+                'items': [{'id': self.prod.pk, 'cantidad': cantidad}],
+                'metodo_pago': 'efectivo',
+                'monto_recibido': monto_recibido,
+                'monto_transferencia': 0,
+            }),
+            content_type='application/json')
+
+    def _stock_almacen(self, almacen):
+        return AlmacenStock.objects.get(
+            producto=self.prod, almacen=almacen).cantidad
+
+    def test_venta_descuenta_almacen_asignado(self):
+        set_modo('multi_pos')
+        self._abrir_turno_pos1()
+        r = self._vender(cantidad='2')
+        self.assertEqual(r.status_code, 200, r.content.decode()[:500])
+        venta = Venta.objects.get(cajero__username='vmp_cajero')
+        self.assertEqual(self._stock_almacen(self.almacen1), Decimal('8'))
+        # El otro almacén no se toca.
+        self.assertEqual(self._stock_almacen(self.almacen2), Decimal('5'))
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('0'))
+        self.assertEqual(venta.punto_venta_id, self.pos1.pk)
+
+    def test_catalogo_pos_usa_stock_almacen(self):
+        set_modo('multi_pos')
+        self._abrir_turno_pos1()
+        self.client.login(username='vmp_cajero', password='x12345')
+        r = self.client.get(reverse('core:pos_catalogo'))
+        self.assertEqual(r.status_code, 200)
+        items = {p['id']: p for p in r.json()['productos']}
+        # visible_pos=False y stock=0: en modo normal sería invisible;
+        # en multi-POS aparece con las 10 existencias de su almacén.
+        self.assertIn(self.prod.pk, items)
+        self.assertEqual(Decimal(items[self.prod.pk]['stock']), Decimal('10'))
+        r = self.client.post(reverse('core:pos_buscar'), {'q': 'pan vmp'})
+        self.assertEqual(r.status_code, 200)
+        items = {p['id']: p for p in r.json()['productos']}
+        self.assertIn(self.prod.pk, items)
+        self.assertEqual(Decimal(items[self.prod.pk]['stock']), Decimal('10'))
+        # La página muestra el origen del stock (POS + almacén).
+        r = self.client.get(reverse('core:pos'))
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn('Caja VMP 1', html)
+        self.assertIn('Almacén VMP 1', html)
+
+    def test_sin_pos_bloquea_venta(self):
+        # Turno abierto sin POS (modo anterior) + cambio a multi-POS:
+        # la venta se bloquea con mensaje y nada se descuenta.
+        # (El cambio de modo NUNCA borra datos: el turno sigue intacto.)
+        self.prod.visible_pos = True
+        self.prod.stock = Decimal('5')
+        self.prod.save(update_fields=['visible_pos', 'stock'])
+        self.client.login(username='vmp_admin', password='x12345')
+        self.client.post(
+            reverse('core:turno_abrir', args=[self.empleado.pk]))
+        self.client.logout()
+        set_modo('multi_pos')
+        r = self._vender(cantidad='1')
+        self.assertEqual(r.status_code, 400, r.content.decode()[:500])
+        self.assertIn('punto de venta', r.json()['error'].lower())
+        self.assertFalse(
+            Venta.objects.filter(cajero__username='vmp_cajero').exists())
+        self.prod.refresh_from_db()
+        self.assertEqual(self.prod.stock, Decimal('5'))
+        self.assertEqual(self._stock_almacen(self.almacen1), Decimal('10'))
+        # La página del POS también se bloquea con mensaje (sin 500).
+        self.client.login(username='vmp_cajero', password='x12345')
+        r = self.client.get(reverse('core:pos'))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Sin punto de venta asignado', r.content.decode())

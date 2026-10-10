@@ -1233,6 +1233,27 @@ def _recalcular_venta(venta):
 # PUNTO DE VENTA
 # ============================================================
 
+def _turno_pos_almacen(request):
+    """(turno, pos, almacen) del turno abierto para el modo multi-POS.
+
+    Spec §5: el POS vende y descuenta directo del `AlmacenStock` del
+    almacén asignado (sin stock propio). Si el usuario no tiene turno
+    abierto o el turno no tiene POS, devuelve Nones y la vista debe
+    bloquear con mensaje (sin descontar nada).
+    """
+    try:
+        turno = request.user.empleado.turno_abierto
+    except Exception:
+        return None, None, None
+    if turno is None or turno.punto_venta_id is None:
+        return turno, None, None
+    pos = turno.punto_venta
+    almacen = pos.almacen if pos is not None else None
+    if pos is None or almacen is None:
+        return turno, None, None
+    return turno, pos, almacen
+
+
 @login_required
 def pos(request):
     # Verificar si es cajero y si tiene turno abierto
@@ -1254,11 +1275,50 @@ def pos(request):
     except PerfilUsuario.DoesNotExist:
         pass
 
+    es_admin = request.user.perfil.es_admin if hasattr(request.user, 'perfil') else False
+
+    if modo_actual() == 'multi_pos':
+        # Spec §5: catálogo = existencias del almacén del turno
+        # (`visible_pos` y `Producto.stock` no son la fuente aquí).
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            messages.warning(
+                request,
+                'Sin punto de venta asignado en el turno: abra el turno '
+                'seleccionando el punto de venta para vender.')
+            return render(request, 'core/pos.html', {
+                'productos': [],
+                'categorias': [],
+                'es_admin': es_admin,
+                'es_multi_pos': True,
+                'pos_actual': None,
+                'almacen_origen': None,
+                'bloqueo_pos': True,
+            })
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos_multi = list(Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones').order_by('nombre'))
+        for p in productos_multi:
+            # Solo memoria (NO guardar): la plantilla y el catálogo JS
+            # leen `producto.stock` como stock disponible.
+            p.stock = stock_map.get(p.id, Decimal('0'))
+        categorias_multi = Categoria.objects.filter(
+            productos__id__in=ids_multi).distinct()
+        return render(request, 'core/pos.html', {
+            'productos': productos_multi,
+            'categorias': categorias_multi,
+            'es_admin': es_admin,
+            'es_multi_pos': True,
+            'pos_actual': pos_obj,
+            'almacen_origen': almacen,
+            'bloqueo_pos': False,
+        })
+
     productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
     categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True, productos__stock__gt=0).distinct()
     
-    es_admin = request.user.perfil.es_admin if hasattr(request.user, 'perfil') else False
-
     context = {
         'productos': productos,
         'categorias': categorias,
@@ -1267,8 +1327,13 @@ def pos(request):
     return render(request, 'core/pos.html', context)
 
 
-def _serializar_producto_pos(p):
-    """Producto + presentaciones para el POS (precio manual por presentación)."""
+def _serializar_producto_pos(p, stock_override=None):
+    """Producto + presentaciones para el POS (precio manual por presentación).
+
+    `stock_override`: en multi-POS el disponible viene del AlmacenStock
+    del turno (no de `Producto.stock`); el payload no cambia, así la
+    cola offline (`bizm_offline_queue_v1`) sigue compatible.
+    """
     pres = [{
         'id': pr.id,
         'nombre': pr.nombre,
@@ -1279,13 +1344,14 @@ def _serializar_producto_pos(p):
     if not pres:
         pres = [{'id': None, 'nombre': 'Unidad', 'factor': '1',
                  'precio': str(p.precio_venta), 'es_default': True}]
+    stock = stock_override if stock_override is not None else p.stock
     return {
         'id': p.id,
         'codigo': p.codigo,
         'nombre': p.nombre,
         'precio': str(p.precio_para()),
-        'stock': str(p.stock),
-        'stock_display': ('%g' % float(p.stock)),
+        'stock': str(stock),
+        'stock_display': ('%g' % float(stock)),
         'unidad': p.unidad_medida,
         'permite_decimal': p.permite_decimal,
         'imagen': p.imagen_url,
@@ -1301,8 +1367,21 @@ def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
     categoria_id = request.POST.get('categoria', '')
 
-    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
-        'categoria').prefetch_related('presentaciones')
+    es_multi = (modo_actual() == 'multi_pos')
+    stock_map = {}
+    if es_multi:
+        # Spec §5: disponibilidad = AlmacenStock del almacén del turno.
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos = Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones')
+    else:
+        productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
+            'categoria').prefetch_related('presentaciones')
     if categoria_id:
         productos = productos.filter(categoria_id=categoria_id)
     if query:
@@ -1318,7 +1397,12 @@ def pos_buscar_productos(request):
                     ids_nombre.append(pid)
         productos = productos.filter(Q(id__in=set(ids_codigo) | set(ids_nombre)))
 
-    data = [_serializar_producto_pos(p) for p in productos.order_by('nombre')[:50]]
+    if es_multi:
+        data = [_serializar_producto_pos(
+            p, stock_override=stock_map.get(p.id, Decimal('0'))
+        ) for p in productos.order_by('nombre')[:50]]
+    else:
+        data = [_serializar_producto_pos(p) for p in productos.order_by('nombre')[:50]]
 
     return JsonResponse({'productos': data})
 
@@ -1355,12 +1439,27 @@ def pos_procesar_venta(request):
         if not items:
             return JsonResponse({'error': 'No hay productos en la venta.'}, status=400)
 
+        es_multi = (modo_actual() == 'multi_pos')
+        turno = None
+        pos_obj = None
+        almacen = None
+        if es_multi:
+            # Spec §5: el POS descuenta del almacén asignado al turno.
+            # Sin POS asignado se bloquea con mensaje (nada se descuenta).
+            turno, pos_obj, almacen = _turno_pos_almacen(request)
+            if pos_obj is None or almacen is None:
+                return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+            stock_map = _stock_map_para(almacen)
+
         subtotal = Decimal('0')
         detalles_data = []
 
         for item in items:
             producto = get_object_or_404(Producto, pk=item['id'])
-            if not producto.activo or not producto.visible_pos:
+            if es_multi:
+                if not producto.activo:
+                    return JsonResponse({'error': f'{producto.nombre} no está disponible en el punto de venta.'}, status=400)
+            elif not producto.activo or not producto.visible_pos:
                 return JsonResponse({'error': f'{producto.nombre} no está disponible en el punto de venta.'}, status=400)
             try:
                 cantidad = Decimal(str(item['cantidad']))
@@ -1378,7 +1477,11 @@ def pos_procesar_venta(request):
             cantidad_base = (cantidad * factor).quantize(Decimal('0.001'))
             if cantidad_base <= 0:
                 return JsonResponse({'error': f'Cantidad invalida para {producto.nombre}.'}, status=400)
-            if cantidad_base > producto.stock:
+            if es_multi:
+                disponible = stock_map.get(producto.id, Decimal('0'))
+                if cantidad_base > disponible:
+                    return JsonResponse({'error': f'Stock insuficiente para {producto.nombre}. Disponible: {"%g" % float(disponible)} {producto.unidad_medida} (Almacén {almacen.nombre})'}, status=400)
+            elif cantidad_base > producto.stock:
                 return JsonResponse({'error': f'Stock insuficiente para {producto.nombre}. Disponible: {"%g" % float(producto.stock)} {producto.unidad_medida}'}, status=400)
             # Precio y subtotal en enteros (ej. 220.2 -> 220). Cantidad sí puede ser decimal (lb, fracciones).
             precio_entero = precio.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
@@ -1401,39 +1504,68 @@ def pos_procesar_venta(request):
 
         cambio = total_pagado - total
 
-        # Obtener turno activo del empleado
-        turno = None
-        try:
-            empleado = request.user.empleado
-            turno = empleado.turno_abierto
-        except Empleado.DoesNotExist:
-            pass
+        if not es_multi:
+            # Obtener turno activo del empleado
+            turno = None
+            try:
+                empleado = request.user.empleado
+                turno = empleado.turno_abierto
+            except Empleado.DoesNotExist:
+                pass
 
-        numero_venta = Venta.generar_numero()
-        venta = Venta.objects.create(
-            numero_venta=numero_venta,
-            cajero=request.user,
-            turno=turno,
-            subtotal=subtotal,
-            impuesto=Decimal('0'),
-            total=total,
-            metodo_pago=metodo_pago,
-            monto_recibido=monto_efectivo,
-            monto_transferencia=monto_transferencia,
-            cambio=cambio,
-        )
-
-        for d in detalles_data:
-            DetalleVenta.objects.create(
-                venta=venta,
-                producto=d['producto'],
-                presentacion=d['presentacion'],
-                cantidad=d['cantidad'],
-                cantidad_base=d['cantidad_base'],
-                precio_unitario=d['precio_unitario'],
-                subtotal=d['subtotal'],
+        with transaction.atomic():
+            numero_venta = Venta.generar_numero()
+            venta = Venta.objects.create(
+                numero_venta=numero_venta,
+                cajero=request.user,
+                turno=turno,
+                punto_venta=(pos_obj if es_multi else (turno.punto_venta if turno is not None and turno.punto_venta_id else None)),
+                subtotal=subtotal,
+                impuesto=Decimal('0'),
+                total=total,
+                metodo_pago=metodo_pago,
+                monto_recibido=monto_efectivo,
+                monto_transferencia=monto_transferencia,
+                cambio=cambio,
             )
-            _registrar_movimiento(d['producto'], 'venta', d['cantidad_base'], request.user, venta.id, f'Venta #{venta.numero_venta}')
+
+            for d in detalles_data:
+                DetalleVenta.objects.create(
+                    venta=venta,
+                    producto=d['producto'],
+                    presentacion=d['presentacion'],
+                    cantidad=d['cantidad'],
+                    cantidad_base=d['cantidad_base'],
+                    precio_unitario=d['precio_unitario'],
+                    subtotal=d['subtotal'],
+                )
+                if es_multi:
+                    # Descuento directo del almacén del POS (Producto.stock
+                    # NO se toca) + auditoría propia del almacén. El IPB del
+                    # día lo refleja vía _sincronizar_inventario_dia
+                    # (columna de ventas sobre los detalles).
+                    stock = _stock_de(d['producto'], almacen)
+                    anterior = stock.cantidad if stock is not None else Decimal('0')
+                    if stock is None:
+                        stock, _ = _get_or_create_stock(d['producto'], almacen)
+                        anterior = stock.cantidad
+                    if d['cantidad_base'] > anterior:
+                        # Revalidación bajo lock (otra caja pudo vender
+                        # entre la validación y el descuento).
+                        raise ValueError(
+                            f'Stock insuficiente para {d["producto"].nombre}. '
+                            f'Disponible: {"%g" % float(anterior)} '
+                            f'{d["producto"].unidad_medida} (Almacén {almacen.nombre})')
+                    stock_nuevo = anterior - d['cantidad_base']
+                    stock.cantidad = stock_nuevo
+                    stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+                    _movimiento_almacen(
+                        d['producto'], 'venta', d['cantidad_base'],
+                        anterior, stock_nuevo, request.user, venta.id,
+                        f'Venta #{venta.numero_venta} en {pos_obj.nombre}',
+                        almacen=almacen)
+                else:
+                    _registrar_movimiento(d['producto'], 'venta', d['cantidad_base'], request.user, venta.id, f'Venta #{venta.numero_venta}')
 
         _sincronizar_inventario_dia(ahora_servidor().date())
 
@@ -1444,6 +1576,8 @@ def pos_procesar_venta(request):
             'total': str(venta.total),
             'cambio': str(venta.cambio),
         })
+    except ValueError as e:
+        return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -1456,7 +1590,27 @@ def pos_ping(request):
 
 @login_required
 def pos_catalogo(request):
-    """Catálogo completo para cache offline del POS (productos + categorías)."""
+    """Catálogo completo para cache offline del POS (productos + categorías).
+
+    En multi-POS el catálogo es por POS (existencias del almacén del
+    turno); el payload no cambia, así la caché local
+    (`bizm_products_cache_v1`) y la cola offline siguen compatibles.
+    """
+    if modo_actual() == 'multi_pos':
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos = Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
+        data = [_serializar_producto_pos(
+            p, stock_override=stock_map.get(p.id, Decimal('0')))
+            for p in productos]
+        categorias = list(Categoria.objects.filter(
+            productos__id__in=ids_multi).distinct().values('id', 'nombre'))
+        return JsonResponse({'productos': data, 'categorias': categorias})
     productos = Producto.objects.filter(activo=True, visible_pos=True).select_related(
         'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
     data = [_serializar_producto_pos(p) for p in productos]
