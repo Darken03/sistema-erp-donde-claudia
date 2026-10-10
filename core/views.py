@@ -170,6 +170,24 @@ def requiere_modo(*modos):
     return deco
 
 
+def _resolver_pos_filtro(request):
+    """PuntoVenta activo de `?pos=` solo en modo multi-POS.
+
+    Devuelve `(pos_o_None, puntos_venta_activos)`. Fuera de multi-POS el
+    filtro se ignora (historia con `punto_venta=NULL`): `(None, [])`.
+    Un `?pos=` ausente/inválido/inactivo también da `(None, lista)`.
+    """
+    if modo_actual() != 'multi_pos':
+        return None, []
+    puntos = list(PuntoVenta.activos().select_related('almacen'))
+    try:
+        pid = int(request.GET.get('pos') or 0)
+    except (ValueError, TypeError):
+        pid = 0
+    pos = next((p for p in puntos if p.pk == pid), None)
+    return pos, puntos
+
+
 # ============================================================
 # DASHBOARD
 # ============================================================
@@ -850,7 +868,13 @@ def venta_lista(request):
     else:
         fecha = hoy
 
-    ventas = Venta.objects.filter(cancelada=False).select_related('cajero')
+    ventas = Venta.objects.filter(cancelada=False).select_related('cajero', 'punto_venta')
+
+    # Spec §5 multi-POS: filtro ?pos= por punto_venta (fuera de
+    # multi-POS se ignora).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
+    if pos_actual is not None:
+        ventas = ventas.filter(punto_venta=pos_actual)
 
     if periodo == 'dia':
         titulo = f'Ventas del dia {fecha.strftime("%d/%m/%Y")}'
@@ -900,6 +924,11 @@ def venta_lista(request):
     
     if empleado_filtro:
         gastos_qs = gastos_qs.filter(cajero__username=empleado_filtro)
+
+    # En la vista por POS, los gastos atribuidos son los de sus turnos
+    # (Gasto.turno→punto_venta); los de admin sin turno quedan en el global.
+    if pos_actual is not None:
+        gastos_qs = gastos_qs.filter(turno__punto_venta=pos_actual)
     
     resumen_gastos = gastos_qs.aggregate(
         total=Sum(F('cantidad_efectivo') + F('cantidad_transferencia')) or 0,
@@ -925,6 +954,9 @@ def venta_lista(request):
         'resumen_gastos_cantidad': resumen_gastos['cantidad'] or 0,
         'resumen_neto': (resumen['total'] or 0) - (resumen_gastos['total'] or 0),
         'hoy': hoy.strftime('%Y-%m-%d'),
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
     }
     return render(request, 'core/venta_lista.html', context)
 
@@ -1679,8 +1711,15 @@ def _fmt_cantidad_ipb(valor, unidad_medida):
     return fmt_cantidad_unidad(valor, unidad_medida)
 
 
-def _obtener_datos_ipb(fecha):
-    """Prepara los datos del IPB para una fecha dada. Retorna un diccionio con el contexto."""
+def _obtener_datos_ipb(fecha, punto_venta=None):
+    """Prepara los datos del IPB para una fecha dada. Retorna un diccionio con el contexto.
+
+    Con `punto_venta` (modo multi-POS, filtro `?pos=`): IPB de ese POS
+    calculado sobre el stock del almacén asignado (ver
+    `_obtener_datos_ipb_por_pos`); sin él, el IPB global actual.
+    """
+    if punto_venta is not None:
+        return _obtener_datos_ipb_por_pos(fecha, punto_venta)
     from datetime import timedelta
     from django.db.models import Sum
     
@@ -1883,6 +1922,229 @@ def _obtener_datos_ipb(fecha):
             'productos_en_deuda': productos_en_deuda,
         },
         'ahora': timezone.now(),
+        'es_por_pos': False,
+        'punto_venta': None,
+        'almacen': None,
+    }
+
+def _obtener_datos_ipb_por_pos(fecha, pos):
+    """IPB de un POS en modo multi-POS (spec §5), sobre el almacén del POS.
+
+    Review-focus del plan: se calcula sobre el stock del almacén asignado
+    (`AlmacenStock`), NO sobre `Producto.stock`:
+    - ventas/ingresos/mix: `DetalleVenta` del día con `venta.punto_venta=pos`.
+    - stock_final: existencia actual en el almacén del POS; inicial =
+      final + ventas (en multi-POS no hay entradas directas al POS ni
+      traslados →POS: el mostrador solo sale por venta).
+    - entradas del POS: 0 por lo mismo (las `AlmacenEntrada` van al almacén,
+      no al mostrador).
+    - donaciones/deudas: salidas del mostrador sin atribución por POS; se
+      muestran globales como en el IPB general (informativo, no restan del
+      inicial derivado).
+    - dinero: ventas del POS; gastos: `Gasto` del día con
+      `turno.punto_venta=pos` (gastos de admin sin turno no se atribuyen).
+    No toca `InventarioDiario` (historia global intacta) ni borra nada.
+    """
+    from django.db.models import Sum as _Sum
+
+    hoy = ahora_servidor().date()
+    almacen = pos.almacen if pos is not None else None
+
+    def _dec(v):
+        return Decimal(str(v or 0))
+
+    ventas_qs = DetalleVenta.objects.filter(
+        venta__fecha_venta__date=fecha, venta__cancelada=False,
+        venta__punto_venta=pos)
+    ventas_map = {
+        v['producto_id']: _dec(v['t'])
+        for v in ventas_qs.values('producto_id').annotate(t=_Sum('cantidad_base'))
+    }
+    ingreso_map = {
+        v['producto_id']: _dec(v['ingreso_real'])
+        for v in ventas_qs.values('producto_id').annotate(
+            ingreso_real=_Sum('subtotal'))
+    }
+    mix_map = {}
+    for m in ventas_qs.values(
+            'producto_id', 'presentacion__nombre',
+            'presentacion__factor').annotate(cant=_Sum('cantidad'),
+                                             sub=_Sum('subtotal')):
+        if not m['presentacion__nombre']:
+            continue
+        try:
+            if Decimal(str(m['presentacion__factor'] or 1)) == 1:
+                continue
+        except Exception:
+            pass
+        try:
+            c = _dec(m['cant'])
+            cs = format(c.quantize(Decimal('0.001')).normalize(), 'f')
+        except Exception:
+            cs = str(m['cant'] or 0)
+        mix_map.setdefault(m['producto_id'], []).append(
+            f"{cs} x {m['presentacion__nombre']}")
+
+    # Donaciones/deudas globales del día (sin atribución por POS).
+    donado_map = {
+        d['producto_id']: _dec(d['total'])
+        for d in RetiroDonacion.objects.filter(
+            fecha_retiro__date=fecha
+        ).values('producto_id').annotate(total=_Sum('cantidad'))
+    }
+    try:
+        deuda_map = {
+            d['producto_id']: _dec(d['total'])
+            for d in Deuda.objects.filter(
+                fecha_registro__date=fecha, tipo='producto'
+            ).values('producto_id').annotate(total=_Sum('cantidad_base'))
+        }
+        if any(v == 0 for v in deuda_map.values()):
+            for d in Deuda.objects.filter(
+                    fecha_registro__date=fecha, tipo='producto',
+                    cantidad_base=0).values('producto_id').annotate(
+                        total=_Sum('cantidad')):
+                if deuda_map.get(d['producto_id'], 0) == 0:
+                    deuda_map[d['producto_id']] = _dec(d['total'])
+    except Exception:
+        deuda_map = {
+            d['producto_id']: _dec(d['total'])
+            for d in Deuda.objects.filter(
+                fecha_registro__date=fecha, tipo='producto'
+            ).values('producto_id').annotate(total=_Sum('cantidad'))
+        }
+
+    stock_map = _stock_map_para(almacen) if almacen is not None else {}
+    ids = {pid for pid, cant in stock_map.items() if _dec(cant) != 0}
+    ids |= set(ventas_map)
+    productos = (Producto.objects.filter(
+        activo=True, id__in=ids
+    ).select_related('categoria').order_by('nombre') if ids else [])
+
+    total_inicial = Decimal('0')
+    total_entradas = Decimal('0')
+    total_ventas = Decimal('0')
+    total_final = Decimal('0')
+    productos_movimiento = 0
+    productos_sin_stock = 0
+    total_donado = Decimal('0')
+    total_en_deuda = Decimal('0')
+    productos_donados = 0
+    productos_en_deuda = 0
+
+    reporte = []
+    for producto in productos:
+        ventas = ventas_map.get(producto.id, Decimal('0'))
+        stock_final = _dec(stock_map.get(producto.id, 0))
+        stock_inicial = stock_final + ventas
+        entradas = Decimal('0')
+        total_inicial += stock_inicial
+        total_entradas += entradas
+        total_ventas += ventas
+        total_final += stock_final
+
+        if ventas > 0 or entradas > 0:
+            productos_movimiento += 1
+        if stock_final == 0 and ventas > 0:
+            productos_sin_stock += 1
+
+        precio_venta = Decimal(str(producto.precio_venta))
+        costo_unit = producto.precio_compra
+        costo_venta = ventas * costo_unit
+        ingreso = ingreso_map.get(producto.id, ventas * precio_venta)
+        ganancia = ingreso - costo_venta
+
+        donado = donado_map.get(producto.id, Decimal('0'))
+        en_deuda = deuda_map.get(producto.id, Decimal('0'))
+        if donado > 0:
+            total_donado += donado
+            productos_donados += 1
+        if en_deuda > 0:
+            total_en_deuda += en_deuda
+            productos_en_deuda += 1
+
+        reporte.append({
+            'inventario': None,
+            'producto': producto,
+            'categoria': producto.categoria,
+            'stock_inicial': stock_inicial,
+            'entradas': entradas,
+            'ventas': ventas,
+            'stock_final': stock_final,
+            'stock_inicial_fmt': _fmt_cantidad_ipb(
+                stock_inicial, producto.unidad_medida),
+            'entradas_fmt': _fmt_cantidad_ipb(
+                entradas, producto.unidad_medida),
+            'ventas_fmt': _fmt_cantidad_ipb(
+                ventas, producto.unidad_medida),
+            'stock_final_fmt': _fmt_cantidad_ipb(
+                stock_final, producto.unidad_medida),
+            'precio_venta': precio_venta,
+            'precio_compra': costo_unit,
+            'costo_venta': costo_venta,
+            'ingreso': ingreso,
+            'ganancia': ganancia,
+            'mix_txt': ' + '.join(mix_map.get(producto.id, [])),
+            'agotado': stock_final == 0 and ventas > 0,
+            'donado': donado,
+            'donado_fmt': _fmt_cantidad_ipb(
+                donado, producto.unidad_medida),
+            'tiene_donacion': donado > 0,
+            'en_deuda': en_deuda,
+            'en_deuda_fmt': _fmt_cantidad_ipb(
+                en_deuda, producto.unidad_medida),
+            'tiene_deuda': en_deuda > 0,
+        })
+
+    resumen_dinero = Venta.objects.filter(
+        fecha_venta__date=fecha, cancelada=False,
+        punto_venta=pos).aggregate(
+        efectivo=_Sum('monto_recibido'),
+        transferencia=_Sum('monto_transferencia'),
+        cambio=_Sum('cambio'),
+        total_ventas=_Sum('total'),
+    )
+    gastos_dia = Gasto.objects.filter(
+        fecha_gasto__date=fecha, turno__punto_venta=pos)
+    resumen_gastos = gastos_dia.aggregate(
+        total=_Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
+        efectivo=_Sum('cantidad_efectivo'),
+        transferencia=_Sum('cantidad_transferencia'),
+    )
+    total_gastos = resumen_gastos['total'] or 0
+    total_ventas_monto = resumen_dinero['total_ventas'] or 0
+
+    total_costo_unitario = sum(
+        float(r['precio_compra'] * r['stock_inicial']) for r in reporte)
+    total_ingreso = sum(float(r['ingreso']) for r in reporte)
+    total_ganancia = sum(float(r['ganancia']) for r in reporte)
+
+    return {
+        'fecha': fecha,
+        'hoy': hoy,
+        'es_hoy': fecha == hoy,
+        'reporte': reporte,
+        'resumen': {
+            'total_productos': len(reporte),
+            'total_stock_inicial': total_inicial,
+            'total_entradas': total_entradas,
+            'total_ventas': total_ventas,
+            'total_stock_final': total_final,
+            'productos_movimiento': productos_movimiento,
+            'productos_sin_stock': productos_sin_stock,
+            'total_ingreso': total_ingreso,
+            'total_gastos': total_gastos,
+            'total_recaudado': total_ventas_monto - total_gastos,
+            'total_ganancia': total_ganancia,
+            'total_donado': total_donado,
+            'total_en_deuda': total_en_deuda,
+            'productos_donados': productos_donados,
+            'productos_en_deuda': productos_en_deuda,
+        },
+        'ahora': timezone.now(),
+        'es_por_pos': True,
+        'punto_venta': pos,
+        'almacen': almacen,
     }
 
 def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=None, descripcion=''):
@@ -2175,7 +2437,15 @@ def ipb(request):
         messages.warning(request, 'El IPB existe desde el 22/09/2026 (inicio del sistema).')
         fecha = FECHA_INICIO_SISTEMA
 
-    context = _obtener_datos_ipb(fecha)
+    # Spec §5 multi-POS: filtro ?pos= con cálculo sobre el almacén de
+    # cada POS (fuera de multi-POS se ignora).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
+    context = _obtener_datos_ipb(fecha, punto_venta=pos_actual)
+    context.update({
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
+    })
     return render(request, 'core/ipb.html', context)
 
 
@@ -2354,6 +2624,11 @@ def venta_impresion(request, fecha=None):
     if empleado_filtro:
         ventas = ventas.filter(cajero__username=empleado_filtro)
     
+    # Consecuencial Task 5: el PDF respeta el filtro ?pos= de la lista.
+    pos_imp, _puntos_imp = _resolver_pos_filtro(request)
+    if pos_imp is not None:
+        ventas = ventas.filter(punto_venta=pos_imp)
+
     try:
         ventas = ventas.prefetch_related('detalles__producto')
         ventas_list = list(ventas)
@@ -2472,7 +2747,10 @@ def ipb_impresion(request, fecha=None):
         fecha = FECHA_INICIO_SISTEMA
 
     _sincronizar_inventario_dia(fecha)
-    context = _obtener_datos_ipb(fecha)
+    # Consecuencial (nota de alcance Task 5): el PDF respeta el mismo
+    # filtro ?pos= del IPB en pantalla (cálculo por almacén del POS).
+    pos_actual, _puntos = _resolver_pos_filtro(request)
+    context = _obtener_datos_ipb(fecha, punto_venta=pos_actual)
     
     html_string = render_to_string('core/ipb_impresion.html', context)
     
@@ -3036,6 +3314,14 @@ def almacen_traslado_crear(request):
         destino_tipo = (request.POST.get('destino_tipo') or 'POS').upper()
         if destino_tipo not in ('POS', 'ALMACEN'):
             destino_tipo = 'POS'
+        # Spec §5 multi-POS: traslados hacia POS no existen (el POS vende
+        # directo del almacén); solo entre almacenes. Sin borrar nada.
+        if modo_actual() == 'multi_pos' and destino_tipo == 'POS':
+            messages.error(
+                request,
+                'En el modo multi-POS los traslados al punto de venta no '
+                'existen: solo entre almacenes.')
+            return redirect('core:almacen_traslado_crear')
         destino_almacen = None
         if destino_tipo == 'ALMACEN':
             try:
@@ -5297,8 +5583,18 @@ def conteo_comparar(request, pk):
 def arqueos_admin(request):
     """Sección del admin: turnos abiertos con su arqueo/conteos (pendientes)
     e historial de turnos ya cerrados con su decisión."""
+    # Spec §5 multi-POS: filtro ?pos= por punto_venta del turno (cada POS
+    # opera su caja, turnos y cierres independientes). Fuera de multi-POS
+    # se ignora. Sin cambios de template (filtro por URL).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
     abiertos = Turno.objects.filter(abierto=True).select_related(
-        'empleado__user').prefetch_related('conteos', 'ventas').order_by('-fecha_apertura')
+        'empleado__user', 'punto_venta').prefetch_related(
+        'conteos', 'ventas').order_by('-fecha_apertura')
+    historial_qs = Turno.objects.filter(abierto=False).select_related(
+        'empleado__user', 'punto_venta').order_by('-fecha_cierre')
+    if pos_actual is not None:
+        abiertos = abiertos.filter(punto_venta=pos_actual)
+        historial_qs = historial_qs.filter(punto_venta=pos_actual)
     pendientes = []
     for t in abiertos:
         pendientes.append({
@@ -5308,11 +5604,13 @@ def arqueos_admin(request):
             'conteos_abiertos': t.conteos.filter(estado='abierto').count(),
             'conteos_cerrados': t.conteos.filter(estado='cerrado'),
         })
-    historial = Turno.objects.filter(abierto=False).select_related(
-        'empleado__user').order_by('-fecha_cierre')[:20]
+    historial = historial_qs[:20]
     return render(request, 'core/arqueos_admin.html', {
         'pendientes': pendientes,
         'historial': historial,
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
     })
 
 

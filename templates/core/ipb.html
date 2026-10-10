@@ -33,6 +33,10 @@ html[data-theme="dark"] .pill-deu { background:rgba(180,83,9,.28); color:#f5c97b
 </style>
 <div class="mb-4">
     <h2 class="mb-0"><i class="bi bi-clipboard2-data me-2"></i>IPB - Inventario Parcial del Dia</h2>
+    {% if pos_actual %}
+    <span class="badge bg-primary mt-2"><i class="bi bi-shop me-1"></i>{{ pos_actual.nombre }} · stock de {{ pos_actual.almacen.nombre }}</span>
+    <small class="text-muted d-block mt-1">Calculado sobre las existencias del almacén del POS (no sobre el stock global del producto).</small>
+    {% endif %}
 </div>
 
 <!-- Selector de fecha -->
@@ -43,6 +47,17 @@ html[data-theme="dark"] .pill-deu { background:rgba(180,83,9,.28); color:#f5c97b
                 <label class="form-label">Fecha</label>
                 <input type="date" name="fecha" class="form-control" value="{{ fecha|date:'Y-m-d' }}" id="fechaInput">
             </div>
+            {% if es_multi_pos %}
+            <div class="col-md-4">
+                <label class="form-label">Punto de venta</label>
+                <select name="pos" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos (global)</option>
+                    {% for p in puntos_venta %}
+                    <option value="{{ p.pk }}" {% if pos_actual and pos_actual.pk == p.pk %}selected{% endif %}>{{ p.nombre }} · {{ p.almacen.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <div class="col-md-2">
                 <button type="submit" class="btn btn-outline-primary btn-sm w-100">
                     <i class="bi bi-search me-1"></i> Consultar
@@ -283,7 +298,9 @@ function imprimirIPB() {
         alert('Seleccione una fecha');
         return;
     }
-    const url = '{% url "core:ipb_impresion" %}?fecha=' + encodeURIComponent(fecha);
+    let url = '{% url "core:ipb_impresion" %}?fecha=' + encodeURIComponent(fecha);
+    const pos = new URLSearchParams(window.location.search).get('pos');
+    if (pos) url += '&pos=' + encodeURIComponent(pos);
     window.open(url, '_blank');
 }
 </script>

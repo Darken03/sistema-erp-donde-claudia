@@ -6,7 +6,7 @@ from decimal import Decimal
 import json
 from .models import (
     ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
-    Almacen, AlmacenStock, Empleado, Turno, PuntoVenta, Venta,
+    Almacen, AlmacenStock, AlmacenTraslado, Empleado, Turno, PuntoVenta, Venta,
 )
 from .views import modo_actual
 
@@ -510,3 +510,132 @@ class TestVentasMultiPos(TestCase):
         r = self.client.get(reverse('core:pos'))
         self.assertEqual(r.status_code, 200)
         self.assertIn('Sin punto de venta asignado', r.content.decode())
+
+
+class TestReportesPorPos(TestCase):
+    """Modo multi-POS (spec §5): IPB/ventas/arqueos por POS + sin traslados a POS.
+
+    IPB con filtro `?pos=` calculado sobre el stock del almacén de cada POS
+    (no sobre `Producto.stock`); ventas y arqueos filtran por `punto_venta`;
+    `destino_tipo=POS` rechazado en multi-POS (solo entre almacenes).
+    """
+
+    def setUp(self):
+        self.admin = _usuario('rep_admin', 'admin')
+        cajero1 = _usuario('rep_cajero1', 'cajero')
+        cajero2 = _usuario('rep_cajero2', 'cajero')
+        self.emp1 = Empleado.objects.create(
+            user=cajero1, salario=0, activo=True)
+        self.emp2 = Empleado.objects.create(
+            user=cajero2, salario=0, activo=True)
+        self.alm1 = Almacen.objects.create(nombre='Almacén REP 1')
+        self.alm2 = Almacen.objects.create(nombre='Almacén REP 2')
+        self.pos1 = PuntoVenta.objects.create(
+            nombre='Caja REP 1', almacen=self.alm1)
+        self.pos2 = PuntoVenta.objects.create(
+            nombre='Caja REP 2', almacen=self.alm2)
+        self.prod = Producto.objects.create(
+            nombre='Pan REP', unidad_medida='unidades', precio_compra=10,
+            precio_venta=20, stock=Decimal('0'), permite_decimal=False,
+            visible_pos=False)
+        AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.alm1,
+            cantidad=Decimal('10'))
+        AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.alm2,
+            cantidad=Decimal('5'))
+
+    def _abrir_turnos(self):
+        self.client.login(username='rep_admin', password='x12345')
+        self.client.post(
+            reverse('core:turno_abrir', args=[self.emp1.pk]),
+            {'punto_venta': self.pos1.pk})
+        self.client.post(
+            reverse('core:turno_abrir', args=[self.emp2.pk]),
+            {'punto_venta': self.pos2.pk})
+        self.client.logout()
+
+    def _vender(self, username, cantidad, recibido):
+        self.client.login(username=username, password='x12345')
+        r = self.client.post(
+            reverse('core:pos_procesar'),
+            data=json.dumps({
+                'items': [{'id': self.prod.pk, 'cantidad': cantidad}],
+                'metodo_pago': 'efectivo',
+                'monto_recibido': recibido,
+                'monto_transferencia': 0,
+            }),
+            content_type='application/json')
+        self.client.logout()
+        return r
+
+    def test_ipb_y_ventas_por_pos_y_sin_traslado_a_pos(self):
+        from .views import _obtener_datos_ipb, ahora_servidor
+        set_modo('multi_pos')
+        self._abrir_turnos()
+        r = self._vender('rep_cajero1', '2', 50)
+        self.assertEqual(r.status_code, 200, r.content.decode()[:500])
+        r = self._vender('rep_cajero2', '1', 50)
+        self.assertEqual(r.status_code, 200, r.content.decode()[:500])
+        hoy = ahora_servidor().date()
+
+        # IPB por POS: mismo producto, distinto almacén y distintas ventas.
+        d1 = _obtener_datos_ipb(hoy, punto_venta=self.pos1)
+        d2 = _obtener_datos_ipb(hoy, punto_venta=self.pos2)
+        self.assertEqual(d1['resumen']['total_ventas'], Decimal('2'))
+        self.assertEqual(d2['resumen']['total_ventas'], Decimal('1'))
+        self.assertNotEqual(
+            d1['resumen']['total_stock_final'],
+            d2['resumen']['total_stock_final'])
+
+        # El filtro ?pos= llega end-to-end (cabecera + opción seleccionada).
+        self.client.login(username='rep_admin', password='x12345')
+        h1 = self.client.get(
+            reverse('core:ipb') + f'?pos={self.pos1.pk}')
+        h2 = self.client.get(
+            reverse('core:ipb') + f'?pos={self.pos2.pk}')
+        self.assertEqual(h1.status_code, 200)
+        self.assertEqual(h2.status_code, 200)
+        self.assertIn('Caja REP 1', h1.content.decode())
+        self.assertIn('Caja REP 2', h2.content.decode())
+        self.assertIn(
+            f'value="{self.pos1.pk}" selected', h1.content.decode())
+
+        # Ventas filtradas por POS (números de ticket exactos).
+        n1 = Venta.objects.get(punto_venta=self.pos1).numero_venta
+        n2 = Venta.objects.get(punto_venta=self.pos2).numero_venta
+        v1 = self.client.get(
+            reverse('core:venta_lista') + f'?pos={self.pos1.pk}').content.decode()
+        v2 = self.client.get(
+            reverse('core:venta_lista') + f'?pos={self.pos2.pk}').content.decode()
+        self.assertIn(n1, v1)
+        self.assertNotIn(n2, v1)
+        self.assertIn(n2, v2)
+        self.assertNotIn(n1, v2)
+
+        # Traslado →POS bloqueado en multi (sin crear nada); entre
+        # almacenes sí pasa.
+        n = AlmacenTraslado.objects.count()
+        rb = self.client.post(
+            reverse('core:almacen_traslado_crear'), {
+                'producto': self.prod.pk, 'cantidad': '1',
+                'origen': self.alm1.pk, 'destino_tipo': 'POS'},
+            follow=True)
+        self.assertEqual(AlmacenTraslado.objects.count(), n)
+        msgs = [str(m).lower() for m in rb.context['messages']]
+        self.assertTrue(
+            any('entre almacenes' in m for m in msgs),
+            f'se esperaba bloqueo solo-entre-almacenes, hubo: {msgs}')
+        rok = self.client.post(
+            reverse('core:almacen_traslado_crear'), {
+                'producto': self.prod.pk, 'cantidad': '1',
+                'origen': self.alm1.pk, 'destino_tipo': 'ALMACEN',
+                'destino_almacen': self.alm2.pk})
+        self.assertEqual(rok.status_code, 302)
+        self.assertEqual(AlmacenTraslado.objects.count(), n + 1)
+
+        # Arqueos filtrados por POS (un turno por POS).
+        a1 = self.client.get(
+            reverse('core:arqueos_admin') + f'?pos={self.pos1.pk}').content.decode()
+        self.assertIn('rep_cajero1', a1)
+        self.assertNotIn('rep_cajero2', a1)
