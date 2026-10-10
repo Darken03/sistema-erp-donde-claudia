@@ -293,6 +293,8 @@ class TestPuntoVenta(TestCase):
         pos.refresh_from_db()
         self.assertEqual((pos.nombre, pos.almacen_id), ('Caja Norte', alm2.pk))
         # Toggle desactiva: en multi-POS ese POS ya no abre turnos.
+        # (Se crea un 2do POS activo: el último activo no se desactiva.)
+        PuntoVenta.objects.create(nombre='Caja N 2', almacen=self.almacen)
         self.client.post(reverse('core:configuracion'), {
             'form_kind': 'pos_toggle', 'pos_id': pos.pk})
         pos.refresh_from_db()
@@ -782,3 +784,150 @@ class TestPdfEtiquetaPos(TestCase):
             'punto_venta': self.pos,
         })
         self.assertIn('Caja PDF 1', html)
+
+
+class TestBloqueosMultiPos(TestCase):
+    """Fix wave (C1/I1/I2): bloqueos multi-POS en ventas manuales y toggle."""
+
+    def setUp(self):
+        _usuario('bmp_admin', 'admin')
+        cajero = _usuario('bmp_cajero', 'cajero')
+        self.empleado = Empleado.objects.create(
+            user=cajero, salario=0, activo=True)
+        self.almacen = Almacen.objects.create(nombre='Almacén BMP')
+        self.pos = PuntoVenta.objects.create(
+            nombre='Caja BMP', almacen=self.almacen)
+        self.prod = Producto.objects.create(
+            nombre='Pan BMP', unidad_medida='unidades', precio_compra=10,
+            precio_venta=20, stock=Decimal('7'), permite_decimal=False,
+            visible_pos=True)
+        AlmacenStock.objects.create(
+            producto=self.prod, almacen=self.almacen,
+            cantidad=Decimal('10'))
+
+    def _abrir_turno_pos(self):
+        self.client.login(username='bmp_admin', password='x12345')
+        self.client.post(
+            reverse('core:turno_abrir', args=[self.empleado.pk]),
+            {'punto_venta': self.pos.pk})
+        self.client.logout()
+
+    def _vender_pos(self, cantidad='2'):
+        self.client.login(username='bmp_cajero', password='x12345')
+        r = self.client.post(
+            reverse('core:pos_procesar'),
+            data=json.dumps({
+                'items': [{'id': self.prod.pk, 'cantidad': cantidad}],
+                'metodo_pago': 'efectivo',
+                'monto_recibido': 100,
+                'monto_transferencia': 0,
+            }),
+            content_type='application/json')
+        self.client.logout()
+        return r
+
+    def test_cancelar_venta_multi_pos_bloqueada_ambos_libros_intactos(self):
+        set_modo('multi_pos')
+        self._abrir_turno_pos()
+        r = self._vender_pos('2')
+        self.assertEqual(r.status_code, 200, r.content.decode()[:500])
+        venta = Venta.objects.get(punto_venta=self.pos)
+        prod_antes = Producto.objects.get(pk=self.prod.pk).stock
+        alm_antes = AlmacenStock.objects.get(
+            producto=self.prod, almacen=self.almacen).cantidad
+        self.client.login(username='bmp_admin', password='x12345')
+        r = self.client.post(
+            reverse('core:venta_editar', args=[venta.pk]),
+            {'action': 'cancelar_venta'}, follow=True)
+        self.assertEqual(r.status_code, 200)
+        venta.refresh_from_db()
+        self.assertFalse(venta.cancelada)
+        self.assertEqual(
+            Producto.objects.get(pk=self.prod.pk).stock, prod_antes)
+        self.assertEqual(
+            AlmacenStock.objects.get(
+                producto=self.prod, almacen=self.almacen).cantidad, alm_antes)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('punto de venta' in m or 'pos' in m for m in msgs),
+            f'se esperaba mensaje claro multi-POS, hubo: {msgs}')
+
+    def test_editar_agregar_multi_pos_bloqueado(self):
+        set_modo('multi_pos')
+        self._abrir_turno_pos()
+        r = self._vender_pos('2')
+        self.assertEqual(r.status_code, 200, r.content.decode()[:500])
+        venta = Venta.objects.get(punto_venta=self.pos)
+        n_det = venta.detalles.count()
+        prod_antes = Producto.objects.get(pk=self.prod.pk).stock
+        alm_antes = AlmacenStock.objects.get(
+            producto=self.prod, almacen=self.almacen).cantidad
+        self.client.login(username='bmp_admin', password='x12345')
+        r = self.client.post(
+            reverse('core:venta_editar', args=[venta.pk]),
+            {'action': 'agregar_producto', 'producto_id': self.prod.pk,
+             'cantidad': '1'}, follow=True)
+        self.assertEqual(r.status_code, 200)
+        venta.refresh_from_db()
+        self.assertEqual(venta.detalles.count(), n_det)
+        self.assertEqual(
+            Producto.objects.get(pk=self.prod.pk).stock, prod_antes)
+        self.assertEqual(
+            AlmacenStock.objects.get(
+                producto=self.prod, almacen=self.almacen).cantidad, alm_antes)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('punto de venta' in m or 'pos' in m for m in msgs),
+            f'se esperaba mensaje claro multi-POS, hubo: {msgs}')
+
+    def test_crear_manual_bloqueado_en_multi_pos(self):
+        set_modo('multi_pos')
+        self.client.login(username='bmp_admin', password='x12345')
+        n = Venta.objects.count()
+        prod_antes = Producto.objects.get(pk=self.prod.pk).stock
+        r = self.client.post(reverse('core:venta_crear'), {
+            'metodo_pago': 'efectivo', 'monto_efectivo': '50',
+            'monto_transferencia': '0',
+            'productos_data': json.dumps(
+                [{'producto_id': self.prod.pk, 'cantidad': 1}]),
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Venta.objects.count(), n)
+        self.assertEqual(
+            Producto.objects.get(pk=self.prod.pk).stock, prod_antes)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('terminal del pos' in m for m in msgs),
+            f'se esperaba "venda desde el terminal del POS", hubo: {msgs}')
+
+    def test_toggle_ultimo_pos_bloqueado(self):
+        self.client.login(username='bmp_admin', password='x12345')
+        self.assertEqual(PuntoVenta.objects.filter(activo=True).count(), 1)
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_toggle', 'pos_id': self.pos.pk}, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.pos.refresh_from_db()
+        self.assertTrue(self.pos.activo)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('nico' in m for m in msgs),
+            f'se esperaba bloqueo del último POS activo, hubo: {msgs}')
+
+    def test_toggle_pos_con_turno_abierto_bloqueado(self):
+        set_modo('multi_pos')
+        PuntoVenta.objects.create(
+            nombre='Caja BMP 2', almacen=self.almacen)
+        self._abrir_turno_pos()
+        self.assertTrue(
+            Turno.objects.filter(
+                punto_venta=self.pos, abierto=True).exists())
+        self.client.login(username='bmp_admin', password='x12345')
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_toggle', 'pos_id': self.pos.pk}, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.pos.refresh_from_db()
+        self.assertTrue(self.pos.activo)
+        msgs = [str(m).lower() for m in r.context['messages']]
+        self.assertTrue(
+            any('turno' in m for m in msgs),
+            f'se esperaba bloqueo por turnos abiertos, hubo: {msgs}')

@@ -978,6 +978,12 @@ def venta_crear(request):
             pass
 
     if request.method == 'POST':
+        if modo_actual() == 'multi_pos':
+            messages.error(
+                request,
+                'En modo multi-POS la venta manual está desactivada: '
+                'venda desde el terminal del POS.')
+            return redirect('core:venta_crear')
         empleado_id = request.POST.get('cajero')
         fecha_str = request.POST.get('fecha', '')
         metodo_pago = request.POST.get('metodo_pago', 'efectivo')
@@ -1093,6 +1099,15 @@ def venta_editar(request, pk):
 
     if request.method == 'POST':
         action = request.POST.get('action')
+
+        if venta.punto_venta_id is not None and action in (
+                'agregar_producto', 'eliminar_detalle',
+                'actualizar_cantidad', 'cancelar_venta'):
+            messages.error(
+                request,
+                'Esta venta es de un punto de venta y no puede editarse '
+                'ni cancelarse aquí: use el terminal del POS.')
+            return redirect('core:venta_editar', pk=venta.pk)
 
         if action == 'agregar_producto':
             producto_id = request.POST.get('producto_id')
@@ -3803,12 +3818,28 @@ def configuracion(request):
                 pk=_pos_id(request, 'pos_id')).first()
             if pos is None:
                 messages.error(request, 'Punto de venta no encontrado.')
+            elif pos.activo:
+                if PuntoVenta.objects.filter(activo=True).count() <= 1:
+                    messages.error(
+                        request,
+                        'No se puede desactivar el único punto de venta activo.')
+                elif Turno.objects.filter(
+                        punto_venta=pos, abierto=True).exists():
+                    messages.error(
+                        request,
+                        f"No se puede desactivar '{pos.nombre}': "
+                        'tiene turnos abiertos. Ciérrelos primero.')
+                else:
+                    pos.activo = False
+                    pos.save(update_fields=['activo'])
+                    messages.success(
+                        request,
+                        f"Punto de venta '{pos.nombre}' desactivado.")
             else:
-                pos.activo = not pos.activo
+                pos.activo = True
                 pos.save(update_fields=['activo'])
-                estado = 'activado' if pos.activo else 'desactivado'
                 messages.success(
-                    request, f"Punto de venta '{pos.nombre}' {estado}.")
+                    request, f"Punto de venta '{pos.nombre}' activado.")
             return redirect(f"{reverse_configuracion()}?tab=almacenes")
         if form_kind == 'tienda':
             f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
