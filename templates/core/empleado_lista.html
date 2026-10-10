@@ -53,6 +53,14 @@
                                 {% else %}
                                     <form method="post" action="{% url 'core:turno_abrir' empleado.pk %}" class="d-inline">
                                         {% csrf_token %}
+                                        {% if es_multi_pos %}
+                                        <select name="punto_venta" class="form-select form-select-sm d-inline-block w-auto align-middle" required title="Punto de venta del turno">
+                                            <option value="">-- POS --</option>
+                                            {% for pos in puntos_venta %}
+                                            <option value="{{ pos.pk }}">{{ pos.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        {% endif %}
                                         <button type="submit" class="btn btn-outline-success btn-sm" title="Abrir Turno">
                                             <i class="bi bi-play-circle"></i>
                                         </button>

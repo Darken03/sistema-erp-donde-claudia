@@ -304,3 +304,94 @@ class TestPuntoVenta(TestCase):
             'form_kind': 'pos_crear', 'nombre': 'Intruso',
             'almacen': self.almacen.pk})
         self.assertEqual(PuntoVenta.objects.count(), n)
+
+
+class TestPuntoVentaUI(TestCase):
+    """Findings C1/C2/I1: UI de POS en apertura de turno y configuración."""
+
+    def setUp(self):
+        _usuario('posui_admin', 'admin')
+        cajero = _usuario('posui_cajero', 'cajero')
+        self.empleado = Empleado.objects.create(
+            user=cajero, salario=0, activo=True)
+        self.almacen = Almacen.objects.create(nombre='Almacén UI')
+        self.pos = PuntoVenta.objects.create(
+            nombre='Caja UI', almacen=self.almacen)
+        self.client.login(username='posui_admin', password='x12345')
+
+    def test_C1_select_pos_en_apertura_solo_en_multi_pos(self):
+        set_modo('multi_pos')
+        html = self.client.get(
+            reverse('core:empleado_lista')).content.decode()
+        self.assertIn('<select name="punto_venta"', html)
+        self.assertIn(f'value="{self.pos.pk}"', html)
+        self.assertIn('Caja UI', html)
+        # Un POS inactivo no se ofrece en el selector.
+        inactivo = PuntoVenta.objects.create(
+            nombre='Caja Cerrada', almacen=self.almacen, activo=False)
+        html = self.client.get(
+            reverse('core:empleado_lista')).content.decode()
+        self.assertNotIn(f'value="{inactivo.pk}"', html)
+        # Apertura iniciada desde la UI (con punto_venta del select) funciona.
+        r = self.client.post(
+            reverse('core:turno_abrir', args=[self.empleado.pk]),
+            {'punto_venta': self.pos.pk})
+        self.assertEqual(r.status_code, 302)
+        turno = Turno.objects.get(empleado=self.empleado, abierto=True)
+        self.assertEqual(turno.punto_venta_id, self.pos.pk)
+        # Fuera de multi_pos el selector se oculta/omite.
+        turno.cerrar()
+        set_modo('pos_almacenes')
+        html = self.client.get(
+            reverse('core:empleado_lista')).content.decode()
+        self.assertNotIn('<select name="punto_venta"', html)
+
+    def test_C2_seccion_pos_en_configuracion_y_crud_end_to_end(self):
+        html = self.client.get(
+            reverse('core:configuracion') + '?tab=almacenes').content.decode()
+        # Sección con nombre/almacén/activo y formularios al CRUD existente.
+        self.assertIn('Puntos de venta', html)
+        self.assertIn('Caja UI', html)
+        self.assertIn('Almacén UI', html)
+        self.assertIn('value="pos_crear"', html)
+        self.assertIn('value="pos_editar"', html)
+        self.assertIn('value="pos_toggle"', html)
+        # Crear a través de la UI y verlo listado.
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Caja Sur',
+            'almacen': self.almacen.pk})
+        self.assertEqual(r.status_code, 302)
+        nuevo = PuntoVenta.objects.get(nombre='Caja Sur')
+        html = self.client.get(
+            reverse('core:configuracion') + '?tab=almacenes').content.decode()
+        self.assertIn('Caja Sur', html)
+        # Editar a través de la UI y verlo actualizado.
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_editar', 'pos_id': nuevo.pk,
+            'nombre': 'Caja Sur 2', 'almacen': self.almacen.pk})
+        html = self.client.get(
+            reverse('core:configuracion') + '?tab=almacenes').content.decode()
+        self.assertIn('Caja Sur 2', html)
+        # Toggle a través de la UI y ver el estado cambiado.
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_toggle', 'pos_id': nuevo.pk})
+        nuevo.refresh_from_db()
+        self.assertFalse(nuevo.activo)
+        html = self.client.get(
+            reverse('core:configuracion') + '?tab=almacenes').content.decode()
+        self.assertIn('Inactivo', html)
+
+    def test_I1_redirects_pos_caen_en_tab_de_pos(self):
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Caja Tab',
+            'almacen': self.almacen.pk})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('tab=almacenes', r.url)
+        pos = PuntoVenta.objects.get(nombre='Caja Tab')
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_editar', 'pos_id': pos.pk,
+            'nombre': 'Caja Tab 2', 'almacen': self.almacen.pk})
+        self.assertIn('tab=almacenes', r.url)
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_toggle', 'pos_id': pos.pk})
+        self.assertIn('tab=almacenes', r.url)

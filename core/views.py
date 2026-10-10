@@ -692,9 +692,13 @@ def categoria_eliminar(request, pk):
 @requiere_admin
 def empleado_lista(request):
     empleados = Empleado.objects.select_related('user').all()
+    es_multi_pos = modo_actual() == 'multi_pos'
     context = {
         'empleados': empleados,
         'ahora': timezone.make_aware(ahora_servidor()),
+        'es_multi_pos': es_multi_pos,
+        'puntos_venta': list(
+            PuntoVenta.activos().select_related('almacen')) if es_multi_pos else [],
     }
     return render(request, 'core/empleado_lista.html', context)
 
@@ -3326,7 +3330,7 @@ def configuracion(request):
                 PuntoVenta.objects.create(nombre=nombre, almacen=almacen)
                 messages.success(
                     request, f"Punto de venta '{nombre}' creado.")
-            return redirect(f"{reverse_configuracion()}?tab=tienda")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
         if form_kind == 'pos_editar':
             pos = PuntoVenta.objects.filter(
                 pk=_pos_id(request, 'pos_id')).first()
@@ -3352,7 +3356,7 @@ def configuracion(request):
                 pos.save(update_fields=['nombre', 'almacen'])
                 messages.success(
                     request, f"Punto de venta '{nombre}' actualizado.")
-            return redirect(f"{reverse_configuracion()}?tab=tienda")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
         if form_kind == 'pos_toggle':
             pos = PuntoVenta.objects.filter(
                 pk=_pos_id(request, 'pos_id')).first()
@@ -3364,7 +3368,7 @@ def configuracion(request):
                 estado = 'activado' if pos.activo else 'desactivado'
                 messages.success(
                     request, f"Punto de venta '{pos.nombre}' {estado}.")
-            return redirect(f"{reverse_configuracion()}?tab=tienda")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
         if form_kind == 'tienda':
             f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
         elif form_kind == 'apariencia':
@@ -3456,6 +3460,8 @@ def config_almacen_editar(request, pk):
         'almacenes': Almacen.objects.all().order_by('nombre'),
         'por_alm': {}, 'multi': Almacen.objects.filter(activo=True).count() > 1,
         'editando': alm,
+        'puntos_venta': list(
+            PuntoVenta.objects.select_related('almacen').order_by('nombre')),
     })
 
 
