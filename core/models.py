@@ -102,6 +102,11 @@ class Empleado(models.Model):
     salario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_contratacion = models.DateField(auto_now_add=True)
     activo = models.BooleanField(default=True)
+    # Spec multi-POS §5: POS al que trabaja. Nullable (historia previa).
+    # Se fija al abrir turno (puede cambiar entre turnos).
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='empleados')
 
     class Meta:
         verbose_name = 'Empleado'
@@ -122,6 +127,10 @@ class Empleado(models.Model):
 
 class Turno(models.Model):
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='turnos')
+    # Spec multi-POS §5: un POS por turno. Nullable (historia previa).
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='turnos')
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     abierto = models.BooleanField(default=True)
@@ -1152,6 +1161,32 @@ class Almacen(models.Model):
 
 def get_almacen_unico():
     return Almacen.get_unico()
+
+
+class PuntoVenta(models.Model):
+    """Punto de venta físico (spec multi-POS §5).
+
+    Un POS ↔ un almacén (varios POS pueden compartir almacén): el POS
+    vende y descuenta directo del `AlmacenStock` del almacén asignado
+    (sin stock propio). Nombre único, estilo `Almacen`.
+    """
+    nombre = models.CharField(max_length=100, unique=True)
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='puntos_venta')
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Punto de Venta'
+        verbose_name_plural = 'Puntos de Venta'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def activos(cls):
+        return cls.objects.filter(activo=True).order_by('nombre')
 
 
 class ConfiguracionTienda(models.Model):

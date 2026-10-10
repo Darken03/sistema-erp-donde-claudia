@@ -1,10 +1,11 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 from decimal import Decimal
 from .models import (
     ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
-    Almacen, AlmacenStock,
+    Almacen, AlmacenStock, Empleado, Turno, PuntoVenta,
 )
 from .views import modo_actual
 
@@ -199,3 +200,107 @@ class TestSoloPos(TestCase):
         self.assertTrue(
             any('cajero' in m for m in msgs),
             f'se esperaba sugerencia de cajero, hubo: {msgs}')
+
+
+class TestPuntoVenta(TestCase):
+    """Modo multi-POS (spec §5): entidad PuntoVenta + turno exige POS.
+
+    Un POS ↔ un almacén (varios POS pueden compartir almacén);
+    `Empleado.punto_venta` se fija al abrir turno; varios trabajadores
+    pueden compartir POS en turnos propios. Historia previa: FKs NULL.
+    """
+
+    def setUp(self):
+        self.admin = _usuario('pos_admin', 'admin')
+        cajero = _usuario('pos_cajero', 'cajero')
+        self.empleado = Empleado.objects.create(
+            user=cajero, salario=0, activo=True)
+        self.almacen = Almacen.objects.create(nombre='Almacén POS 1')
+
+    def _abrir_turno(self, pos_pk=None):
+        url = reverse('core:turno_abrir', args=[self.empleado.pk])
+        data = {} if pos_pk is None else {'punto_venta': pos_pk}
+        return self.client.post(url, data)
+
+    def test_pos_requiere_almacen_y_turno_exige_pos(self):
+        # Un POS sin almacén falla (FK obligatoria).
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            PuntoVenta.objects.create(nombre='POS huérfano')
+        # Nombre único, estilo Almacen.
+        PuntoVenta.objects.create(nombre='Caja 1', almacen=self.almacen)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            PuntoVenta.objects.create(nombre='Caja 1', almacen=self.almacen)
+        # En multi-POS, abrir turno sin POS falla (no se crea el turno).
+        set_modo('multi_pos')
+        self.client.login(username='pos_admin', password='x12345')
+        r = self._abrir_turno()
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(
+            Turno.objects.filter(empleado=self.empleado).exists())
+        # Con POS válido: turno con POS + empleado asignado a ese POS.
+        pos = PuntoVenta.objects.get(nombre='Caja 1')
+        r = self._abrir_turno(pos.pk)
+        self.assertEqual(r.status_code, 302)
+        turno = Turno.objects.get(empleado=self.empleado, abierto=True)
+        self.assertEqual(turno.punto_venta_id, pos.pk)
+        self.empleado.refresh_from_db()
+        self.assertEqual(self.empleado.punto_venta_id, pos.pk)
+        # Varios trabajadores comparten POS en turnos propios.
+        otro_user = _usuario('pos_cajero2', 'cajero')
+        otro = Empleado.objects.create(user=otro_user, salario=0, activo=True)
+        r = self.client.post(
+            reverse('core:turno_abrir', args=[otro.pk]),
+            {'punto_venta': pos.pk})
+        self.assertEqual(r.status_code, 302)
+        turno2 = Turno.objects.get(empleado=otro, abierto=True)
+        self.assertEqual(turno2.punto_venta_id, pos.pk)
+
+    def test_turno_sin_pos_fuera_de_multi_pos_y_crud_configuracion(self):
+        # Fuera de multi-POS el turno abre sin POS (historia con NULL).
+        self.client.login(username='pos_admin', password='x12345')
+        r = self._abrir_turno()
+        self.assertEqual(r.status_code, 302)
+        turno = Turno.objects.get(empleado=self.empleado, abierto=True)
+        self.assertIsNone(turno.punto_venta)
+        # CRUD de POS en Configuración (solo admin).
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Caja N',
+            'almacen': self.almacen.pk})
+        self.assertEqual(r.status_code, 302)
+        pos = PuntoVenta.objects.get(nombre='Caja N')
+        self.assertEqual(pos.almacen_id, self.almacen.pk)
+        self.assertTrue(pos.activo)
+        # Duplicado no crea; sin almacén no crea.
+        n = PuntoVenta.objects.count()
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Caja N',
+            'almacen': self.almacen.pk})
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Sin Almacén'})
+        self.assertEqual(PuntoVenta.objects.count(), n)
+        # Editar cambia nombre y almacén.
+        alm2 = Almacen.objects.create(nombre='Almacén POS 2')
+        r = self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_editar', 'pos_id': pos.pk,
+            'nombre': 'Caja Norte', 'almacen': alm2.pk})
+        self.assertEqual(r.status_code, 302)
+        pos.refresh_from_db()
+        self.assertEqual((pos.nombre, pos.almacen_id), ('Caja Norte', alm2.pk))
+        # Toggle desactiva: en multi-POS ese POS ya no abre turnos.
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_toggle', 'pos_id': pos.pk})
+        pos.refresh_from_db()
+        self.assertFalse(pos.activo)
+        turno.cerrar()
+        set_modo('multi_pos')
+        r = self._abrir_turno(pos.pk)
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(
+            Turno.objects.filter(empleado=self.empleado, abierto=True).exists())
+        # No-admin no gestiona POS.
+        self.client.login(username='pos_cajero', password='x12345')
+        n = PuntoVenta.objects.count()
+        self.client.post(reverse('core:configuracion'), {
+            'form_kind': 'pos_crear', 'nombre': 'Intruso',
+            'almacen': self.almacen.pk})
+        self.assertEqual(PuntoVenta.objects.count(), n)

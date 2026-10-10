@@ -24,6 +24,7 @@ from .models import (
     DENOMINACIONES_CUP, DENOMINACIONES_CUP_VALOR,
     ALMACEN_PROVEEDOR, almacen_proveedor_nombre, Almacen, ConfiguracionTienda,
     get_almacen_unico, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento,
+    PuntoVenta,
 )
 from .forms import (
     ProductoForm, CategoriaForm, EmpleadoForm, PresentacionFormSet,
@@ -786,6 +787,27 @@ def turno_abrir(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk, activo=True)
     if empleado.en_turno:
         messages.warning(request, f'{empleado} ya tiene un turno abierto.')
+    elif modo_actual() == 'multi_pos':
+        # Spec §5: un POS por turno. El trabajador selecciona a qué POS va
+        # a trabajar (POST 'punto_venta'); su asignación se fija al abrir
+        # turno y puede cambiar entre turnos. Sin POS no hay turno.
+        try:
+            pos_id = int(request.POST.get('punto_venta') or 0)
+        except (ValueError, TypeError):
+            pos_id = 0
+        pos = PuntoVenta.objects.filter(pk=pos_id, activo=True).first()
+        if pos is None:
+            messages.error(
+                request,
+                'Seleccione el punto de venta del turno '
+                '(obligatorio en el modo multi-POS).')
+        else:
+            Turno.objects.create(empleado=empleado, punto_venta=pos)
+            if empleado.punto_venta_id != pos.pk:
+                empleado.punto_venta = pos
+                empleado.save(update_fields=['punto_venta'])
+            messages.success(
+                request, f'Turno abierto para {empleado} en {pos}.')
     else:
         Turno.objects.create(empleado=empleado)
         messages.success(request, f'Turno abierto para {empleado}.')
@@ -3285,6 +3307,64 @@ def configuracion(request):
             else:
                 messages.error(request, 'Modo de operación inválido.')
             return redirect(f"{reverse_configuracion()}?tab=tienda")
+        if form_kind == 'pos_crear':
+            # CRUD de puntos de venta (spec §5, solo admin: la vista lo exige).
+            # Un POS ↔ un almacén (varios POS pueden compartir almacén).
+            nombre = (request.POST.get('nombre') or '').strip()
+            almacen = Almacen.objects.filter(pk=_pos_id(request, 'almacen')).first()
+            if not nombre:
+                messages.error(
+                    request, 'El nombre del punto de venta es obligatorio.')
+            elif almacen is None:
+                messages.error(
+                    request,
+                    'Seleccione el almacén que surte al punto de venta.')
+            elif PuntoVenta.objects.filter(nombre__iexact=nombre).exists():
+                messages.error(
+                    request, 'Ya existe un punto de venta con ese nombre.')
+            else:
+                PuntoVenta.objects.create(nombre=nombre, almacen=almacen)
+                messages.success(
+                    request, f"Punto de venta '{nombre}' creado.")
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
+        if form_kind == 'pos_editar':
+            pos = PuntoVenta.objects.filter(
+                pk=_pos_id(request, 'pos_id')).first()
+            nombre = (request.POST.get('nombre') or '').strip()
+            almacen = Almacen.objects.filter(
+                pk=_pos_id(request, 'almacen')).first()
+            if pos is None:
+                messages.error(request, 'Punto de venta no encontrado.')
+            elif not nombre:
+                messages.error(
+                    request, 'El nombre del punto de venta es obligatorio.')
+            elif almacen is None:
+                messages.error(
+                    request,
+                    'Seleccione el almacén que surte al punto de venta.')
+            elif PuntoVenta.objects.filter(
+                    nombre__iexact=nombre).exclude(pk=pos.pk).exists():
+                messages.error(
+                    request, 'Ya existe un punto de venta con ese nombre.')
+            else:
+                pos.nombre = nombre
+                pos.almacen = almacen
+                pos.save(update_fields=['nombre', 'almacen'])
+                messages.success(
+                    request, f"Punto de venta '{nombre}' actualizado.")
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
+        if form_kind == 'pos_toggle':
+            pos = PuntoVenta.objects.filter(
+                pk=_pos_id(request, 'pos_id')).first()
+            if pos is None:
+                messages.error(request, 'Punto de venta no encontrado.')
+            else:
+                pos.activo = not pos.activo
+                pos.save(update_fields=['activo'])
+                estado = 'activado' if pos.activo else 'desactivado'
+                messages.success(
+                    request, f"Punto de venta '{pos.nombre}' {estado}.")
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
         if form_kind == 'tienda':
             f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
         elif form_kind == 'apariencia':
@@ -3320,6 +3400,8 @@ def configuracion(request):
         'form_regional': ConfigRegionalForm(instance=cfg),
         'form_almacen': AlmacenForm(),
         'almacenes': almacenes, 'por_alm': por_alm,
+        'puntos_venta': list(
+            PuntoVenta.objects.select_related('almacen').order_by('nombre')),
         'multi': Almacen.objects.filter(activo=True).count() > 1,
     })
 
@@ -3327,6 +3409,14 @@ def configuracion(request):
 def reverse_configuracion():
     from django.urls import reverse
     return reverse('core:configuracion')
+
+
+def _pos_id(request, campo):
+    """PK entera desde POST sin 500 ante basura (None si inválida)."""
+    try:
+        return int(request.POST.get(campo) or 0)
+    except (ValueError, TypeError):
+        return 0
 
 
 @requiere_admin
