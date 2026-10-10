@@ -1,0 +1,445 @@
+{% extends 'base.html' %}
+
+{% block title %}Contar a ciegas #{{ conteo.pk }} - BizMaster{% endblock %}
+{% block topbar_text %}Conteo Ciego #{{ conteo.pk }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-eye-slash me-2"></i>Conteo #{{ conteo.pk }} · a ciegas</h2>
+    <a href="{% url 'core:conteo_lista' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Conteos
+    </a>
+</div>
+
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    No se muestra el stock del sistema. Cuenta físicamente y anota. Al <strong>cerrar</strong> se compara con el sistema.
+</div>
+
+<div id="draftBanner" class="alert alert-info d-none" role="alert">
+    <i class="bi bi-cloud-arrow-down me-1"></i>
+    <span id="draftBannerText">Se recuperó tu conteo sin guardar.</span>
+</div>
+
+<div id="autosaveBar" class="d-flex align-items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-3 border">
+    <span id="autosaveDot" style="width:10px;height:10px;border-radius:50%;background:#6c757d;display:inline-block;"></span>
+    <small id="autosaveText" class="fw-semibold">Listo. El conteo se guarda solo en este equipo y en el servidor.</small>
+    <span id="autosaveCount" class="badge bg-secondary d-none">0 pendientes</span>
+    <span class="ms-auto d-flex gap-2">
+        <button type="button" id="autosaveRetry" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-arrow-repeat me-1"></i>Reintentar ahora
+        </button>
+        <button type="button" id="draftDiscard" class="btn btn-sm btn-outline-secondary" title="Borra el borrador de este equipo y vuelve a lo guardado en el servidor">
+            <i class="bi bi-trash me-1"></i>Descartar borrador
+        </button>
+    </span>
+</div>
+
+<form method="post" id="conteoForm" data-autosave-url="{% url 'core:conteo_autosave' conteo.pk %}" data-conteo-pk="{{ conteo.pk }}">
+    {% csrf_token %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                <div class="input-group" style="max-width:340px; flex:1 1 220px;">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="search" id="buscarConteo" class="form-control" placeholder="Buscar por nombre, código o categoría..." autocomplete="off">
+                </div>
+                <div style="max-width:250px; flex:1 1 170px; position:relative;">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-tag"></i></span>
+                        <input type="search" id="filtroCategoriaSearch" class="form-control" placeholder="Categoría..." autocomplete="off" aria-label="Buscar categoría">
+                        <button type="button" class="btn btn-outline-secondary" id="filtroCategoriaClear" title="Mostrar todas" style="display:none;">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <input type="hidden" id="filtroCategoria" value="">
+                    <div id="catResults" class="list-group shadow" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:220px; overflow-y:auto; margin-top:4px;"></div>
+                </div>
+                <script id="conteoCategorias" type="application/json">[{"id":"","nombre":"Todas las categorías"}{% for c in categorias %},{"id":"{{ c.pk }}","nombre":"{{ c.nombre|escapejs }}"}{% endfor %},{"id":"__sin__","nombre":"Sin categoría"}]</script>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="conteoTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Código</th>
+                            <th>Producto</th>
+                            <th style="width:190px;">Contado (unidad base)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% regroup productos by categoria as grupos %}
+                        {% for g in grupos %}
+                        <tr class="cat-row" data-cat="{% if g.grouper %}{{ g.grouper.pk }}{% else %}__sin__{% endif %}">
+                            <td colspan="3" class="fw-bold" style="background:var(--soft);">
+                                <i class="bi bi-tag me-1"></i>{% if g.grouper %}{{ g.grouper.nombre }}{% else %}Sin categoría{% endif %}
+                                <span class="badge bg-secondary ms-1">{{ g.list|length }}</span>
+                            </td>
+                        </tr>
+                        {% for p in g.list %}
+                        <tr class="crow" data-nombre="{{ p.nombre|lower }} {{ p.codigo|lower }} {% if p.categoria %}{{ p.categoria.nombre|lower }}{% endif %}" data-cat="{% if p.categoria_id %}{{ p.categoria_id }}{% else %}__sin__{% endif %}">
+                            <td class="text-muted small mono">{{ p.codigo }}</td>
+                            <td>
+                                <strong>{{ p.nombre }}</strong>
+                                <small class="text-muted d-block">{{ p.unidad_medida }}{% if p.permite_decimal %} · admite decimal{% endif %}</small>
+                            </td>
+                            <td>
+                                <input type="number" name="cant_{{ p.pk }}" class="form-control text-end fw-bold mono"
+                                       min="0" step="{% if p.permite_decimal %}0.001{% else %}1{% endif %}"
+                                       inputmode="decimal"
+                                       value="{% for pid, val in actuales.items %}{% if pid == p.pk %}{{ val }}{% endif %}{% endfor %}"
+                                       placeholder="0">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                        <tr id="conteoSinResultados" style="display:none;">
+                            <td colspan="3" class="text-center text-muted py-4">Sin resultados para ese filtro</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-3 d-flex gap-2 justify-content-end flex-wrap">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-save me-1"></i> Guardar conteo
+            </button>
+        </div>
+    </div>
+</form>
+
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-body p-4">
+        <h5><i class="bi bi-lock me-2"></i>Cerrar y comparar</h5>
+        <p class="text-muted small">Al cerrar se congela el stock del sistema y se muestra la comparación producto por producto. Ya no podrás editar.</p>
+        <form method="post" action="{% url 'core:conteo_cerrar' conteo.pk %}" onsubmit="return confirm('¿Cerrar el conteo #{{ conteo.pk }} y comparar con el sistema?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-check-circle me-1"></i> Cerrar conteo y comparar
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+    #catResults .list-group-item { cursor:pointer; font-size:13px; }
+    #catResults .list-group-item.active { background:var(--accent-tint); color:var(--accent); border-color:var(--accent-soft); font-weight:700; }
+    html[data-theme="dark"] #catResults .list-group-item { background:#23232f; border-color:var(--line); color:var(--ink); }
+    html[data-theme="dark"] #catResults .list-group-item:hover { background:var(--soft); }
+    html[data-theme="dark"] #catResults .list-group-item.active { background:var(--accent-tint); color:#cfc2ff; }
+</style>
+<script>
+(function(){
+    var box = document.getElementById('buscarConteo');
+    var sel = document.getElementById('filtroCategoria');
+    var emptyRow = document.getElementById('conteoSinResultados');
+    if (!box) return;
+    /* Buscador de categorías (inputsearch): escribe, elige y filtra */
+    try {
+        var cSearch = document.getElementById('filtroCategoriaSearch');
+        var cClear = document.getElementById('filtroCategoriaClear');
+        var cBox = document.getElementById('catResults');
+        var cData = JSON.parse(document.getElementById('conteoCategorias').textContent || '[]');
+        var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+        function cRender(){
+            var q = (cSearch.value || '').toLowerCase().trim();
+            var vis = cData.filter(function(c){
+                return !q || c.nombre.toLowerCase().indexOf(q) !== -1;
+            });
+            if (!vis.length){
+                cBox.innerHTML = '<span class="list-group-item text-muted small">Sin categorías para esa búsqueda.</span>';
+            } else {
+                cBox.innerHTML = vis.map(function(c){
+                    var act = String(sel.value) === String(c.id) ? ' active' : '';
+                    return '<button type="button" class="list-group-item list-group-item-action' + act + '" data-id="' + esc(c.id) + '">' + esc(c.nombre) + '</button>';
+                }).join('');
+            }
+            cBox.style.display = '';
+        }
+        function cPick(id, nombre){
+            sel.value = id;
+            cSearch.value = (id === '') ? '' : nombre;
+            if (cClear) cClear.style.display = (id === '') ? 'none' : '';
+            cBox.style.display = 'none';
+            filtrar();
+        }
+        if (cSearch && cBox){
+            cSearch.addEventListener('focus', cRender);
+            cSearch.addEventListener('input', cRender);
+            cSearch.addEventListener('keydown', function(ev){
+                if (ev.key === 'Escape'){ cBox.style.display = 'none'; cSearch.blur(); }
+                else if (ev.key === 'Enter'){
+                    ev.preventDefault();
+                    var first = cBox.querySelector('button[data-id]');
+                    if (first) cPick(first.getAttribute('data-id'), first.textContent);
+                }
+            });
+            document.addEventListener('click', function(ev){
+                if (!cBox.contains(ev.target) && ev.target !== cSearch && cBox.style.display !== 'none'){
+                    // Solo cierra si el clic fue fuera y no eligió (los botones usan mousedown)
+                    if (!ev.target.closest || !ev.target.closest('#catResults')) cBox.style.display = 'none';
+                }
+            });
+            cBox.addEventListener('mousedown', function(ev){
+                var b = ev.target.closest ? ev.target.closest('button[data-id]') : null;
+                if (!b) return;
+                ev.preventDefault();
+                cPick(b.getAttribute('data-id'), b.textContent);
+            });
+            // Al borrar con la X nativa del search, vuelve a "todas"
+            cSearch.addEventListener('search', function(){
+                if (!cSearch.value) cPick('', '');
+            });
+        }
+        if (cClear) cClear.addEventListener('click', function(){
+            cPick('', '');
+            cSearch.focus();
+        });
+    } catch(e){}
+    function filtrar(){
+        var q = box.value.toLowerCase().trim();
+        var cat = sel ? sel.value : '';
+        var visibles = 0;
+        document.querySelectorAll('#conteoTable .crow').forEach(function(r){
+            var okQ = !q || r.getAttribute('data-nombre').indexOf(q) !== -1;
+            var okC = !cat || r.getAttribute('data-cat') === cat;
+            var show = okQ && okC;
+            r.style.display = show ? '' : 'none';
+            if (show) visibles++;
+        });
+        // Oculta el encabezado de categoría si no tiene filas visibles
+        document.querySelectorAll('#conteoTable .cat-row').forEach(function(h){
+            var key = h.getAttribute('data-cat');
+            var alguno = false;
+            var next = h.nextElementSibling;
+            while (next && !next.classList.contains('cat-row') && next.id !== 'conteoSinResultados'){
+                if (next.classList.contains('crow') && next.style.display !== 'none'){ alguno = true; break; }
+                next = next.nextElementSibling;
+            }
+            h.style.display = (alguno && (!cat || key === cat)) ? '' : 'none';
+        });
+        if (emptyRow) emptyRow.style.display = visibles ? 'none' : '';
+    }
+    box.addEventListener('input', filtrar);
+    if (sel) sel.addEventListener('change', filtrar);
+})();
+</script>
+<script>
+/* Opción C: borrador local + autoguardado al servidor + cola offline.
+   - Todo lo que se escribe se guarda al instante en este equipo (localStorage).
+   - Cada ~1s se envía al servidor solo lo cambiado (fetch JSON al endpoint autosave).
+   - Sin conexión: queda pendiente y reintenta solo cada 7s + al volver internet.
+   - Al recargar tras una caída, restaura el borrador y muestra el banner. */
+(function(){
+    var form = document.getElementById('conteoForm');
+    if (!form) return;
+    var PK = form.getAttribute('data-conteo-pk') || '';
+    var URL = form.getAttribute('data-autosave-url') || '';
+    var DRAFT_KEY = 'conteo_draft_' + PK;
+    var SYNC_KEY = 'conteo_synced_' + PK;
+    var dot = document.getElementById('autosaveDot');
+    var txt = document.getElementById('autosaveText');
+    var badge = document.getElementById('autosaveCount');
+    var btnRetry = document.getElementById('autosaveRetry');
+    var btnDiscard = document.getElementById('draftDiscard');
+    var banner = document.getElementById('draftBanner');
+    var bannerText = document.getElementById('draftBannerText');
+    var sending = false, isSubmitting = false;
+    var draftTimer = null, flushTimer = null;
+
+    function inputs(){
+        return Array.prototype.slice.call(form.querySelectorAll('input[name^="cant_"]'));
+    }
+    function pidOf(el){ return el.name.slice(5); }
+    function readCurrent(){
+        var m = {};
+        inputs().forEach(function(el){ m[pidOf(el)] = (el.value == null ? '' : String(el.value)); });
+        return m;
+    }
+    function loadJSON(k){
+        try {
+            var raw = localStorage.getItem(k);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch(e){ return null; }
+    }
+    function saveJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+    function getCsrf(){
+        var el = form.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+    function hora(ts){
+        try { return new Date(ts).toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+        catch(e){ return ''; }
+    }
+    function setStatus(mode, msg, pending){
+        var colors = {ok:'#198754', saving:'#0d6efd', local:'#ffc107', offline:'#dc3545', error:'#dc3545', idle:'#6c757d'};
+        if (dot) dot.style.background = colors[mode] || colors.idle;
+        if (txt && msg) txt.textContent = msg;
+        if (badge){
+            if (pending && pending > 0){
+                badge.classList.remove('d-none');
+                badge.textContent = pending + (pending === 1 ? ' pendiente' : ' pendientes');
+                badge.className = 'badge ' + (mode === 'offline' ? 'bg-danger' : 'bg-warning text-dark');
+            } else {
+                badge.classList.add('d-none');
+            }
+        }
+    }
+    function dirtyMap(cur, synced){
+        var d = {}, n = 0;
+        Object.keys(cur).forEach(function(pid){
+            var a = (cur[pid] == null ? '' : String(cur[pid]).trim());
+            var b = (synced[pid] == null ? '' : String(synced[pid]).trim());
+            if (a !== b){ d[pid] = cur[pid]; n++; }
+        });
+        return {map: d, count: n};
+    }
+
+    // 1) Foto del servidor tal como se renderizó + borrador previo.
+    var serverMap = readCurrent();
+    var synced = (loadJSON(SYNC_KEY) && loadJSON(SYNC_KEY).v) || serverMap;
+    var draft = loadJSON(DRAFT_KEY);
+    if (draft && draft.v){
+        var restored = 0;
+        inputs().forEach(function(el){
+            var pid = pidOf(el);
+            if (draft.v.hasOwnProperty(pid) && String(el.value) !== String(draft.v[pid])){
+                el.value = draft.v[pid];
+                restored++;
+            }
+        });
+        if (restored > 0 && banner && bannerText){
+            var h = draft.t ? hora(draft.t) : '';
+            bannerText.textContent = 'Se recuperó tu conteo sin guardar' + (h ? ' de las ' + h : '') +
+                ' (' + restored + ' producto(s)). Ya está a salvo en este equipo; se está sincronizando con el servidor…';
+            banner.classList.remove('d-none');
+        }
+    }
+
+    function persistDraft(){
+        saveJSON(DRAFT_KEY, {v: readCurrent(), t: Date.now()});
+    }
+    function scheduleDraft(){
+        if (draftTimer) clearTimeout(draftTimer);
+        draftTimer = setTimeout(persistDraft, 250);
+    }
+    function scheduleFlush(delay){
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = setTimeout(flush, delay == null ? 1000 : delay);
+    }
+
+    function flush(){
+        if (sending || isSubmitting || !URL) return;
+        var cur = readCurrent();
+        var d = dirtyMap(cur, synced);
+        if (d.count === 0){
+            setStatus('ok', 'Sincronizado con el servidor ' + hora(Date.now()) + '.', 0);
+            return;
+        }
+        if (!navigator.onLine){
+            persistDraft();
+            setStatus('offline', 'Sin conexión: guardado en este equipo (' + d.count + '). Se enviará solo al volver internet.', d.count);
+            return;
+        }
+        sending = true;
+        setStatus('saving', 'Guardando ' + d.count + ' producto(s) en el servidor…', d.count);
+        fetch(URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            credentials: 'same-origin',
+            body: JSON.stringify({lineas: d.map})
+        }).then(function(r){
+            return r.json().then(function(j){ return {status: r.status, body: j}; });
+        }).then(function(res){
+            var j = res.body || {};
+            if (res.status === 400 && j.error === 'El conteo ya está cerrado.'){
+                setStatus('error', 'Este conteo ya fue cerrado. Recarga la página.', d.count);
+                sending = false;
+                return;
+            }
+            if (!j.ok && !j.guardados && !j.eliminados){
+                throw new Error(j.error || 'Error del servidor');
+            }
+            var errs = j.errores || {};
+            // Lo aceptado (o borrado con '') queda sincronizado.
+            Object.keys(d.map).forEach(function(pid){
+                if (!errs.hasOwnProperty(pid)){
+                    synced[pid] = d.map[pid];
+                } else {
+                    // Rechazado por validación: no reintentar en bucle; marcar input.
+                    synced[pid] = d.map[pid];
+                    var bad = form.querySelector('input[name="cant_' + pid + '"]');
+                    if (bad) bad.classList.add('is-invalid');
+                }
+            });
+            saveJSON(SYNC_KEY, {v: synced, t: Date.now()});
+            persistDraft();
+            var nErr = Object.keys(errs).length;
+            if (nErr > 0){
+                setStatus('error', 'Servidor rechazó ' + nErr + ' valor(es) (revísalos en rojo). El resto está sincronizado.', 0);
+            } else {
+                var tot = (j.guardados || 0) + (j.eliminados || 0);
+                setStatus('ok', 'Sincronizado con el servidor ' + hora(Date.now()) + ' (' + tot + ' guardado(s)).', 0);
+                if (banner) banner.classList.add('d-none');
+            }
+            sending = false;
+        }).catch(function(){
+            persistDraft();
+            var cur2 = readCurrent();
+            var d2 = dirtyMap(cur2, synced);
+            setStatus('offline', 'No se pudo contactar al servidor. Guardado en este equipo (' + d2.count + '). Reintentando…', d2.count);
+            sending = false;
+        });
+    }
+
+    // 2) Eventos: escribir -> borrador inmediato + envío diferido.
+    form.addEventListener('input', function(ev){
+        if (!ev.target || !ev.target.name || ev.target.name.indexOf('cant_') !== 0) return;
+        ev.target.classList.remove('is-invalid');
+        scheduleDraft();
+        scheduleFlush(1000);
+        var cur = readCurrent();
+        var d = dirtyMap(cur, synced);
+        if (d.count > 0) setStatus('local', 'Guardado en este equipo. Sincronizando ' + d.count + '…', d.count);
+    });
+    // 3) Reintentos automáticos + botón manual + aviso al salir con pendientes.
+    setInterval(function(){ if (!sending && !isSubmitting && navigator.onLine) flush(); }, 7000);
+    window.addEventListener('online', function(){ setStatus('saving', 'Conexión recuperada. Sincronizando…', null); flush(); });
+    window.addEventListener('offline', function(){
+        persistDraft();
+        var d = dirtyMap(readCurrent(), synced);
+        setStatus('offline', 'Sin conexión: todo queda guardado en este equipo (' + d.count + ').', d.count);
+    });
+    if (btnRetry) btnRetry.addEventListener('click', function(){ flush(); });
+    if (btnDiscard) btnDiscard.addEventListener('click', function(){
+        if (!confirm('¿Borrar el borrador de este equipo y volver a lo guardado en el servidor?')) return;
+        try { localStorage.removeItem(DRAFT_KEY); } catch(e){}
+        Object.keys(serverMap).forEach(function(pid){
+            var el = form.querySelector('input[name="cant_' + pid + '"]');
+            if (el) el.value = serverMap[pid];
+        });
+        synced = Object.assign({}, serverMap);
+        saveJSON(SYNC_KEY, {v: synced, t: Date.now()});
+        if (banner) banner.classList.add('d-none');
+        setStatus('idle', 'Borrador descartado. Mostrando lo guardado en el servidor.', 0);
+    });
+    form.addEventListener('submit', function(){
+        isSubmitting = true;
+        try { persistDraft(); } catch(e){}
+    });
+    window.addEventListener('beforeunload', function(e){
+        if (isSubmitting) return;
+        var d = dirtyMap(readCurrent(), synced);
+        if (d.count > 0){
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+    // Primer intento de sincronizar el borrador recuperado (si lo hay).
+    setTimeout(flush, 1500);
+})();
+</script>
+{% endblock %}

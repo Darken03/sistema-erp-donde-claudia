@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-tags me-2"></i>{{ titulo }}</h2>
+    <a href="{% url 'core:categoria_lista' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-7">
+        <form method="post" autocomplete="off" id="categoriaForm">
+            {% csrf_token %}
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-tags"></i></span>
+                        <div><h5>Información de la categoría</h5><small>Organiza tus productos en el POS y reportes</small></div>
+                        <span class="cat-count-pill ms-auto" id="catCharPill">0/100</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.nombre.id_for_label }}">Nombre *</label>
+                        {{ form.nombre }}
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <div class="form-text m-0">Ej. Carnes, Lácteos, Bebidas, Limpieza…</div>
+                            <small class="text-muted mono" id="nombreCount">0/100</small>
+                        </div>
+                        {% if form.nombre.errors %}
+                            <div class="text-danger small mt-1">{{ form.nombre.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-1">
+                        <label class="form-label" for="{{ form.descripcion.id_for_label }}">Descripción</label>
+                        {{ form.descripcion }}
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <div class="form-text m-0">Opcional · para qué sirve esta categoría.</div>
+                            <small class="text-muted mono" id="descCount"></small>
+                        </div>
+                        {% if form.descripcion.errors %}
+                            <div class="text-danger small mt-1">{{ form.descripcion.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-eye"></i></span>
+                        <div><h5>Vista previa</h5><small>Así se verá en el POS y listados</small></div>
+                    </div>
+                    <div class="cat-preview" id="catPreview">
+                        <span class="cat-preview-icon" id="catPrevIcon">C</span>
+                        <span class="cat-preview-name" id="catPrevName">Nombre de la categoría</span>
+                        <span class="cat-preview-chip">chip POS</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-3 d-flex gap-2 justify-content-end flex-wrap">
+                    <a href="{% url 'core:categoria_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary px-4" id="btnGuardarCat">
+                        <i class="bi bi-check-lg me-1"></i> Guardar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.form-card-head { display:flex; align-items:center; gap:10px; margin-bottom:1rem; }
+.form-card-head .section-icon {
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background:var(--accent-tint); color:var(--accent);
+    display:inline-flex; align-items:center; justify-content:center; font-size:17px;
+}
+.form-card-head h5 { font-size:14px; font-weight:700; margin:0; color:var(--ink); }
+.form-card-head small { display:block; font-size:12px; color:var(--ink-3); font-weight:400; }
+.cat-count-pill {
+    font-family:var(--font-mono); font-size:11px; font-weight:700;
+    background:var(--soft); color:var(--ink-2);
+    border:1px solid var(--line); border-radius:99px; padding:4px 12px; white-space:nowrap;
+}
+.cat-preview {
+    border:1px solid var(--line); border-radius:12px; background:var(--soft);
+    padding:12px 14px; display:flex; align-items:center; gap:10px; min-height:58px;
+}
+.cat-preview-icon {
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),#b65cd6); color:#fff;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:700;
+}
+.cat-preview-name { font-size:14px; font-weight:600; color:var(--ink); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cat-preview-chip {
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    background:var(--accent-tint); color:var(--accent);
+    border-radius:99px; padding:3px 10px; white-space:nowrap;
+}
+textarea.form-control { min-height:96px; resize:vertical; }
+</style>
+
+<script>
+(function(){
+    var nameInput = document.getElementById('{{ form.nombre.id_for_label }}');
+    var descInput = document.getElementById('{{ form.descripcion.id_for_label }}');
+    var nameCount = document.getElementById('nombreCount');
+    var charPill = document.getElementById('catCharPill');
+    var prevName = document.getElementById('catPrevName');
+    var prevIcon = document.getElementById('catPrevIcon');
+    var descCount = document.getElementById('descCount');
+    function paint(){
+        var v = (nameInput && nameInput.value || '').trim();
+        if (nameCount) nameCount.textContent = (nameInput ? nameInput.value.length : 0) + '/100';
+        if (charPill) charPill.textContent = (nameInput ? nameInput.value.length : 0) + '/100';
+        if (prevName) prevName.textContent = v || 'Nombre de la categoría';
+        if (prevIcon) prevIcon.textContent = (v ? v.charAt(0) : 'C').toUpperCase();
+    }
+    function paintDesc(){
+        if (descCount && descInput) descCount.textContent = (descInput.value.length ? descInput.value.length + ' car.' : '');
+    }
+    if (nameInput){
+        nameInput.setAttribute('maxlength', '100');
+        if (!nameInput.getAttribute('placeholder')) nameInput.setAttribute('placeholder', 'Ej. Carnes, Lácteos, Bebidas…');
+        nameInput.addEventListener('input', paint);
+    }
+    if (descInput){
+        if (!descInput.getAttribute('placeholder')) descInput.setAttribute('placeholder', 'Detalle opcional de la categoría…');
+        descInput.addEventListener('input', paintDesc);
+    }
+    paint(); paintDesc();
+    if (nameInput) nameInput.focus();
+})();
+</script>
+{% endblock %}

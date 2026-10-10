@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Eliminar Entrada - BizMaster{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="mb-4">
+                    <i class="bi bi-exclamation-triangle text-danger" style="font-size: 3rem;"></i>
+                </div>
+                <h4 class="mb-3">Confirmar Eliminacion</h4>
+                <p class="text-muted mb-4">
+                    ¿Esta seguro que desea eliminar la entrada <strong>{{ entrada.numero_entrada }}</strong>?
+                </p>
+                
+                <div class="alert alert-info text-start">
+                    <small>
+                        <strong>Producto:</strong> {{ entrada.producto.nombre }}<br>
+                        <strong>Cantidad:</strong> {{ entrada.cantidad_fmt }}<br>
+                        <strong>Costo Unitario:</strong> ${{ entrada.costo_unitario|floatformat:2 }}<br>
+                        <strong>Costo Total:</strong> ${{ entrada.costo_total|floatformat:2 }}<br>
+                        <strong>Fecha:</strong> {{ entrada.fecha_entrada|date:"d/m/Y H:i" }}
+                    </small>
+                </div>
+
+                <div class="alert alert-warning text-start">
+                    <small>
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Nota:</strong> Al eliminar esta entrada se descontaran {{ entrada.cantidad_fmt }} del stock del producto y se eliminara el movimiento de inventario relacionado.
+                    </small>
+                </div>
+
+                <form method="post" class="mt-4">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger me-2">
+                        <i class="bi bi-trash me-1"></i> Eliminar
+                    </button>
+                    <a href="{% url 'core:entrada_lista' %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

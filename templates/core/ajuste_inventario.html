@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes de Inventario - BizMaster{% endblock %}
+
+{% block topbar_text %}Ajustes de Inventario{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-sliders me-2"></i>Ajustes de Inventario</h2>
+    <span class="text-muted small">{{ productos|length }} producto(s) activo(s)</span>
+</div>
+
+<form method="post" id="ajusteForm">
+    {% csrf_token %}
+    <input type="hidden" name="producto" id="productoId" value="">
+    <div class="row g-3">
+        <!-- ===== Selector de producto ===== -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>1 · Elige el producto</h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="buscarProducto" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
+                    </div>
+                    <div class="list-group overflow-auto" id="listaProductos" style="max-height: 430px;">
+                        {% for p in productos %}
+                        <button type="button"
+                                class="list-group-item list-group-item-action producto-opt"
+                                data-id="{{ p.id }}"
+                                data-codigo="{{ p.codigo|lower }}"
+                                data-nombre="{{ p.nombre|lower }}"
+                                data-stock="{{ p.stock }}"
+                                data-peso="{% if p.unidad_medida == 'kg' or p.unidad_medida == 'lb' %}1{% else %}0{% endif %}"
+                                data-unidad="{{ p.unidad_medida }}">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="prod-ini">{{ p.nombre|slice:":2"|upper }}</span>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-bold text-truncate">{{ p.nombre }}</div>
+                                    <small class="text-muted">{{ p.codigo }} · {{ p.categoria.nombre|default:"Sin categoría" }}</small>
+                                </div>
+                                <span class="badge {% if p.stock_bajo %}bg-danger{% else %}bg-success{% endif %}">{{ p.stock_fmt }}</span>
+                            </div>
+                        </button>
+                        {% empty %}
+                        <div class="text-center text-muted py-4">No hay productos activos</div>
+                        {% endfor %}
+                    </div>
+                    <small class="text-muted"><span id="conteoProd">{{ productos|length }}</span> coincidencia(s)</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Panel de ajuste ===== -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i>2 · Define el nuevo stock</h5>
+                </div>
+                <div class="card-body">
+                    <div class="ajuste-sel mb-3" id="selBox">
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="prod-ini big" id="selIni">–</span>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold fs-5" id="selNombre">Selecciona un producto</div>
+                                <small class="text-muted" id="selSub">Toca un producto de la lista</small>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted d-block">STOCK ACTUAL</small>
+                                <span class="fs-4 fw-bold" id="selStock">–</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Nuevo stock <small class="text-muted" id="lblUnidad"></small></label>
+                            <div class="input-group input-group-lg">
+                                <button type="button" class="btn btn-outline-secondary" id="btnMenos" title="Restar"><i class="bi bi-dash-lg"></i></button>
+                                <input type="number" name="nuevo_stock" id="nuevoStock" class="form-control text-center fw-bold" min="0" step="0.001" required>
+                                <button type="button" class="btn btn-outline-secondary" id="btnMas" title="Sumar"><i class="bi bi-plus-lg"></i></button>
+                            </div>
+                            <div class="form-text" id="ayudaPaso">Paso: 1 unidad.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Atajos</label>
+                            <div class="d-flex flex-wrap gap-1" id="chipsBox">
+                                <button type="button" class="btn btn-sm btn-outline-danger chip" data-d="-5">−5</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger chip" data-d="-1">−1</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger chip chip-peso" data-d="-0.5" style="display:none;">−0.5</button>
+                                <button type="button" class="btn btn-sm btn-outline-success chip chip-peso" data-d="0.5" style="display:none;">+0.5</button>
+                                <button type="button" class="btn btn-sm btn-outline-success chip" data-d="1">+1</button>
+                                <button type="button" class="btn btn-sm btn-outline-success chip" data-d="5">+5</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Vista previa en vivo -->
+                    <div class="ajuste-prev mt-3" id="prevBox">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <small class="text-muted d-block">DIFERENCIA</small>
+                                <span class="fs-3 fw-bold" id="difBadge">–</span>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted d-block">RESULTADO</small>
+                                <span class="fs-5 fw-bold" id="resPreview">–</span>
+                            </div>
+                        </div>
+                        <div class="ajuste-bar mt-2">
+                            <div class="ajuste-bar-old" id="barOld"></div>
+                            <div class="ajuste-bar-new" id="barNew"></div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted" id="lblOld">Actual: –</small>
+                            <small class="text-muted" id="lblNew">Nuevo: –</small>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Motivo del ajuste</label>
+                            <select name="motivo" class="form-select" required>
+                                <option value="inventario_fisico">📋 Inventario Físico</option>
+                                <option value="mercancia_danada">💔 Mercancía Dañada</option>
+                                <option value="mercancia_perdida">🔍 Mercancía Perdida</option>
+                                <option value="ajuste_error">⚠️ Ajuste por Error</option>
+                                <option value="otro">📝 Otro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Observación</label>
+                            <input type="text" name="observacion" class="form-control" placeholder="Detalle opcional...">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary btn-lg w-100" id="btnGuardar" disabled>
+                                <i class="bi bi-check-circle me-1"></i><span id="btnGuardarTxt">Elige un producto para ajustar</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Historial de ajustes -->
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial de Ajustes</h5>
+        <span class="badge bg-secondary">{{ ajustes|length }} reciente(s)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Producto</th>
+                        <th class="text-center">Anterior</th>
+                        <th class="text-center">Nuevo</th>
+                        <th class="text-center">Diferencia</th>
+                        <th>Motivo</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ajuste in ajustes %}
+                    <tr>
+                        <td class="text-muted">{{ ajuste.fecha|date:"d/m/Y H:i" }}</td>
+                        <td><strong>{{ ajuste.producto.codigo }}</strong> - {{ ajuste.producto.nombre }}</td>
+                        <td class="text-center">{{ ajuste.stock_anterior_fmt }}</td>
+                        <td class="text-center"><strong>{{ ajuste.stock_nuevo_fmt }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge {% if ajuste.cantidad > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                {% if ajuste.cantidad > 0 %}+{% endif %}{{ ajuste.cantidad_fmt }}
+                            </span>
+                        </td>
+                        <td><small>{{ ajuste.descripcion|default:"Ajuste" }}</small></td>
+                        <td><small>{{ ajuste.usuario.username }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-3">No hay ajustes registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.prod-ini { width:38px; height:38px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:13px; color:var(--accent); background:var(--accent-tint); flex:0 0 38px; }
+.prod-ini.big { width:52px; height:52px; font-size:17px; flex-basis:52px; }
+/* La lista usa los tokens del tema para no quedar blanca en modo oscuro */
+#listaProductos .producto-opt {
+  background:var(--surface); color:var(--ink); border-color:var(--line);
+}
+#listaProductos .producto-opt small.text-muted { color:var(--ink-3) !important; }
+#listaProductos .producto-opt:hover { background:var(--soft); }
+.producto-opt.active { border-color:var(--accent) !important; background:var(--accent-tint) !important; box-shadow:inset 3px 0 0 var(--accent); }
+.producto-opt.active small.text-muted { color:var(--ink-2) !important; }
+.ajuste-sel { background:var(--soft); border:1px solid var(--line); border-radius:12px; padding:12px 16px; color:var(--ink); }
+.ajuste-prev { background:var(--soft); border:1px solid var(--line); border-radius:12px; padding:12px 16px; color:var(--ink); }
+.ajuste-sel small.text-muted, .ajuste-prev small.text-muted { color:var(--ink-3) !important; }
+.ajuste-bar { position:relative; height:10px; border-radius:99px; background:var(--line); overflow:hidden; }
+.ajuste-bar-old, .ajuste-bar-new { position:absolute; top:0; bottom:0; left:0; border-radius:99px; transition:width .2s; }
+.ajuste-bar-old { background:var(--ink-3); opacity:.55; }
+.ajuste-bar-new { background:var(--accent); opacity:.8; }
+/* Buscador: el addon del icono seguía blanco en oscuro */
+#ajusteForm .input-group-text { background:var(--soft); border-color:var(--line); color:var(--ink-3); }
+html[data-theme="dark"] #listaProductos .producto-opt { background:var(--surface); }
+html[data-theme="dark"] .producto-opt.active { background:var(--accent-tint) !important; }
+html[data-theme="dark"] .ajuste-sel, html[data-theme="dark"] .ajuste-prev { background:#23232f; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const opts = Array.from(document.querySelectorAll('.producto-opt'));
+  const fmtNum = v => { const r = Math.round(v * 1000) / 1000; return String(r); };
+  let sel = null; // {id, stock, peso, unidad}
+
+  function fmtQty(v, peso, unidad){
+    if (peso){
+      let s = fmtNum(v);
+      return s + ' (' + unidad + ')';
+    }
+    return String(Math.round(v));
+  }
+  function paso(){ return sel && sel.peso ? 0.5 : 1; }
+
+  function seleccionar(btn){
+    opts.forEach(o => o.classList.remove('active'));
+    btn.classList.add('active');
+    sel = {
+      id: btn.dataset.id,
+      stock: parseFloat(btn.dataset.stock) || 0,
+      peso: btn.dataset.peso === '1',
+      unidad: btn.dataset.unidad || ''
+    };
+    $('productoId').value = sel.id;
+    const ini = (btn.dataset.nombre || '?').trim().slice(0, 2).toUpperCase();
+    $('selIni').textContent = ini;
+    const nombre = btn.querySelector('.fw-bold').textContent;
+    $('selNombre').textContent = nombre;
+    $('selSub').textContent = btn.querySelector('small').textContent;
+    $('selStock').textContent = fmtQty(sel.stock, sel.peso, sel.unidad);
+    $('lblUnidad').textContent = sel.peso ? '(en ' + sel.unidad + ', admite decimales)' : '(unidades enteras)';
+    $('ayudaPaso').textContent = sel.peso ? 'Paso: 0.5 ' + sel.unidad + '. Puedes escribir hasta 3 decimales.' : 'Paso: 1 unidad. Solo enteros.';
+    document.querySelectorAll('.chip-peso').forEach(c => c.style.display = sel.peso ? '' : 'none');
+    $('nuevoStock').value = sel.peso ? fmtNum(sel.stock) : Math.round(sel.stock);
+    actualizar();
+    $('nuevoStock').focus();
+    $('nuevoStock').select();
+  }
+
+  function leerNuevo(){
+    let v = parseFloat(String($('nuevoStock').value).replace(',', '.'));
+    if (isNaN(v) || v < 0) v = 0;
+    v = Math.round(v * 1000) / 1000;
+    if (sel && !sel.peso) v = Math.max(0, Math.round(v));
+    return v;
+  }
+
+  function actualizar(){
+    if (!sel){
+      $('difBadge').textContent = '–';
+      $('difBadge').className = 'fs-3 fw-bold text-muted';
+      $('resPreview').textContent = '–';
+      $('btnGuardar').disabled = true;
+      $('btnGuardarTxt').textContent = 'Elige un producto para ajustar';
+      return;
+    }
+    const nuevo = leerNuevo();
+    const diff = Math.round((nuevo - sel.stock) * 1000) / 1000;
+    const badge = $('difBadge');
+    if (diff > 0){ badge.textContent = '+' + fmtQty(diff, sel.peso, sel.unidad); badge.className = 'fs-3 fw-bold text-success'; }
+    else if (diff < 0){ badge.textContent = '−' + fmtQty(Math.abs(diff), sel.peso, sel.unidad); badge.className = 'fs-3 fw-bold text-danger'; }
+    else { badge.textContent = 'Sin cambios'; badge.className = 'fs-3 fw-bold text-muted'; }
+    $('resPreview').textContent = fmtQty(nuevo, sel.peso, sel.unidad);
+    $('lblOld').textContent = 'Actual: ' + fmtQty(sel.stock, sel.peso, sel.unidad);
+    $('lblNew').textContent = 'Nuevo: ' + fmtQty(nuevo, sel.peso, sel.unidad);
+    const max = Math.max(sel.stock, nuevo, 1);
+    $('barOld').style.width = (sel.stock / max * 100) + '%';
+    $('barNew').style.width = (nuevo / max * 100) + '%';
+    const ok = diff !== 0;
+    $('btnGuardar').disabled = !ok;
+    $('btnGuardarTxt').textContent = ok
+      ? ('Guardar ajuste (' + (diff > 0 ? '+' : '−') + fmtQty(Math.abs(diff), sel.peso, sel.unidad) + ')')
+      : 'Sin cambios que guardar';
+  }
+
+  opts.forEach(o => o.addEventListener('click', () => seleccionar(o)));
+
+  $('buscarProducto').addEventListener('input', function(){
+    const t = this.value.toLowerCase().trim();
+    let n = 0;
+    opts.forEach(o => {
+      const ok = !t || o.dataset.codigo.includes(t) || o.dataset.nombre.includes(t);
+      o.style.display = ok ? '' : 'none';
+      if (ok) n++;
+    });
+    $('conteoProd').textContent = n;
+  });
+
+  $('btnMas').addEventListener('click', () => {
+    if (!sel) return;
+    $('nuevoStock').value = fmtNum(leerNuevo() + paso());
+    actualizar();
+  });
+  $('btnMenos').addEventListener('click', () => {
+    if (!sel) return;
+    $('nuevoStock').value = fmtNum(Math.max(0, leerNuevo() - paso()));
+    actualizar();
+  });
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    if (!sel) return;
+    $('nuevoStock').value = fmtNum(Math.max(0, leerNuevo() + parseFloat(c.dataset.d)));
+    actualizar();
+  }));
+  $('nuevoStock').addEventListener('input', actualizar);
+
+  $('ajusteForm').addEventListener('submit', function(e){
+    if (!sel){ e.preventDefault(); return; }
+    const nuevo = leerNuevo();
+    if (nuevo === sel.stock){ e.preventDefault(); return; }
+    const diff = Math.round((nuevo - sel.stock) * 1000) / 1000;
+    const signo = diff > 0 ? '+' : '−';
+    if (!confirm('Ajustar ' + $('selNombre').textContent + ' de ' + fmtQty(sel.stock, sel.peso, sel.unidad) + ' a ' + fmtQty(nuevo, sel.peso, sel.unidad) + ' (' + signo + fmtQty(Math.abs(diff), sel.peso, sel.unidad) + ')?')) {
+      e.preventDefault();
+    }
+  });
+
+  // Preselecciona el primero para agilizar
+  if (opts.length) seleccionar(opts[0]);
+})();
+</script>
+{% endblock %}

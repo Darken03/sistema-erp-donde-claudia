@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+instance/
+
+# Bases de datos SQLite
+*.sqlite3
+*.db
+
+# Archivos generados
+*.log

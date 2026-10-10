@@ -1,0 +1,9 @@
+# Phusion Passenger configuration
+
+PassengerEnabled on
+PassengerAppRoot /home/USERNAME/public_html
+PassengerAppEnv development
+PassengerPython /home/USERNAME/venv/bin/python
+
+# IMPORTANTE: Reemplaza USERNAME con tu nombre de usuario de cPanel
+# El path al Python debe apuntar al venv del proyecto

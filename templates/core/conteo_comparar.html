@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Comparación Conteo #{{ conteo.pk }} - BizMaster{% endblock %}
+{% block topbar_text %}Comparación #{{ conteo.pk }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Comparación · Conteo #{{ conteo.pk }}</h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'core:conteo_lista' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Conteos
+        </a>
+        <a href="{% url 'core:ajuste_inventario' %}" class="btn btn-outline-primary">
+            <i class="bi bi-sliders me-1"></i> Ir a Ajustes
+        </a>
+    </div>
+</div>
+
+{% if conteo.estado != 'cerrado' %}
+<div class="alert alert-warning">Este conteo sigue abierto: son valores parciales del sistema en este momento.</div>
+{% else %}
+<div class="alert alert-success">
+    <i class="bi bi-check-circle me-1"></i>
+    Conteo cerrado el {{ conteo.fecha_cierre|date:"d/m/Y H:i" }} · <strong>{{ conteo.num_diferencias }} producto(s) con diferencia</strong>.
+    Usa <strong>Ajustes</strong> para llevar el sistema a lo contado donde corresponda.
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Producto</th>
+                        <th class="text-center">Sistema</th>
+                        <th class="text-center">Contado</th>
+                        <th class="text-center">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in lineas %}
+                    <tr {% if l.diferencia and l.diferencia != 0 %}class="table-danger"{% endif %}>
+                        <td>
+                            <strong>{{ l.producto.codigo }}</strong> · {{ l.producto.nombre }}
+                            <small class="text-muted d-block">{{ l.producto.unidad_medida }}</small>
+                        </td>
+                        <td class="text-center mono">{% if l.stock_sistema != None %}{{ l.stock_sistema }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                        <td class="text-center mono fw-bold">{{ l.cantidad }}</td>
+                        <td class="text-center">
+                            {% if l.diferencia == None %}
+                            <span class="text-muted">—</span>
+                            {% elif l.diferencia == 0 %}
+                            <span class="badge bg-success">0 · cuadra</span>
+                            {% else %}
+                            <span class="badge {% if l.diferencia > 0 %}bg-warning{% else %}bg-danger{% endif %}">
+                                {% if l.diferencia > 0 %}+{% endif %}{{ l.diferencia }}
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-muted py-4">Sin líneas en este conteo</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

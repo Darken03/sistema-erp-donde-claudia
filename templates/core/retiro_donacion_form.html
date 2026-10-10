@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+
+{% block title %}Nueva Donación - BizMaster{% endblock %}
+{% block topbar_text %}Nueva Donación{% endblock %}
+
+{% block extra_css %}
+<style>
+    .producto-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all 0.2s;
+    }
+    .producto-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .producto-card .producto-info {
+        flex: 1;
+    }
+    .producto-card .producto-nombre {
+        font-weight: 600;
+        color: #333;
+    }
+    .producto-card .producto-stock {
+        font-size: 0.8rem;
+        color: #666;
+    }
+    .producto-card .cantidad-box {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 1rem;
+    }
+    .producto-card .cantidad-box button {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 50%;
+    }
+    .producto-card .cantidad-box input {
+        width: 60px;
+        text-align: center;
+    }
+    .producto-seleccionado {
+        border: 2px solid #4e73df;
+        background: #f8f9fc;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #999;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block layout %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-5 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>Seleccionar Productos</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="p-3 border-bottom">
+                        <input type="text" id="searchProducto" class="form-control" placeholder="Buscar producto...">
+                    </div>
+                    <div class="productos-grid" style="max-height: 400px; overflow-y: auto;" id="productosGrid">
+                        {% for p in productos %}
+                        <div class="producto-item p-3 border-bottom" data-id="{{ p.pk }}" data-stock="{{ p.stock }}" data-nombre="{{ p.nombre|escapejs }}" data-codigo="{{ p.codigo }}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold">{{ p.nombre }}</div>
+                                    <small class="text-muted">{{ p.codigo }} | Stock: {{ p.stock_fmt }}</small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarProducto({{ p.pk }})">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-center text-muted p-4">No hay productos disponibles</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-gift me-2"></i>Registrar Donación</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="donacionForm">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Beneficiario</label>
+                                <input type="text" name="beneficiario_nombre" class="form-control" placeholder="Nombre del trabajador" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Motivo (opcional)</label>
+                                <input type="text" name="motivo" class="form-control" placeholder="Ej: Incentivo por buen trabajo">
+                            </div>
+                        </div>
+
+                        <label class="form-label">Productos a Donar</label>
+                        <div id="productosSeleccionados" class="mb-3">
+                            <div class="empty-state">
+                                <i class="bi bi-cart"></i>
+                                <div>Seleccione productos de la lista</div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="productos_data" id="productosData" value="">
+
+                        <div class="d-flex gap-2">
+                            <a href="{% url 'core:retiro_donacion_lista' %}" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary" id="btnRegistrar" disabled>
+                                <i class="bi bi-check-circle me-1"></i> Registrar Donación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let productosDonar = [];
+
+document.getElementById('searchProducto').addEventListener('input', function() {
+    const query = this.value.toLowerCase();
+    document.querySelectorAll('.producto-item').forEach(function(el) {
+        const nombre = el.dataset.nombre.toLowerCase();
+        const codigo = el.dataset.codigo.toLowerCase();
+        el.style.display = (nombre.includes(query) || codigo.includes(query)) ? 'block' : 'none';
+    });
+});
+
+function agregarProducto(productoId) {
+    const item = document.querySelector('.producto-item[data-id="' + productoId + '"]');
+    if (!item) return;
+    
+    const nombre = item.dataset.nombre;
+    const stock = parseInt(item.dataset.stock);
+    
+    const existente = productosDonar.find(p => p.producto_id == productoId);
+    if (existente) {
+        if (existente.cantidad < stock) {
+            existente.cantidad++;
+        } else {
+            alert('Stock máximo alcanzado');
+        }
+    } else {
+        productosDonar.push({
+            producto_id: productoId,
+            nombre: nombre,
+            stock: stock,
+            cantidad: 1
+        });
+    }
+    
+    renderProductos();
+}
+
+function cambiarCantidad(productoId, cambio) {
+    const producto = productosDonar.find(p => p.producto_id == productoId);
+    if (!producto) return;
+    
+    const nuevaCantidad = producto.cantidad + cambio;
+    if (nuevaCantidad > 0 && nuevaCantidad <= producto.stock) {
+        producto.cantidad = nuevaCantidad;
+        renderProductos();
+    }
+}
+
+function eliminarProducto(productoId) {
+    productosDonar = productosDonar.filter(p => p.producto_id != productoId);
+    renderProductos();
+}
+
+function renderProductos() {
+    const container = document.getElementById('productosSeleccionados');
+    const dataInput = document.getElementById('productosData');
+    const btnRegistrar = document.getElementById('btnRegistrar');
+    
+    if (productosDonar.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="bi bi-cart"></i><div>Seleccione productos de la lista</div></div>';
+        btnRegistrar.disabled = true;
+        dataInput.value = '';
+        return;
+    }
+    
+    btnRegistrar.disabled = false;
+    
+    let html = '';
+    productosDonar.forEach(function(p) {
+        html += '<div class="producto-card">';
+        html += '<div class="producto-info">';
+        html += '<div class="producto-nombre">' + p.nombre + '</div>';
+        html += '<div class="producto-stock">Stock: ' + p.stock + '</div>';
+        html += '</div>';
+        html += '<div class="cantidad-box">';
+        html += '<button type="button" class="btn btn-outline-secondary" onclick="cambiarCantidad(' + p.producto_id + ', -1)">';
+        html += '<i class="bi bi-dash"></i></button>';
+        html += '<input type="text" class="form-control" value="' + p.cantidad + '" readonly>';
+        html += '<button type="button" class="btn btn-outline-secondary" onclick="cambiarCantidad(' + p.producto_id + ', 1)">';
+        html += '<i class="bi bi-plus"></i></button>';
+        html += '</div>';
+        html += '<button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(' + p.producto_id + ')">';
+        html += '<i class="bi bi-trash"></i></button>';
+        html += '</div>';
+    });
+    
+    container.innerHTML = html;
+    dataInput.value = JSON.stringify(productosDonar);
+}
+</script>
+{% endblock %}

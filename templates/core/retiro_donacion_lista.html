@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}Retiros por Donación - BizMaster{% endblock %}
+{% block topbar_text %}Retiros por Donación{% endblock %}
+
+{% block layout %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Dashboard
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'core:retiro_donacion_crear' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i> Nueva Donación
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-gift me-2"></i>Retiros por Donación</h5>
+                <form method="get" class="d-flex gap-2 flex-wrap">
+                    <input type="search" name="q" class="form-control form-control-sm" style="min-width:180px;"
+                           placeholder="Producto o beneficiario…" value="{{ q|default:'' }}" autocomplete="off">
+                    <input type="date" name="fecha" class="form-control form-control-sm" value="{{ fecha }}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Filtrar">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    {% if q %}
+                    <a href="?fecha={{ fecha }}" class="btn btn-sm btn-outline-secondary" title="Limpiar búsqueda">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-1">Total Retiros</h6>
+                            <h4 class="mb-0">{{ resumen_cantidad }}</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-1">Valor Total</h6>
+                            <h4 class="mb-0 text-success">${{ resumen_total|floatformat:2 }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>No. Retiro</th>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Beneficiario</th>
+                            <th>Motivo</th>
+                            <th>Registrado por</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in retiros %}
+                        <tr>
+                            <td><span class="badge bg-info">{{ r.numero_retiro }}</span></td>
+                            <td>{{ r.fecha_retiro|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <div>{{ r.producto.nombre }}</div>
+                                <small class="text-muted">{{ r.producto.codigo }}</small>
+                            </td>
+                            <td>{{ r.cantidad }}</td>
+                            <td>{{ r.beneficiario.get_full_name|default:r.beneficiario.username }}</td>
+                            <td><small>{{ r.motivo|default:"-" }}</small></td>
+                            <td>{{ r.registrado_por.get_full_name|default:r.registrado_por.username }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#detalleDonacion{{ r.pk }}" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <a href="{% url 'core:retiro_donacion_eliminar' r.pk %}" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        
+                        <!-- Modal Detalle Donacion -->
+                        <div class="modal fade" id="detalleDonacion{{ r.pk }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title"><i class="bi bi-gift me-2"></i>Detalle de Donación</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row">
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">No. Retiro</label>
+                                                <p class="mb-0 fw-bold">{{ r.numero_retiro }}</p>
+                                            </div>
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">Fecha</label>
+                                                <p class="mb-0">{{ r.fecha_retiro|date:"d/m/Y H:i" }}</p>
+                                            </div>
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">Producto</label>
+                                                <p class="mb-0">{{ r.producto.nombre }}</p>
+                                                <small class="text-muted">{{ r.producto.codigo }}</small>
+                                            </div>
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">Cantidad</label>
+                                                <p class="mb-0">{{ r.cantidad }}</p>
+                                            </div>
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">Beneficiario</label>
+                                                <p class="mb-0">{{ r.beneficiario.get_full_name|default:r.beneficiario.username }}</p>
+                                            </div>
+                                            <div class="col-6 mb-2">
+                                                <label class="text-muted small">Registrado por</label>
+                                                <p class="mb-0">{{ r.registrado_por.get_full_name|default:r.registrado_por.username }}</p>
+                                            </div>
+                                            <div class="col-12 mb-2">
+                                                <label class="text-muted small">Motivo</label>
+                                                <p class="mb-0">{{ r.motivo|default:"-" }}</p>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="text-muted small">Valor</label>
+                                                <p class="mb-0 fw-bold text-success">${{ r.valor|floatformat:2 }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox" style="font-size:2rem;"></i>
+                                <p class="mt-2">No hay retiros por donación en esta fecha</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

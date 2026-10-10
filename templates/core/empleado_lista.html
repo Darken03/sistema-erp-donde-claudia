@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Empleados - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people me-2"></i>Empleados</h2>
+    <a href="{% url 'core:empleado_crear' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Nuevo Empleado
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Usuario</th>
+                        <th>Salario</th>
+                        <th>Estado</th>
+                        <th>Turno</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for empleado in empleados %}
+                    <tr>
+                        <td>{{ empleado.user.get_full_name|default:empleado.user.username }}</td>
+                        <td>{{ empleado.user.username }}</td>
+                        <td>${{ empleado.salario|floatformat:2 }}</td>
+                        <td>
+                            {% if empleado.activo %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if empleado.en_turno %}
+                                <span class="badge bg-primary">En turno</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Fuera de turno</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                {% if empleado.en_turno %}
+                                    <a href="{% url 'core:revisar_turno' empleado.turno_abierto.pk %}" class="btn btn-outline-warning btn-sm" title="Revisar arqueo y conteo para cerrar">
+                                        <i class="bi bi-pause-circle"></i>
+                                    </a>
+                                {% else %}
+                                    <form method="post" action="{% url 'core:turno_abrir' empleado.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-success btn-sm" title="Abrir Turno">
+                                            <i class="bi bi-play-circle"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                <a href="{% url 'core:empleado_turnos' empleado.pk %}" class="btn btn-outline-info btn-sm" title="Ver Turnos">
+                                    <i class="bi bi-clock-history"></i>
+                                </a>
+                                <a href="{% url 'core:empleado_editar' empleado.pk %}" class="btn btn-outline-primary btn-sm" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'core:empleado_eliminar' empleado.pk %}" class="btn btn-outline-danger btn-sm" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">No se encontraron empleados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

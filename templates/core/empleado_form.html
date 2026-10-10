@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-person-gear me-2"></i>{{ titulo }}</h2>
+    <a href="{% url 'core:empleado_lista' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+
+            <!-- Sección: cuenta de acceso -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="section-icon"><i class="bi bi-person-lock"></i></span>
+                <div>
+                    <div class="section-title">Cuenta de acceso</div>
+                    <div class="section-sub">Usuario y contraseña para ingresar al sistema</div>
+                </div>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.username.id_for_label }}">Usuario *</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        {{ form.username }}
+                    </div>
+                    {% if form.username.errors %}
+                        <div class="text-danger small mt-1">{{ form.username.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.password.id_for_label }}">{% if empleado %}Nueva contraseña{% else %}Contraseña *{% endif %}</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-key"></i></span>
+                        {{ form.password }}
+                        <button class="btn btn-outline-secondary" type="button" id="togglePass" title="Mostrar / ocultar">
+                            <i class="bi bi-eye" id="togglePassIcon"></i>
+                        </button>
+                    </div>
+                    {% if empleado %}<div class="form-text">{{ form.password.help_text }}</div>{% endif %}
+                    {% if form.password.errors %}
+                        <div class="text-danger small mt-1">{{ form.password.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <!-- Sección: datos del empleado -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="section-icon"><i class="bi bi-person-badge"></i></span>
+                <div>
+                    <div class="section-title">Datos del empleado</div>
+                    <div class="section-sub">Información personal y laboral</div>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.first_name.id_for_label }}">Nombre</label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}
+                        <div class="text-danger small mt-1">{{ form.first_name.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.last_name.id_for_label }}">Apellido</label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}
+                        <div class="text-danger small mt-1">{{ form.last_name.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.salario.id_for_label }}">Salario</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        {{ form.salario }}
+                    </div>
+                    {% if form.salario.errors %}
+                        <div class="text-danger small mt-1">{{ form.salario.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Estado</label>
+                    <div class="form-switch-box">
+                        <div class="form-check form-switch m-0">
+                            {{ form.activo }}
+                            <label class="form-check-label" for="{{ form.activo.id_for_label }}">Empleado activo</label>
+                        </div>
+                        <small class="text-muted">Si se desactiva, no podrá ingresar al sistema.</small>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{% url 'core:empleado_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-check-lg me-1"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.section-icon {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    background: var(--accent-tint); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+}
+.section-title { font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+.section-sub { font-size: 12px; color: var(--ink-3); }
+.form-divider { border-color: var(--line); opacity: 1; margin: 1.25rem 0; }
+.input-group-text {
+    background: var(--soft); border: 1px solid var(--line);
+    color: var(--ink-3); font-size: 14px;
+}
+.input-group .form-control { border-left: 0; }
+.input-group .input-group-text + .form-control { border-left: 0; }
+.input-group .form-control:focus { border-color: var(--accent); }
+.form-switch-box {
+    min-height: 38px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px; background: var(--surface);
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.form-switch-box .form-check-label { font-size: 13px; font-weight: 500; color: var(--ink); }
+/* Evita el fondo celeste del autocompletado del navegador */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    -webkit-text-fill-color: var(--ink) !important;
+    transition: background-color 9999s ease-in-out 0s;
+}
+html[data-theme="dark"] input:-webkit-autofill,
+html[data-theme="dark"] input:-webkit-autofill:hover,
+html[data-theme="dark"] input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #23232f inset !important;
+    -webkit-text-fill-color: #f1f1f6 !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('togglePass');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var input = document.getElementById('{{ form.password.id_for_label }}');
+        var icon = document.getElementById('togglePassIcon');
+        if (!input) return;
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('bi-eye');
+            icon.classList.add('bi-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('bi-eye-slash');
+            icon.classList.add('bi-eye');
+        }
+    });
+});
+</script>
+{% endblock %}

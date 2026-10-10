@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+
+{% block title %}Movimientos - {{ producto.nombre }} - BizMaster{% endblock %}
+{% block topbar_text %}Movimientos de {{ producto.nombre }}{% endblock %}
+
+{% block layout %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="{% url 'core:submayor_lista' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Volver
+            </a>
+        </div>
+        <h4 class="mb-0"><i class="bi bi-journal-text me-2"></i>Submayor - {{ producto.nombre }}</h4>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Código</h6>
+                    <p class="mb-0 fw-bold">{{ producto.codigo }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Categoría</h6>
+                    <p class="mb-0">{{ producto.categoria.nombre|default:"-" }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Stock Actual</h6>
+                    <p class="mb-0 fw-bold {% if producto.stock > 10 %}text-success{% elif producto.stock > 0 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ producto.stock_fmt }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Precio Venta</h6>
+                    <p class="mb-0 fw-bold text-success">${{ producto.precio_venta|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <form method="get" class="d-flex gap-2 align-items-center">
+                <label class="mb-0">Desde:</label>
+                <input type="date" name="fecha_inicio" class="form-control form-control-sm" value="{{ fecha_inicio }}">
+                <label class="mb-0">Hasta:</label>
+                <input type="date" name="fecha_fin" class="form-control form-control-sm" value="{{ fecha_fin }}">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+            </form>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Cantidad</th>
+                            <th>Stock Anterior</th>
+                            <th>Stock Nuevo</th>
+                            <th>Descripción</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in movimientos %}
+                        <tr>
+                            <td>{{ m.fecha|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                {% if m.tipo == 'entrada' %}
+                                    <span class="badge bg-success">Entrada</span>
+                                {% elif m.tipo == 'venta' %}
+                                    <span class="badge bg-primary">Venta</span>
+                                {% elif m.tipo == 'donacion' %}
+                                    <span class="badge bg-warning">Donación</span>
+                                {% elif m.tipo == 'devolucion' %}
+                                    <span class="badge bg-info">Devolución</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Ajuste</span>
+                                {% endif %}
+                            </td>
+                            <td class="{% if m.cantidad > 0 %}text-success fw-bold{% else %}text-danger fw-bold{% endif %}">
+                                {% if m.cantidad > 0 %}+{% endif %}{{ m.cantidad_fmt }}
+                            </td>
+                            <td>{{ m.stock_anterior_fmt }}</td>
+                            <td>{{ m.stock_nuevo_fmt }}</td>
+                            <td><small>{{ m.descripcion|default:"-" }}</small></td>
+                            <td>{{ m.usuario.get_full_name|default:m.usuario.username|default:"Sistema" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox" style="font-size:2rem;"></i>
+                                <p class="mt-2">No hay movimientos en el período seleccionado</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

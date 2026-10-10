@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Ventas - {{ fecha|date:"d/m/Y" }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm 1cm 1.5cm 1cm;
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                bottom: 0.6cm; left: 1cm; right: 1cm; height: 1cm;
+            }
+        }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #1f1f2c; line-height: 1.35; margin: 0; padding: 0; }
+        .brand-box { background-color: #6f53d9; color: #ffffff; font-size: 22pt; font-weight: bold; text-align: center; width: 54px; height: 54px; }
+        .brand-name { font-size: 17pt; font-weight: bold; color: #1f1f2c; }
+        .brand-sub { font-size: 8pt; color: #8d8da0; letter-spacing: 1px; }
+        .report-title { font-size: 11pt; font-weight: bold; color: #6f53d9; }
+        .date-big { font-size: 19pt; font-weight: bold; color: #6f53d9; text-align: right; }
+        .printed { font-size: 7.5pt; color: #8d8da0; text-align: right; }
+        .bar { background-color: #6f53d9; color: #ffffff; font-size: 8.5pt; font-weight: bold; }
+        .kpi { border: 1px solid #e6e6ec; text-align: center; }
+        .kpi-label { font-size: 7.5pt; color: #8d8da0; font-weight: bold; }
+        .kpi-value { font-size: 14pt; font-weight: bold; color: #1f1f2c; }
+        .kpi-sub { font-size: 7.5pt; color: #8d8da0; }
+        .sec-title { font-size: 11pt; font-weight: bold; color: #1f1f2c; border-bottom: 2px solid #6f53d9; padding-bottom: 3px; }
+        .grid { border: 1px solid #e6e6ec; }
+        .grid th { background-color: #6f53d9; color: #ffffff; font-size: 7.5pt; font-weight: bold; padding: 6px 4px; text-align: left; }
+        .grid th.c { text-align: center; }
+        .grid th.r { text-align: right; }
+        .grid td { padding: 5px 4px; font-size: 8pt; border-bottom: 1px solid #f0f0f5; }
+        .grid td.c { text-align: center; }
+        .grid td.r { text-align: right; }
+        .row-alt td { background-color: #f7f5ff; }
+        .sale-head td { background-color: #f5f3fd; font-weight: bold; font-size: 8.5pt; border-top: 1px solid #ece9fb; border-bottom: 1px solid #ece9fb; }
+        .mono { font-family: Helvetica, Arial, sans-serif; }
+        .sku { font-size: 7.5pt; font-family: Courier, monospace; color: #54546a; }
+        .b { font-weight: bold; }
+        .green { color: #1e7a44; }
+        .red { color: #a83232; }
+        .muted { color: #8d8da0; }
+        .note { font-size: 7pt; color: #8d8da0; }
+        .pill { font-size: 7pt; font-weight: bold; padding: 2px 6px; }
+        .pill-green { background-color: #eaf7ef; color: #1e7a44; }
+        .pill-blue { background-color: #e0f2fe; color: #0369a1; }
+        .pill-amber { background-color: #fef3c7; color: #92400e; }
+        .totals td { padding: 5px 8px; font-size: 8.5pt; border-bottom: 1px solid #f0f0f5; }
+        .totals-label { color: #54546a; }
+        .totals-val { text-align: right; font-weight: bold; }
+        .grand { background-color: #f5f3fd; border: 1px solid #ece9fb; }
+        .grand td { padding: 8px; font-size: 10pt; font-weight: bold; }
+        #footerContent { font-size: 7pt; color: #8d8da0; text-align: center; border-top: 1px solid #e6e6ec; padding-top: 4px; }
+    </style>
+</head>
+<body>
+
+    <!-- ===== CABECERA ===== -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="58" valign="middle">
+                <table cellpadding="0" cellspacing="0"><tr><td class="brand-box">B</td></tr></table>
+            </td>
+            <td valign="middle">
+                <div class="brand-name">BizMaster ERP</div>
+                <div class="brand-sub">SISTEMA DE GESTION EMPRESARIAL</div>
+                <div class="report-title">Reporte de Ventas {% if periodo == 'mes' %}del Mes{% elif periodo == 'ano' %}del Año{% else %}del Día{% endif %}{% if empleado_filtro %} · {{ empleado_filtro }}{% endif %}</div>
+            </td>
+            <td width="220" valign="middle">
+                <div class="date-big">{{ fecha|date:"d/m/Y" }}</div>
+                <div class="printed">Impreso: {{ ahora|date:"d/m/Y H:i" }}</div>
+                <div class="printed">{{ total_ventas }} venta(s) · {{ total_items }} producto(s)</div>
+            </td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <table width="100%" cellpadding="6" cellspacing="0">
+        <tr>
+            <td class="bar" width="60%">REPORTE DE VENTAS &nbsp;·&nbsp; {% if periodo == 'mes' %}{{ fecha|date:"F Y" }}{% elif periodo == 'ano' %}Año {{ fecha|date:"Y" }}{% else %}{{ fecha|date:"l, d F Y" }}{% endif %}</td>
+            <td class="bar" align="right">Total: ${{ monto_total|floatformat:2 }} &nbsp;·&nbsp; Ganancia: ${{ ganancia_total|floatformat:2 }}</td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <!-- ===== KPIs ===== -->
+    <table width="100%" cellpadding="8" cellspacing="6">
+        <tr>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">VENTAS</div>
+                <div class="kpi-value">{{ total_ventas }}</div>
+                <div class="kpi-sub">transacciones</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">INGRESOS</div>
+                <div class="kpi-value green">${{ monto_total|floatformat:2 }}</div>
+                <div class="kpi-sub">efectivo ${{ total_efectivo|floatformat:2 }} · transf. ${{ total_transferencia|floatformat:2 }}</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">GANANCIA</div>
+                <div class="kpi-value green">${{ ganancia_total|floatformat:2 }}</div>
+                <div class="kpi-sub">ingresos menos costo</div>
+            </td>
+            <td class="kpi" width="25%">
+                <div class="kpi-label">TICKET PROMEDIO</div>
+                <div class="kpi-value">${{ ticket_promedio|floatformat:2 }}</div>
+                <div class="kpi-sub">{{ total_items }} producto(s) vendidos</div>
+            </td>
+        </tr>
+    </table>
+
+    <br/>
+
+    <!-- ===== RESUMEN POR VENTA ===== -->
+    <div class="sec-title">Resumen por venta</div>
+    <br/>
+    <table class="grid" width="100%" cellpadding="0" cellspacing="0" repeat="1">
+        <thead>
+            <tr>
+                <th width="12%">NO. VENTA</th>
+                <th width="9%" class="c">HORA</th>
+                <th width="20%">CAJERO</th>
+                <th width="10%" class="c">METODO</th>
+                <th width="7%" class="c">ITEMS</th>
+                <th width="12%" class="r">TOTAL</th>
+                <th width="12%" class="r">GANANCIA</th>
+                <th width="18%">COBRO</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in ventas %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}row-alt{% endif %}">
+                <td class="b">{{ v.numero_venta }}</td>
+                <td class="c">{{ v.fecha_venta|date:"H:i" }}</td>
+                <td>{{ v.cajero.get_full_name|default:v.cajero.username|default:"-"|truncatechars:22 }}</td>
+                <td class="c">
+                    {% if v.metodo_pago == 'efectivo' %}<font class="pill pill-green">EFECTIVO</font>
+                    {% elif v.metodo_pago == 'transferencia' %}<font class="pill pill-blue">TRANSF.</font>
+                    {% else %}<font class="pill pill-amber">MIXTO</font>{% endif %}
+                </td>
+                <td class="c">{{ v.num_items }}</td>
+                <td class="r b">${{ v.total|floatformat:2 }}</td>
+                <td class="r">
+                    {% if v.ganancia > 0 %}<font color="#1e7a44">+${{ v.ganancia|floatformat:2 }}</font>
+                    {% elif v.ganancia < 0 %}<font color="#a83232">${{ v.ganancia|floatformat:2 }}</font>
+                    {% else %}<font color="#8d8da0">$0.00</font>{% endif %}
+                </td>
+                <td><font color="#54546a">Ef. ${{ v.monto_recibido|floatformat:2 }} / Tr. ${{ v.monto_transferencia|floatformat:2 }}</font></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" align="center"><font color="#8d8da0">No hay ventas en este periodo</font></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br/><br/>
+
+    <!-- ===== DETALLE: PRODUCTOS DE CADA VENTA ===== -->
+    <div class="sec-title">Detalle de productos por venta</div>
+    <br/>
+    <table class="grid" width="100%" cellpadding="0" cellspacing="0" repeat="1">
+        <thead>
+            <tr>
+                <th width="14%">CODIGO</th>
+                <th width="42%">PRODUCTO</th>
+                <th width="10%" class="c">CANT.</th>
+                <th width="17%" class="r">PRECIO</th>
+                <th width="17%" class="r">SUBTOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in ventas %}
+            <tr class="sale-head">
+                <td colspan="3">{{ v.numero_venta }} · {{ v.fecha_venta|date:"H:i" }} · {{ v.cajero.get_full_name|default:v.cajero.username|default:"-"|truncatechars:20 }}</td>
+                <td class="r">Total: ${{ v.total|floatformat:2 }}</td>
+                <td class="r">{{ v.num_items }} ítem(s)</td>
+            </tr>
+            {% for d in v.items_list %}
+            <tr>
+                <td class="sku">{{ d.producto.codigo }}</td>
+                <td><b>{{ d.producto.nombre|truncatechars:40 }}</b></td>
+                <td class="c">{{ d.cantidad }}</td>
+                <td class="r">${{ d.precio_unitario|floatformat:2 }}</td>
+                <td class="r b">${{ d.subtotal|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+            {% empty %}
+            <tr><td colspan="5" align="center"><font color="#8d8da0">No hay ventas en este periodo</font></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br/><br/>
+
+    <!-- ===== RANKING DE PRODUCTOS ===== -->
+    <div class="sec-title">Productos más vendidos</div>
+    <br/>
+    <table class="grid" width="100%" cellpadding="0" cellspacing="0" repeat="1">
+        <thead>
+            <tr>
+                <th width="8%" class="c">#</th>
+                <th width="14%">CODIGO</th>
+                <th width="42%">PRODUCTO</th>
+                <th width="16%" class="c">CANT. VENDIDA</th>
+                <th width="20%" class="r">INGRESO</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in ranking %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}row-alt{% endif %}">
+                <td class="c b">{{ forloop.counter }}</td>
+                <td class="sku">{{ r.producto.codigo }}</td>
+                <td><b>{{ r.producto.nombre|truncatechars:40 }}</b></td>
+                <td class="c">{{ r.cantidad }}</td>
+                <td class="r b">${{ r.ingreso|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" align="center"><font color="#8d8da0">Sin productos vendidos</font></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br/><br/>
+
+    <!-- ===== TOTALES ===== -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="55%" valign="top">
+                <table width="100%" cellpadding="0" cellspacing="0" class="totals">
+                    <tr><td class="totals-label">Número de ventas</td><td class="totals-val">{{ total_ventas }}</td></tr>
+                    <tr><td class="totals-label">Productos vendidos</td><td class="totals-val">{{ total_items }} u.</td></tr>
+                    <tr><td class="totals-label">Ticket promedio</td><td class="totals-val">${{ ticket_promedio|floatformat:2 }}</td></tr>
+                </table>
+            </td>
+            <td width="3%"></td>
+            <td width="42%" valign="top">
+                <table width="100%" cellpadding="0" cellspacing="0" class="totals">
+                    <tr><td class="totals-label">Total efectivo</td><td class="totals-val"><font color="#1e7a44">${{ total_efectivo|floatformat:2 }}</font></td></tr>
+                    <tr><td class="totals-label">Total transferencia</td><td class="totals-val"><font color="#1e7a44">${{ total_transferencia|floatformat:2 }}</font></td></tr>
+                </table>
+                <br/>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr class="grand">
+                        <td width="50%">GANANCIA TOTAL</td>
+                        <td width="50%" align="right">${{ ganancia_total|floatformat:2 }}</td>
+                    </tr>
+                </table>
+                <br/>
+                <span class="note">Ganancia calculada con el costo de compra vigente por producto.</span>
+            </td>
+        </tr>
+    </table>
+
+    <div id="footerContent">
+        BizMaster ERP &nbsp;·&nbsp; Sistema de Gestion Empresarial &nbsp;·&nbsp; Ventas {{ fecha|date:"d/m/Y" }} &nbsp;·&nbsp; Pagina <pdf:pagenumber /> de <pdf:pagecount />
+    </div>
+
+</body>
+</html>

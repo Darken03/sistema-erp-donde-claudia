@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} - BizMaster{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-person-badge me-2"></i>{{ titulo }}</h2>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nombre *</label>
+                    <input type="text" name="nombre" class="form-control" required value="{{ deudor.nombre|default:'' }}" placeholder="Ej: Jose">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Apellido</label>
+                    <input type="text" name="apellido" class="form-control" value="{{ deudor.apellido|default:'' }}" placeholder="Ej: Manuel">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">CI *</label>
+                    <input type="text" name="ci" class="form-control mono" required value="{{ deudor.ci|default:'' }}" placeholder="Cédula de identidad">
+                    <div class="form-text">Identificador único del deudor.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Teléfono</label>
+                    <input type="text" name="telefono" class="form-control" value="{{ deudor.telefono|default:'' }}" placeholder="Opcional">
+                </div>
+            </div>
+            <hr>
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{% if deudor %}{% url 'core:deudor_detalle' deudor.pk %}{% else %}{% url 'core:deuda_lista' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-check-lg me-1"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

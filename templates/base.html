@@ -1,0 +1,188 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#6f53d9">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>{% block title %}BizMaster{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="{% static 'css/styles.css' %}" rel="stylesheet">
+    {# Capa responsive S20/tablet: excluye .pos-shell, tickets e impresión #}
+    <link href="{% static 'css/responsive.css' %}" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{% static 'img/logo-donde-clau.png' %}">
+    <script>
+    /* Tema claro/oscuro global — se aplica antes del primer pintado para evitar flash */
+    (function(){ try {
+      var t = localStorage.getItem('bizm_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch(e){ document.documentElement.setAttribute('data-theme','light'); } })();
+    </script>
+    {% block extra_css %}{% endblock %}
+</head>
+<body {% block body_attrs %}{% endblock %}>
+    {% block layout %}
+    <div class="d-flex">
+        {% block sidebar %}
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau" class="sidebar-store-logo">
+                <div><div class="sidebar-name">BizMaster</div><div class="sidebar-sub">Donde Clau</div></div>
+            </div>
+            <div class="sidebar-menu">
+                <ul class="nav flex-column">
+                    {% if request.user.perfil.es_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'core:dashboard' %}">
+                            <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item side-group">
+                        <button type="button" class="side-group-btn {% if 'venta' in request.resolver_match.url_name or request.resolver_match.url_name == 'ipb' %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideVentas" aria-expanded="{% if 'venta' in request.resolver_match.url_name or request.resolver_match.url_name == 'ipb' %}true{% else %}false{% endif %}">
+                            <i class="bi bi-receipt me-2"></i> Ventas
+                            <i class="bi bi-chevron-down chev"></i>
+                        </button>
+                        <div class="collapse side-group-collapse {% if 'venta' in request.resolver_match.url_name or request.resolver_match.url_name == 'ipb' %}show{% endif %}" id="sideVentas">
+                            <a class="side-sub-link {% if 'venta' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:venta_lista' %}">Ventas</a>
+                            <a class="side-sub-link {% if request.resolver_match.url_name == 'ipb' %}active{% endif %}" href="{% url 'core:ipb' %}">IPB</a>
+                        </div>
+                    </li>
+                    <li class="nav-item side-group">
+                        <button type="button" class="side-group-btn {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideInventario" aria-expanded="{% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
+                            <i class="bi bi-box-seam me-2"></i> Inventario
+                            <i class="bi bi-chevron-down chev"></i>
+                        </button>
+                        <div class="collapse side-group-collapse {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}show{% endif %}" id="sideInventario">
+                            <a class="side-sub-link {% if 'producto' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:producto_lista' %}">Productos</a>
+                            <a class="side-sub-link {% if 'categoria' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:categoria_lista' %}">Categorías</a>
+                            <a class="side-sub-link {% if 'entrada' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:entrada_lista' %}">Entradas</a>
+                            <a class="side-sub-link {% if 'ajuste' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:ajuste_inventario' %}">Ajustes</a>
+                        </div>
+                    </li>
+                    <li class="nav-item side-group">
+                        <button type="button" class="side-group-btn {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideFinanzas" aria-expanded="{% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
+                            <i class="bi bi-wallet2 me-2"></i> Finanzas
+                            <i class="bi bi-chevron-down chev"></i>
+                        </button>
+                        <div class="collapse side-group-collapse {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}show{% endif %}" id="sideFinanzas">
+                            <a class="side-sub-link {% if 'gasto' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:gasto_lista' %}">Gastos</a>
+                            <a class="side-sub-link {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:deuda_lista' %}">Deudas</a>
+                        </div>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'empleado' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:empleado_lista' %}">
+                            <i class="bi bi-people me-2"></i> Empleados
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'arqueos_admin' or request.resolver_match.url_name == 'revisar_turno' %}active{% endif %}" href="{% url 'core:arqueos_admin' %}">
+                            <i class="bi bi-calculator me-2"></i> Arqueos
+                        </a>
+                    </li>
+                    {% else %}
+                    {# Vendedor: panel propio + POS + conteos #}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'mi_panel' %}active{% endif %}" href="{% url 'core:mi_panel' %}">
+                            <i class="bi bi-house me-2"></i> Inicio
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'pos' %}active{% endif %}" href="{% url 'core:pos' %}">
+                            <i class="bi bi-cart3 me-2"></i> Punto de Venta
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'arqueo' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:arqueo' %}">
+                            <i class="bi bi-calculator me-2"></i> Arqueo
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'conteo' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:conteo_lista' %}">
+                            <i class="bi bi-clipboard-check me-2"></i> Conteos
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <span class="sidebar-avatar">{{ request.user.first_name|default:request.user.username|slice:":1"|upper }}</span>
+                    <div class="flex-grow-1 min-w-0"><div class="sidebar-username">{{ request.user.get_full_name|default:request.user.username }}</div><span class="sidebar-role">{{ request.user.perfil.get_rol_display }}</span></div>
+                </div>
+                <a href="{% url 'core:logout' %}" class="btn btn-logout w-100">
+                    <i class="bi bi-box-arrow-left me-1"></i> Cerrar Sesion
+                </a>
+            </div>
+        </nav>
+        {% endblock %}
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <div class="{% block main_class %}main-content flex-grow-1{% endblock %}">
+            {% block topbar %}
+            <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4">
+                <button class="btn btn-link text-dark" id="sidebarToggle" title="Mostrar / ocultar menú" aria-label="Mostrar / ocultar menú">
+                    <i class="bi bi-layout-sidebar fs-4"></i>
+                </button>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="text-muted me-1 d-none d-md-inline">{% block topbar_text %}Bienvenido al Sistema ERP{% endblock %}</span>
+                    <a class="theme-toggle top-quick" href="{% url 'core:pos' %}" title="Abrir Punto de Venta" aria-label="Abrir Punto de Venta">
+                        <i class="bi bi-cart3"></i>
+                    </a>
+                    <a class="theme-toggle top-quick" href="{% url 'core:mostrador_display' %}" title="Monitor del cliente (TV)" aria-label="Monitor del cliente">
+                        <i class="bi bi-display"></i>
+                    </a>
+                    <span class="top-sep"></span>
+                    <button type="button" class="theme-toggle" id="themeToggle" title="Alternar modo oscuro / claro" aria-label="Alternar modo oscuro">
+                        <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
+                    </button>
+                </div>
+            </nav>
+            {% endblock %}
+
+            <div class="{% block container_class %}container-fluid p-4{% endblock %}">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'js/main.js' %}"></script>
+    {# Mejoras responsive (tablas-card, drawer). Se auto-desactiva en el POS. #}
+    <script src="{% static 'js/responsive.js' %}" defer></script>
+    <script>
+    /* Grupos del menú lateral: abre el que tiene la página activa y recuerda los demás */
+    (function(){
+        try {
+            document.querySelectorAll('.side-group-collapse').forEach(function(el){
+                var key = 'bizm_side_' + el.id;
+                var saved = null;
+                try { saved = sessionStorage.getItem(key); } catch(e){}
+                var hasActive = !!el.querySelector('.side-sub-link.active');
+                var inst = bootstrap.Collapse.getOrCreateInstance(el, {toggle:false});
+                if (hasActive){ inst.show(); }
+                else if (saved === 'open'){ inst.show(); }
+                else if (saved === 'closed'){ inst.hide(); }
+                el.addEventListener('shown.bs.collapse', function(){ try{ sessionStorage.setItem(key,'open'); }catch(e){} });
+                el.addEventListener('hidden.bs.collapse', function(){ try{ sessionStorage.setItem(key,'closed'); }catch(e){} });
+            });
+        } catch(e){}
+    })();
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

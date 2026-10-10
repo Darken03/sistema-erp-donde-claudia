@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}Confirmar Eliminación - BizMaster{% endblock %}
+{% block topbar_text %}Confirmar Eliminación{% endblock %}
+
+{% block layout %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Confirmar Eliminación</h5>
+                </div>
+                <div class="card-body">
+                    <p>¿Estás seguro de que deseas eliminar esta donación?</p>
+                    <div class="alert alert-warning">
+                        <strong>No. Retiro:</strong> {{ retiro.numero_retiro }}<br>
+                        <strong>Producto:</strong> {{ retiro.producto.nombre }}<br>
+                        <strong>Cantidad:</strong> {{ retiro.cantidad }}<br>
+                        <strong>Beneficiario:</strong> {{ retiro.beneficiario.get_full_name|default:retiro.beneficiario.username }}<br>
+                        <strong>Fecha:</strong> {{ retiro.fecha_retiro|date:"d/m/Y H:i" }}
+                    </div>
+                    <p class="text-danger small"><i class="bi bi-info-circle me-1"></i>Se restaurará el stock del producto.</p>
+                </div>
+                <div class="card-footer d-flex gap-2">
+                    <a href="{% url 'core:retiro_donacion_lista' %}" class="btn btn-secondary">Cancelar</a>
+                    <form method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Eliminar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,475 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} - BizMaster{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-cash-coin me-2"></i>{{ titulo }}</h2>
+</div>
+
+<style>
+.deu-search { position:relative; }
+.deu-search .form-control { height:40px; padding-left:38px !important; padding-right:52px !important; }
+.deu-search > i { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--ink-3); pointer-events:none; z-index:2; }
+.deu-search .count-badge { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:var(--accent-tint); color:var(--accent); font-size:11px; font-weight:700; border-radius:99px; padding:2px 9px; font-family:var(--font-mono); }
+.prod-results { border:1px solid var(--line); border-radius:10px; overflow-y:auto; max-height:248px; background:var(--surface); }
+.prod-results:empty { display:none; }
+.prod-opt { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:transparent; border:0; border-bottom:1px solid var(--soft); padding:8px 10px; cursor:pointer; color:var(--ink); }
+.prod-opt:last-child { border-bottom:0; }
+.prod-opt:hover { background:var(--accent-tint); }
+.prod-opt.active { background:var(--accent-tint); box-shadow:inset 3px 0 0 var(--accent); }
+.prod-opt .ini { width:36px; height:36px; border-radius:10px; flex:0 0 36px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; color:var(--accent); background:var(--accent-tint); }
+.prod-opt .nm { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prod-opt .cd { font-size:11px; color:var(--ink-3); font-family:var(--font-mono); }
+.prod-opt .pr { margin-left:auto; text-align:right; flex-shrink:0; }
+.prod-opt .pr b { font-family:var(--font-mono); font-size:13px; color:var(--accent); display:block; }
+.prod-picked { display:flex; align-items:center; gap:10px; background:var(--success-soft); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+.prod-picked .ini { width:38px; height:38px; border-radius:10px; flex:0 0 38px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:var(--success-dark); background:rgba(47,174,94,.18); }
+.prod-picked .nm { font-size:13px; font-weight:700; color:var(--ink); }
+.prod-picked .sb { font-size:11px; color:var(--ink-2); font-family:var(--font-mono); }
+.deu-totalbox { background:var(--accent-tint); border:1px solid var(--accent-soft); border-radius:10px; padding:8px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.deu-totalbox .lbl { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); }
+.deu-totalbox .val { font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--accent); }
+.deu-totalbox .det { display:block; font-size:11px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--ink-2); }
+.qty-step { display:flex; align-items:stretch; gap:0; }
+.qty-step .btn { flex:0 0 38px; border-radius:8px; }
+.qty-step input { text-align:center; font-family:var(--font-mono); font-weight:700; }
+.stock-hint { font-size:11px; color:var(--ink-3); margin-top:4px; font-family:var(--font-mono); }
+.stock-hint.over { color:var(--danger-dark); font-weight:700; }
+</style>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" id="deudaForm">
+            {% csrf_token %}
+            {% if not deuda %}
+            <div class="mb-3">
+                <label class="form-label">Deudor *</label>
+                <select name="deudor" class="form-select" required>
+                    <option value="">Seleccione el deudor...</option>
+                    {% for d in deudores %}
+                    <option value="{{ d.pk }}" {% if preselect == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.nombre_completo }} ({{ d.ci|default:'sin CI' }})</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">¿No existe? <a href="{% url 'core:deudor_crear' %}">Regístrelo aquí primero</a>.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Tipo de Deuda *</label>
+                <div class="d-flex gap-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="tipo" id="tipoDinero" value="dinero" checked>
+                        <label class="form-check-label" for="tipoDinero"><i class="bi bi-cash me-1"></i>Dinero</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="tipo" id="tipoProducto" value="producto">
+                        <label class="form-check-label" for="tipoProducto"><i class="bi bi-box-seam me-1"></i>Producto</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mb-3" id="bloqueDinero">
+                <div class="col-md-6">
+                    <label class="form-label">Monto *</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="monto" class="form-control text-end" step="0.01" min="0.01" placeholder="0.00">
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mb-3" id="bloqueProducto" style="display:none;">
+                <div class="col-md-5">
+                    <label class="form-label">Producto * <small class="text-muted fw-normal" id="prodCountTxt"></small></label>
+                    <div class="deu-search mb-2">
+                        <i class="bi bi-search"></i>
+                        <input type="text" class="form-control" id="prodSearch" placeholder="Buscar por nombre o código..." autocomplete="off">
+                        <span class="count-badge" id="prodCount">{{ productos|length }}</span>
+                    </div>
+                    <div class="prod-picked mb-2" id="prodPicked" style="display:none;">
+                        <span class="ini" id="pickedIni">–</span>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="nm text-truncate" id="pickedName">–</div>
+                            <div class="sb" id="pickedSub">–</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="pickedChange">Cambiar</button>
+                    </div>
+                    <div class="prod-results" id="prodResults"></div>
+                    <select name="producto" class="form-select" id="productoSelect" style="display:none;">
+                        <option value="">Seleccione el producto...</option>
+                        {% for p in productos %}
+                        <option value="{{ p.pk }}" data-precio="{{ p.precio_venta }}" data-stock="{{ p.stock }}" data-decimal="{% if p.permite_decimal %}1{% else %}0{% endif %}" data-pres='[{% for pr in p.presentaciones.all %}{% if pr.activo %}{"id":"{{ pr.pk }}","n":"{{ pr.nombre|escapejs }}","p":"{{ pr.precio }}","f":"{{ pr.factor }}","d":{% if pr.es_default %}1{% else %}0{% endif %}}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}]'>{{ p.codigo }} - {{ p.nombre }} (${{ p.precio_venta }}, Stock: {{ p.stock_fmt }})</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Se descuenta del stock y se valoriza al precio de la <strong>presentación</strong> (ej. cartón ≠ huevo suelto).</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Presentación *</label>
+                    <select name="presentacion" class="form-select" id="presentacionSelect">
+                        <option value="">Seleccione el producto primero...</option>
+                    </select>
+                    <div class="form-text" id="presHelp"></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Cantidad *</label>
+                    <div class="qty-step">
+                        <button type="button" class="btn btn-outline-secondary" id="cantMenos" title="Restar">−</button>
+                        <input type="number" name="cantidad" class="form-control" id="cantidadInput" min="0" step="0.001" value="1">
+                        <button type="button" class="btn btn-outline-secondary" id="cantMas" title="Sumar">+</button>
+                    </div>
+                    <div class="stock-hint" id="stockHint"></div>
+                </div>
+                <div class="col-12">
+                    <div class="deu-totalbox">
+                        <span class="lbl">Se suma a la deuda <small class="det" id="deudaDetallePrev"></small></span>
+                        <strong class="val" id="totalPreview">$0.00</strong>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <button type="button" class="btn btn-outline-primary w-100" id="btnAgregarLinea">
+                        <i class="bi bi-plus-lg me-1"></i> Agregar producto a la deuda
+                    </button>
+                </div>
+                <div class="col-12" id="lineasWrap" style="display:none;">
+                    <label class="form-label">Productos en esta deuda (<span id="lineasCount">0</span>)</label>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" id="lineasTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Cant.</th>
+                                    <th class="text-end">Subtotal</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="lineasBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="deu-totalbox mt-2">
+                        <span class="lbl">Total de la deuda</span>
+                        <strong class="val" id="granTotal">$0.00</strong>
+                    </div>
+                </div>
+                <input type="hidden" name="productos_data" id="productosData" value="">
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <strong>{{ deuda.numero_deuda }}</strong> · {{ deuda.deudor.nombre_completo }} ·
+                {% if deuda.tipo == 'producto' %}Producto: {{ deuda.producto.nombre }}{% if deuda.presentacion %} ({{ deuda.cantidad }} x {{ deuda.presentacion.nombre }}){% else %} x{{ deuda.cantidad }}{% endif %}{% else %}Dinero{% endif %} ·
+                Monto: ${{ deuda.monto|floatformat:2 }} · Abonado: ${{ deuda.calc_abonado|floatformat:2 }}
+            </div>
+            {% if deuda.tipo == 'dinero' and deuda.calc_abonado <= 0 %}
+            <div class="mb-3">
+                <label class="form-label">Monto *</label>
+                <div class="input-group">
+                    <span class="input-group-text">$</span>
+                    <input type="number" name="monto" class="form-control text-end" step="0.01" min="0.01" value="{{ deuda.monto }}">
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+            <div class="mb-3">
+                <label class="form-label">Motivo {% if deuda %} {% else %}<span class="text-muted">(en producto se genera solo: ej. "2 x Botella de Agua")</span>{% endif %}</label>
+                <input type="text" name="motivo" class="form-control" value="{{ deuda.motivo|default:'' }}" placeholder="Ej: préstamo en efectivo, 2 x Botella de Agua...">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Fecha de Pago (opcional)</label>
+                <input type="date" name="fecha_pago" class="form-control" value="{{ deuda.fecha_pago|date:'Y-m-d'|default:'' }}">
+            </div>
+            <hr>
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{% if deuda %}{% url 'core:deudor_detalle' deuda.deudor.pk %}{% else %}{% url 'core:deuda_lista' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-success px-4">
+                    <i class="bi bi-check-lg me-1"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if not deuda %}
+<script>
+(function(){
+    var rDinero = document.getElementById('tipoDinero');
+    var rProd = document.getElementById('tipoProducto');
+    var bDinero = document.getElementById('bloqueDinero');
+    var bProd = document.getElementById('bloqueProducto');
+    var sel = document.getElementById('productoSelect');
+    var presSel = document.getElementById('presentacionSelect');
+    var cant = document.getElementById('cantidadInput');
+    var prev = document.getElementById('totalPreview');
+    var det = document.getElementById('deudaDetallePrev');
+    var help = document.getElementById('presHelp');
+    function toggle(){
+        var esProd = rProd.checked;
+        bDinero.style.display = esProd ? 'none' : '';
+        bProd.style.display = esProd ? '' : 'none';
+    }
+    function presList(){
+        try {
+            var opt = sel.options[sel.selectedIndex];
+            var raw = opt ? opt.getAttribute('data-pres') : '[]';
+            var arr = JSON.parse(raw || '[]');
+            return arr || [];
+        } catch(e){ return []; }
+    }
+    function fillPres(){
+        var arr = presList();
+        var cur = presSel.value;
+        presSel.innerHTML = '';
+        if (!arr.length){
+            var opt = sel.options[sel.selectedIndex];
+            var precio = opt && opt.getAttribute('data-precio') ? parseFloat(opt.getAttribute('data-precio')) : 0;
+            var o = document.createElement('option');
+            o.value = ''; o.textContent = 'Unidad · $' + precio.toFixed(2);
+            presSel.appendChild(o);
+        } else {
+            arr.forEach(function(pr){
+                var o = document.createElement('option');
+                o.value = pr.id;
+                o.textContent = pr.n + ' · $' + parseFloat(pr.p).toFixed(2);
+                o.dataset.precio = pr.p; o.dataset.factor = pr.f;
+                if (String(pr.d) === '1') o.dataset.def = '1';
+                presSel.appendChild(o);
+            });
+            var def = Array.prototype.slice.call(presSel.options).find(function(o){ return o.dataset.def === '1'; });
+            if (def) presSel.value = def.value;
+            else if (cur) presSel.value = cur;
+        }
+        total();
+    }
+    function total(){
+        var o = presSel.options[presSel.selectedIndex];
+        var precio = o && o.dataset.precio ? parseFloat(o.dataset.precio) : 0;
+        if (!precio){
+            var opt = sel.options[sel.selectedIndex];
+            precio = opt && opt.getAttribute('data-precio') ? parseFloat(opt.getAttribute('data-precio')) : 0;
+        }
+        var c = parseFloat(cant.value) || 0;
+        prev.textContent = '$' + (precio * c).toFixed(2);
+        var factor = o && o.dataset.factor ? parseFloat(o.dataset.factor) : 1;
+        var pname = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text.split(' (')[0] : '';
+        if (sel.value && o){
+            det.textContent = c + ' x ' + o.textContent.split(' · ')[0] + ' (' + pname + ') = ' + (c * factor) + ' u. base';
+            help.textContent = '1 ' + o.textContent.split(' · ')[0] + ' = ' + factor + ' u. base del stock.';
+        } else { det.textContent = ''; help.textContent = ''; }
+    }
+    rDinero.addEventListener('change', toggle);
+    rProd.addEventListener('change', toggle);
+    sel.addEventListener('change', fillPres);
+    presSel.addEventListener('change', total);
+    cant.addEventListener('input', total);
+    toggle(); fillPres();
+})();
+</script>
+<script>
+/* Mejora del selector de productos: buscador + lista rica + ficha del elegido.
+   Reutiliza el <select> oculto (productoSelect) para no romper el envío ni fillPres(). */
+(function(){
+    var sel = document.getElementById('productoSelect');
+    var presSel = document.getElementById('presentacionSelect');
+    var cant = document.getElementById('cantidadInput');
+    var search = document.getElementById('prodSearch');
+    var results = document.getElementById('prodResults');
+    var picked = document.getElementById('prodPicked');
+    var countEl = document.getElementById('prodCount');
+    var countTxt = document.getElementById('prodCountTxt');
+    var hint = document.getElementById('stockHint');
+    if (!sel || !search || !results) return;
+    var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+    var items = [];
+    Array.prototype.forEach.call(sel.options, function(o){
+        if (!o.value) return;
+        var pres = [];
+        try { pres = JSON.parse(o.getAttribute('data-pres') || '[]') || []; } catch(e){ pres = []; }
+        var label = o.text || '';
+        var code = (label.split(' - ')[0] || '').trim();
+        var nm = label.split(' - ')[1] || label;
+        nm = nm.split(' ($')[0];
+        items.push({
+            id: o.value, code: code, nombre: nm.trim(),
+            precio: parseFloat(o.getAttribute('data-precio')) || 0,
+            stock: parseFloat(o.getAttribute('data-stock')) || 0,
+            pres: pres
+        });
+    });
+    function ini(s){ s = String(s || '?').trim(); return (s.charAt(0) || '?').toUpperCase(); }
+    function fmtStock(v){
+        var r = Math.round(v * 1000) / 1000;
+        return (r % 1 === 0) ? String(Math.round(r)) : String(r);
+    }
+    function render(q){
+        q = (q || '').toLowerCase().trim();
+        var vis = items.filter(function(p){
+            return !q || p.nombre.toLowerCase().indexOf(q) !== -1 || p.code.toLowerCase().indexOf(q) !== -1;
+        });
+        if (countEl) countEl.textContent = vis.length;
+        if (countTxt) countTxt.textContent = vis.length + ' de ' + items.length;
+        if (!vis.length){
+            results.innerHTML = '<div class="p-3 text-center text-muted small">Sin resultados para esa búsqueda.</div>';
+            return;
+        }
+        results.innerHTML = vis.map(function(p){
+            var np = p.pres.length ? p.pres.length + ' pres.' : 'unidad';
+            return '<button type="button" class="prod-opt' + (String(sel.value) === String(p.id) ? ' active' : '') + '" data-id="' + esc(p.id) + '">'
+                + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
+                + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
+                + '<span class="cd">' + esc(p.code) + ' · Stock ' + esc(fmtStock(p.stock)) + ' · ' + esc(np) + '</span></span>'
+                + '<span class="pr"><b>$' + p.precio.toFixed(2) + '</b></span></button>';
+        }).join('');
+    }
+    function showPicked(){
+        var p = items.filter(function(x){ return String(x.id) === String(sel.value); })[0];
+        var has = !!p;
+        if (picked) picked.style.display = has ? '' : 'none';
+        if (results) results.style.display = has ? 'none' : '';
+        if (search) search.style.display = has ? 'none' : '';
+        if (has){
+            document.getElementById('pickedIni').textContent = ini(p.nombre);
+            document.getElementById('pickedName').textContent = p.code + ' - ' + p.nombre;
+            document.getElementById('pickedSub').textContent = 'Stock ' + fmtStock(p.stock) + ' · $' + p.precio.toFixed(2);
+            search.value = '';
+        }
+        render('');
+        updateHint();
+    }
+    function updateHint(){
+        if (!hint) return;
+        var o = presSel.options[presSel.selectedIndex];
+        var factor = o && o.dataset.factor ? parseFloat(o.dataset.factor) : 1;
+        var opt = sel.options[sel.selectedIndex];
+        var stock = opt && opt.getAttribute('data-stock') ? parseFloat(opt.getAttribute('data-stock')) : 0;
+        var c = parseFloat(cant.value) || 0;
+        if (!sel.value){ hint.textContent = ''; hint.classList.remove('over'); return; }
+        var max = factor > 0 ? Math.floor(stock / factor * 1000) / 1000 : 0;
+        hint.textContent = 'Máx: ' + fmtStock(max) + ' (' + fmtStock(stock) + ' base / ' + factor + ')';
+        hint.classList.toggle('over', c * factor > stock + 1e-9);
+    }
+    results.addEventListener('click', function(ev){
+        var b = ev.target.closest ? ev.target.closest('.prod-opt') : null;
+        if (!b) return;
+        sel.value = b.getAttribute('data-id');
+        sel.dispatchEvent(new Event('change'));
+        showPicked();
+    });
+    var chg = document.getElementById('pickedChange');
+    if (chg) chg.addEventListener('click', function(){
+        sel.value = '';
+        sel.dispatchEvent(new Event('change'));
+        if (picked) picked.style.display = 'none';
+        if (results) results.style.display = '';
+        if (search){ search.style.display = ''; search.focus(); }
+        render(search ? search.value : '');
+        updateHint();
+    });
+    if (search) search.addEventListener('input', function(){ render(search.value); });
+    sel.addEventListener('change', updateHint);
+    if (presSel) presSel.addEventListener('change', updateHint);
+    if (cant) cant.addEventListener('input', updateHint);
+    var mMenos = document.getElementById('cantMenos'), mMas = document.getElementById('cantMas');
+    function step(d){
+        var v = (parseFloat(cant.value) || 0) + d;
+        if (v < 0) v = 0;
+        cant.value = Math.round(v * 1000) / 1000;
+        cant.dispatchEvent(new Event('input'));
+        updateHint();
+    }
+    if (mMenos) mMenos.addEventListener('click', function(){ step(-1); });
+    if (mMas) mMas.addEventListener('click', function(){ step(1); });
+    render('');
+    if (countTxt) countTxt.textContent = items.length + ' de ' + items.length;
+})();
+
+    /* Carrito multilínea: varios productos en la misma deuda.
+       El servidor recalcula precios/stock (lo del cliente es solo vista previa). */
+    (function(){
+        var form = document.getElementById('deudaForm');
+        var rProd = document.getElementById('tipoProducto');
+        var sel = document.getElementById('productoSelect');
+        var presSel = document.getElementById('presentacionSelect');
+        var cant = document.getElementById('cantidadInput');
+        var btnAdd = document.getElementById('btnAgregarLinea');
+        var wrap = document.getElementById('lineasWrap');
+        var tb = document.getElementById('lineasBody');
+        var cnt = document.getElementById('lineasCount');
+        var gtot = document.getElementById('granTotal');
+        var dataInput = document.getElementById('productosData');
+        if (!form || !btnAdd || !sel || !tb) return;
+        var lineas = [];
+        var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+        function curPick(){
+            var opt = sel.options[sel.selectedIndex];
+            if (!sel.value || !opt) return {error: 'Seleccione un producto.'};
+            var c = parseFloat(cant.value) || 0;
+            if (c <= 0) return {error: 'Indique una cantidad mayor a 0.'};
+            var o = presSel.options[presSel.selectedIndex];
+            var precio = (o && o.dataset.precio) ? parseFloat(o.dataset.precio) : (parseFloat(opt.getAttribute('data-precio')) || 0);
+            var presId = (o && o.value) ? o.value : '';
+            var presNom = o ? o.textContent.split(' · ')[0] : 'Unidad';
+            var factor = (o && o.dataset.factor) ? parseFloat(o.dataset.factor) : 1;
+            var stock = parseFloat(opt.getAttribute('data-stock')) || 0;
+            var label = opt.text || '';
+            var code = (label.split(' - ')[0] || '').trim();
+            var nm = (label.split(' - ')[1] || label).split(' ($')[0].trim();
+            return {producto_id: sel.value, codigo: code, nombre: nm,
+                    presentacion_id: presId, presentacion_nombre: presNom,
+                    cantidad: Math.round(c * 1000) / 1000,
+                    precio: precio, factor: factor, stock: stock};
+        }
+        function baseDe(l){ return l.cantidad * l.factor; }
+        btnAdd.addEventListener('click', function(){
+            var p = curPick();
+            if (p.error){ alert(p.error); return; }
+            var yaBase = lineas.reduce(function(a, l){
+                return a + (String(l.producto_id) === String(p.producto_id) ? baseDe(l) : 0);
+            }, 0);
+            if (yaBase + baseDe(p) > p.stock + 1e-9){
+                alert('Stock insuficiente de ' + p.nombre + '. Disponible: ' + p.stock);
+                return;
+            }
+            var ex = lineas.filter(function(l){
+                return String(l.producto_id) === String(p.producto_id)
+                    && String(l.presentacion_id) === String(p.presentacion_id);
+            })[0];
+            if (ex){ ex.cantidad = Math.round((ex.cantidad + p.cantidad) * 1000) / 1000; }
+            else { lineas.push(p); }
+            var chg = document.getElementById('pickedChange');
+            if (chg) chg.click();
+            cant.value = 1;
+            cant.dispatchEvent(new Event('input'));
+            sel.value = '';
+            sel.dispatchEvent(new Event('change'));
+            render();
+        });
+        function render(){
+            dataInput.value = lineas.length ? JSON.stringify(lineas.map(function(l){
+                return {producto_id: l.producto_id, presentacion_id: l.presentacion_id, cantidad: l.cantidad};
+            })) : '';
+            cnt.textContent = lineas.length;
+            wrap.style.display = lineas.length ? '' : 'none';
+            var t = 0;
+            tb.innerHTML = lineas.map(function(l, i){
+                var sub = l.precio * l.cantidad;
+                t += sub;
+                return '<tr><td><strong>' + esc(l.nombre) + '</strong><br>'
+                    + '<small class="text-muted">' + esc(l.codigo) + ' · ' + esc(l.presentacion_nombre) + '</small></td>'
+                    + '<td class="text-center">' + esc(String(l.cantidad)) + '</td>'
+                    + '<td class="text-end">$' + sub.toFixed(2) + '</td>'
+                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-i="' + i + '" title="Quitar"><i class="bi bi-trash"></i></button></td></tr>';
+            }).join('');
+            gtot.textContent = '$' + t.toFixed(2);
+        }
+        tb.addEventListener('click', function(ev){
+            var b = ev.target.closest ? ev.target.closest('button[data-i]') : null;
+            if (!b) return;
+            lineas.splice(parseInt(b.getAttribute('data-i'), 10), 1);
+            render();
+        });
+        form.addEventListener('submit', function(ev){
+            if (rProd && rProd.checked && !lineas.length){
+                ev.preventDefault();
+                alert('Agregue al menos un producto a la deuda.');
+            }
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}
+

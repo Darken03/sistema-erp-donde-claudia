@@ -1,0 +1,104 @@
+/* ============================================================
+   BizMaster POS — Tema Halloween (sutil festivo, temporal)
+   Solo se carga en el POS (pos.html). Para quitarlo después de
+   Halloween: borre la línea <link> en pos.html y este archivo.
+   Todo va scoperado a .pos-shell: no toca el resto del sistema.
+   ============================================================ */
+
+/* --- Re-tinteo de tokens del POS --- */
+.pos-shell {
+  --accent: #e8641b;            /* naranja calabaza */
+  --accent-strong: #c9520f;
+  --accent-soft: #fdeede;
+  --accent-tint: #fdf3e7;
+  --accent-shadow: rgba(232, 100, 27, 0.32);
+  --bg: #faf6f0;
+  --soft: #f6efe4;
+}
+
+/* --- Guirnalda de la toolbar --- */
+.hwn-garland {
+  display: flex; align-items: center; gap: 2px;
+  font-size: 17px; line-height: 1; user-select: none;
+  padding: 2px 10px 2px 4px; margin-right: 2px;
+  border-right: 1px solid var(--line);
+  filter: saturate(1.1);
+}
+.hwn-garland span:nth-child(even) { transform: translateY(2px); }
+.hwn-garland span:nth-child(odd) { transform: translateY(-1px); }
+
+/* --- Marca y botones principales --- */
+.pos-shell .pos-brand-logo {
+  background: linear-gradient(135deg, #e8641b, #7c3aed);
+}
+.pos-shell .pos-user {
+  background: linear-gradient(135deg, #e8641b, #7c3aed);
+}
+.pos-shell .pos-trigger .ticon,
+.pos-shell .pos-cart-head .hicon {
+  background: rgba(232, 100, 27, 0.14);
+  color: var(--accent);
+}
+.pos-shell .pos-trigger.is-active { background: var(--accent-tint); }
+.pos-shell .btn-pay-hom, .pos-shell .btn-cobrar {
+  background: linear-gradient(135deg, #e8641b, #c9520f) !important;
+  box-shadow: 0 4px 14px rgba(232, 100, 27, 0.35);
+}
+.pos-shell .btn-pay-hom:hover, .pos-shell .btn-cobrar:hover { filter: brightness(1.06); }
+
+/* --- Tarjetas de producto --- */
+.pos-shell .product-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 10px -2px rgba(232, 100, 27, 0.4);
+}
+.pos-shell .product-add { background: rgba(232, 100, 27, 0.14); color: var(--accent); }
+.pos-shell .cat-item.active, .pos-shell .cat-chip.active {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-strong, #c9520f);
+}
+
+/* --- Detalle morado bruja en focos --- */
+.pos-shell .form-control:focus, .pos-shell .form-select:focus,
+.pos-shell .pos-search-input:focus {
+  border-color: #7c3aed !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15) !important;
+}
+
+/* --- Cabecera del ticket en modo Halloween --- */
+#ticketHead { background: linear-gradient(135deg, #e8641b, #7c3aed) !important; }
+#ticketModal .modal-content { overflow: hidden; }
+
+/* --- Guirnalda columpiándose + calabaza brillando --- */
+@keyframes hwn-swing {
+  0%, 100% { transform: rotate(-8deg) translateY(-1px); }
+  50% { transform: rotate(8deg) translateY(2px); }
+}
+@keyframes hwn-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(232, 100, 27, 0.6)); }
+  50% { filter: drop-shadow(0 0 8px rgba(232, 100, 27, 0.95)); }
+}
+.hwn-garland span { display: inline-block; animation: hwn-swing 2.4s ease-in-out infinite; }
+.hwn-garland span:nth-child(2n) { animation-delay: 0.3s; }
+.hwn-garland span:nth-child(3n) { animation-delay: 0.6s; }
+.hwn-garland span:first-child { animation: hwn-swing 2.4s ease-in-out infinite, hwn-glow 1.8s ease-in-out infinite; }
+
+/* --- Lluvia de emojis tras cada compra --- */
+@keyframes hwn-rise {
+  0% { transform: translateY(20px) rotate(-12deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(-46vh) rotate(14deg); opacity: 0; }
+}
+.pos-shell { position: relative; }
+.hwn-float {
+  position: absolute; bottom: 8px; z-index: 60;
+  pointer-events: none; animation: hwn-rise 2.6s ease-out forwards;
+}
+
+/* --- Modo oscuro: calabaza encendida --- */
+html[data-theme="dark"] .pos-shell {
+  --accent-tint: rgba(232, 100, 27, 0.2);
+  --accent-soft: rgba(232, 100, 27, 0.3);
+  --bg: #171310;
+}
+html[data-theme="dark"] .pos-shell .product-add { background: rgba(232, 100, 27, 0.25); }
