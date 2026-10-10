@@ -1156,6 +1156,11 @@ def get_almacen_unico():
 
 class ConfiguracionTienda(models.Model):
     """Singleton (pk=1) con datos de tienda, apariencia y regional."""
+    MODOS_OPERACION = [
+        ('solo_pos', 'Solo POS (sin almacén)'),
+        ('pos_almacenes', 'POS + almacenes'),
+        ('multi_pos', 'Multi-POS (varios puntos de venta)'),
+    ]
     nombre_tienda = models.CharField(max_length=150, default='Donde Clau')
     logo = models.ImageField(upload_to='tienda/', blank=True, null=True)
     telefono = models.CharField(max_length=30, blank=True, default='')
@@ -1168,6 +1173,10 @@ class ConfiguracionTienda(models.Model):
         max_length=5, choices=[('light', 'Claro'), ('dark', 'Oscuro')],
         default='light')
     idioma = models.CharField(max_length=5, default='es')
+    # Modo de operación (spec 2026-10-10-modos-operacion, §1-2).
+    # Cambiar de modo NUNCA borra datos: lo no aplicable solo se oculta.
+    modo_operacion = models.CharField(
+        max_length=15, choices=MODOS_OPERACION, default='pos_almacenes')
 
     class Meta:
         verbose_name = 'Configuración de Tienda'

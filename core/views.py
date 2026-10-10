@@ -124,6 +124,45 @@ def requiere_almacen(view_func):
 
 
 # ============================================================
+# MODOS DE OPERACIÓN (spec 2026-10-10-modos-operacion, §1-2).
+# Cambiar de modo NUNCA borra datos: lo no aplicable se oculta
+# (sidebar + decorador) y reaparece intacto al volver.
+# ============================================================
+
+MODOS_OPERACION = ('solo_pos', 'pos_almacenes', 'multi_pos')
+
+
+def modo_actual():
+    """Modo vigente según ConfiguracionTienda (default: comportamiento actual)."""
+    try:
+        modo = ConfiguracionTienda.get_solo().modo_operacion
+    except Exception:
+        return 'pos_almacenes'
+    return modo if modo in MODOS_OPERACION else 'pos_almacenes'
+
+
+def requiere_modo(*modos):
+    """Bloquea URLs fuera del modo actual (redirect + mensaje, sin 500)."""
+    def deco(view_func):
+        def wrapper(request, *args, **kwargs):
+            if modo_actual() not in modos:
+                messages.warning(
+                    request, 'No disponible en el modo actual.')
+                try:
+                    es_admin = request.user.perfil.es_admin
+                except Exception:
+                    es_admin = False
+                if es_admin:
+                    return redirect('core:dashboard')
+                return redirect('core:pos')
+            return view_func(request, *args, **kwargs)
+        wrapper.__name__ = view_func.__name__
+        wrapper.__doc__ = view_func.__doc__
+        return wrapper
+    return deco
+
+
+# ============================================================
 # DASHBOARD
 # ============================================================
 
@@ -1156,7 +1195,7 @@ def pos(request):
     # Verificar si es cajero y si tiene turno abierto
     try:
         perfil = request.user.perfil
-        if perfil.es_almacenero and not perfil.es_admin:
+        if perfil.es_almacenero and not perfil.es_admin and modo_actual() != 'solo_pos':
             return redirect('core:almacen_panel')
         if perfil.es_cajero:
             try:
@@ -2431,6 +2470,7 @@ def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
     )
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_panel(request):
     """Panel del almacén: existencias valorizadas y actividad del día."""
@@ -2468,6 +2508,7 @@ def almacen_panel(request):
     return render(request, 'core/almacen_panel.html', context)
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_stock(request):
     """Existencias del almacén con acceso a trasladar (y ajustar si admin)."""
@@ -2495,6 +2536,7 @@ def almacen_stock(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_entrada_lista(request):
     hoy = ahora_servidor().date()
@@ -2523,6 +2565,7 @@ def almacen_entrada_lista(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_entrada_crear(request):
     """Entrada al almacén: suma al stock del almacén, NO al del POS."""
@@ -2592,6 +2635,7 @@ def almacen_entrada_crear(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_admin
 @require_POST
 def almacen_entrada_cancelar(request, pk):
@@ -2632,6 +2676,7 @@ def almacen_entrada_cancelar(request, pk):
     return redirect(f"{_reverse('core:almacen_entrada_lista')}?fecha={fecha_qs}")
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_traslado_lista(request):
     hoy = ahora_servidor().date()
@@ -2659,6 +2704,7 @@ def almacen_traslado_lista(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_traslado_crear(request):
     """Traslado con origen y destino (POS o almacén).
@@ -2779,6 +2825,7 @@ def almacen_traslado_crear(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_admin
 @require_POST
 def almacen_traslado_cancelar(request, pk):
@@ -2880,6 +2927,7 @@ def almacen_traslado_cancelar(request, pk):
     return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_almacen
 def almacen_movimientos(request):
     """Auditoría propia del almacén (entradas, traslados y ajustes)."""
@@ -2903,6 +2951,7 @@ def almacen_movimientos(request):
     })
 
 
+@requiere_modo('pos_almacenes', 'multi_pos')
 @requiere_admin
 def almacen_ajuste(request):
     """Ajuste de existencias del almacén (solo admin)."""
@@ -2960,12 +3009,20 @@ def _tienda_context():
         cfg = None
     if cfg is None:
         return {'TIENDA': {'nombre': 'Donde Clau', 'logo_url': None,
-                           'color_acento': '#6f53d9', 'tema': 'light'}}
+                           'color_acento': '#6f53d9', 'tema': 'light'},
+                'MODO': 'pos_almacenes'}
+    try:
+        modo = cfg.modo_operacion
+    except Exception:
+        modo = 'pos_almacenes'
+    if modo not in MODOS_OPERACION:
+        modo = 'pos_almacenes'
     return {'TIENDA': {'nombre': cfg.nombre_tienda, 'logo_url': cfg.logo_url,
                        'color_acento': cfg.color_acento or '#6f53d9',
                        'tema': cfg.tema_por_defecto or 'light',
                        'moneda': cfg.moneda, 'simbolo': cfg.simbolo_moneda,
-                       'objeto': cfg}}
+                       'objeto': cfg, 'modo': modo},
+            'MODO': modo}
 
 
 def configuracion_tienda(request):
@@ -3082,6 +3139,24 @@ def configuracion(request):
     tab = request.GET.get('tab', 'tienda')
     if request.method == 'POST':
         form_kind = request.POST.get('form_kind', 'tienda')
+        if form_kind == 'modo':
+            # Selector de modo de operación (solo admin: la vista ya lo exige).
+            # Cambiar de modo NUNCA borra datos: solo oculta/muestra secciones.
+            nuevo = (request.POST.get('modo_operacion') or '').strip()
+            validos = dict(ConfiguracionTienda.MODOS_OPERACION)
+            if nuevo in validos:
+                if cfg.modo_operacion != nuevo:
+                    cfg.modo_operacion = nuevo
+                    cfg.save(update_fields=['modo_operacion'])
+                    messages.success(
+                        request,
+                        f"Modo de operación cambiado a '{validos[nuevo]}'. "
+                        'Lo no aplicable se oculta sin borrar datos.')
+                else:
+                    messages.info(request, 'El modo de operación no cambió.')
+            else:
+                messages.error(request, 'Modo de operación inválido.')
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
         if form_kind == 'tienda':
             f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
         elif form_kind == 'apariencia':
@@ -3111,6 +3186,7 @@ def configuracion(request):
         a.info_valor = d['valor']
     return render(request, 'core/configuracion.html', {
         'cfg': cfg, 'tab': tab,
+        'modos_operacion': ConfiguracionTienda.MODOS_OPERACION,
         'form_tienda': ConfigTiendaForm(instance=cfg),
         'form_apariencia': ConfigAparienciaForm(instance=cfg),
         'form_regional': ConfigRegionalForm(instance=cfg),

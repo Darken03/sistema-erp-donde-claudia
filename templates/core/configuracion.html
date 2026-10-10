@@ -88,6 +88,39 @@
     </div>
 </form>
 
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-body p-4">
+        <div class="form-card-head">
+            <span class="section-icon"><i class="bi bi-toggles"></i></span>
+            <div><h5>Modo de operación</h5><small>Define qué módulos usa el negocio. Cambiar de modo nunca borra datos: lo no aplicable se oculta y reaparece intacto al volver.</small></div>
+        </div>
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+            <input type="hidden" name="form_kind" value="modo">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label" for="modo_operacion">Modo *</label>
+                    <select name="modo_operacion" id="modo_operacion" class="form-select">
+                        {% for valor, etiqueta in modos_operacion %}
+                        <option value="{{ valor }}" {% if cfg.modo_operacion == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-check-lg me-1"></i>Cambiar modo
+                    </button>
+                </div>
+            </div>
+            <div class="form-text mt-2">
+                <strong>Solo POS:</strong> vende sin almacén (sin Panel/Existencias/Traslados).<br>
+                <strong>POS + almacenes:</strong> funcionamiento actual.<br>
+                <strong>Multi-POS:</strong> varios puntos de venta, cada uno surtido por su almacén.
+            </div>
+        </form>
+    </div>
+</div>
+
 {% elif tab == 'apariencia' %}
 <form method="post" autocomplete="off">
     {% csrf_token %}

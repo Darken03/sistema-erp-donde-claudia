@@ -76,6 +76,7 @@
                             <a class="side-sub-link {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:deuda_lista' %}">Deudas</a>
                         </div>
                     </li>
+                    {% if MODO != 'solo_pos' %}
                     <li class="nav-item side-group">
                         <button type="button" class="side-group-btn {% if 'almacen' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideAlmacen" aria-expanded="{% if 'almacen' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
                             <i class="bi bi-shop me-2"></i> Almacén
@@ -89,6 +90,19 @@
                             <a class="side-sub-link {% if 'almacen_movimiento' in request.resolver_match.url_name or request.resolver_match.url_name == 'almacen_ajuste' %}active{% endif %}" href="{% url 'core:almacen_movimientos' %}">Auditoría</a>
                         </div>
                     </li>
+                    {% endif %}
+                    {% if MODO == 'multi_pos' %}
+                    <li class="nav-item side-group">
+                        <button type="button" class="side-group-btn" data-bs-toggle="collapse" data-bs-target="#sidePos" aria-expanded="false">
+                            <i class="bi bi-cart3 me-2"></i> POS
+                            <i class="bi bi-chevron-down chev"></i>
+                        </button>
+                        <div class="collapse side-group-collapse" id="sidePos">
+                            <a class="side-sub-link" href="{% url 'core:pos' %}">Terminal POS</a>
+                            <a class="side-sub-link" href="{% url 'core:configuracion' %}">Puntos de venta</a>
+                        </div>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'empleado' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:empleado_lista' %}">
                             <i class="bi bi-people me-2"></i> Empleados
@@ -105,7 +119,8 @@
                         </a>
                     </li>
                     {% elif request.user.perfil.es_almacenero %}
-                    {# Almacenero: solo el almacén #}
+                    {# Almacenero: solo el almacén (oculto en modo solo-POS) #}
+                    {% if MODO != 'solo_pos' %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'almacen_panel' %}active{% endif %}" href="{% url 'core:almacen_panel' %}">
                             <i class="bi bi-shop me-2"></i> Almacén
@@ -131,6 +146,7 @@
                             <i class="bi bi-clock-history me-2"></i> Auditoría
                         </a>
                     </li>
+                    {% endif %}
                     {% else %}
                     {# Vendedor: panel propio + POS + conteos #}
                     <li class="nav-item">
