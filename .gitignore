@@ -1,13 +1,20 @@
+# Entorno
+venv/
 __pycache__/
 *.py[cod]
-.venv/
-venv/
-.env
-instance/
+*$py.class
 
-# Bases de datos SQLite
-*.sqlite3
-*.db
+# Respaldos y paquetes
+*.backup
+*.backup_*
+*.zip
 
-# Archivos generados
-*.log
+# Archivos generados por collectstatic
+staticfiles/
+
+# Sistema / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+db.sqlite3
