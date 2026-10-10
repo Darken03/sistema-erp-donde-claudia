@@ -21,6 +21,19 @@
     <div class="card-body p-4">
         <form method="post" autocomplete="off">
             {% csrf_token %}
+            {% if multi %}
+            <div class="mb-3">
+                <label class="form-label">Almacén *</label>
+                <select name="almacen" class="form-select" required>
+                    <option value="">Seleccione almacén...</option>
+                    {% for a in almacenes %}
+                    <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% elif almacen_actual %}
+            <input type="hidden" name="almacen" value="{{ almacen_actual.pk }}">
+            {% endif %}
             <div class="mb-3">
                 <label class="form-label">Producto *</label>
                 <select name="producto" id="productoSelect" class="form-select" required>

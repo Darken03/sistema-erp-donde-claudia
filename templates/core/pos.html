@@ -445,6 +445,9 @@ html[data-theme="dark"] .cat-drawer { background:#1e1e2a; color:var(--ink); }
 html[data-theme="dark"] .cat-item:hover { background:var(--soft); }
 html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
 </style>
+{# Tema temporal de Halloween (solo POS): quitar estas líneas al retirarlo #}
+<link href="{% static 'css/halloween-pos.css' %}" rel="stylesheet">
+<script src="{% static 'js/halloween-pos.js' %}" defer></script>
 {% endblock %}
 
 {% block layout %}
@@ -452,9 +455,11 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
   <!-- ===== Toolbar ===== -->
   <nav class="pos-toolbar">
     <div class="pos-brand">
-      <img src="{% static 'img/logo-donde-clau.webp' %}" alt="Donde Clau" class="pos-brand-logo-img">
-      <div><div class="pos-brand-name">Donde Clau</div><div class="pos-brand-sub">Punto de Venta</div></div>
+      {% if TIENDA.logo_url %}<img src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}" class="pos-brand-logo-img">
+      {% else %}<img src="{% static 'img/logo-donde-clau.webp' %}" alt="Donde Clau" class="pos-brand-logo-img" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
+      <div><div class="pos-brand-name">{{ TIENDA.nombre|default:"Donde Clau" }}</div><div class="pos-brand-sub">Punto de Venta</div></div>
     </div>
+    <div class="hwn-garland" aria-hidden="true"><span>🎃</span><span>🦇</span><span>👻</span><span>🍬</span></div>
     <span class="pos-pill open" id="turnoPill" title="Turno"><span class="dot"></span><span id="turnoPillTxt">EN TURNO</span></span>
     <span class="pos-pill offline" id="offlinePill" style="display:none;" title="Estado de conexión"><span class="dot"></span><span id="offlinePillTxt">OFFLINE</span></span>
     <button type="button" class="pos-trigger" id="catTrigger" title="Categorías">
@@ -491,7 +496,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
           <div><div class="htitle">Orden Actual</div><div class="hsub" id="cartCount">0 productos</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <div><span class="htotal-label">Total</span><span class="htotal-value" id="totalDisplay">$0</span></div>
+          <div><span class="htotal-label">Total</span><span class="htotal-value" id="totalDisplay">{{ TIENDA.simbolo|default:"$" }}0</span></div>
           <button type="button" class="pos-clear" id="btnClear" title="Cancelar venta" onclick="limpiarCarrito()" disabled><i class="bi bi-trash"></i></button>
         </div>
       </div>
@@ -499,11 +504,11 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
       <div class="pos-pay-block">
         <button class="monto-btn active" id="btnEfectivo" onclick="setTarget('efectivo')">
           <span class="monto-label"><i class="bi bi-cash-stack me-1"></i>Efectivo</span>
-          <span class="monto-valor" id="montoEfectivoDisplay" tabindex="0">$0</span>
+          <span class="monto-valor" id="montoEfectivoDisplay" tabindex="0">{{ TIENDA.simbolo|default:"$" }}0</span>
         </button>
         <button class="monto-btn" id="btnTransferencia" onclick="setTarget('transferencia')">
           <span class="monto-label"><i class="bi bi-bank me-1"></i>Transferencia</span>
-          <span class="monto-valor" id="montoTransferenciaDisplay" tabindex="0">$0</span>
+          <span class="monto-valor" id="montoTransferenciaDisplay" tabindex="0">{{ TIENDA.simbolo|default:"$" }}0</span>
         </button>
         <div class="numpad-target" id="numpadTarget">Editando: <strong>Efectivo</strong></div>
         <div class="numpad">
@@ -513,13 +518,13 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
           <button type="button" class="action" onclick="numpadClear()">C</button><button type="button" onclick="numpadInput('0')">0</button><button type="button" class="action" onclick="numpadBackspace()"><i class="bi bi-backspace"></i></button>
         </div>
         <div class="pay-resumen">
-          <div class="rowline"><span>Efectivo</span><span class="mono" id="resEfectivo">$0</span></div>
-          <div class="rowline"><span>Transferencia</span><span class="mono" id="resTransferencia">$0</span></div>
-          <div class="rowline"><span>Total pagado</span><span class="mono" id="resTotalPagado">$0</span></div>
+          <div class="rowline"><span>Efectivo</span><span class="mono" id="resEfectivo">{{ TIENDA.simbolo|default:"$" }}0</span></div>
+          <div class="rowline"><span>Transferencia</span><span class="mono" id="resTransferencia">{{ TIENDA.simbolo|default:"$" }}0</span></div>
+          <div class="rowline"><span>Total pagado</span><span class="mono" id="resTotalPagado">{{ TIENDA.simbolo|default:"$" }}0</span></div>
         </div>
-        <div class="pay-cambio"><span>Cambio</span><span id="resCambio" class="sobr">$0</span></div>
+        <div class="pay-cambio"><span>Cambio</span><span id="resCambio" class="sobr">{{ TIENDA.simbolo|default:"$" }}0</span></div>
         <button class="btn-pay d-none d-md-inline-flex" onclick="procesarVenta()" id="btnPagar" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span></button>
-        <button class="pos-mobile-pay d-md-none" onclick="procesarVenta()" id="btnPagarM" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span><span class="amt" id="totalDisplayM">$0</span></button>
+        <button class="pos-mobile-pay d-md-none" onclick="procesarVenta()" id="btnPagarM" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span><span class="amt" id="totalDisplayM">{{ TIENDA.simbolo|default:"$" }}0</span></button>
       </div>
     </aside>
 
@@ -538,7 +543,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
             <div class="product-img">{% if producto.imagen_url %}<img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" loading="lazy">{% else %}<span class="initials">{{ producto.nombre|slice:":2"|upper }}</span>{% endif %}</div>
             <div class="product-name">{{ producto.nombre }}</div>
             <div class="product-sku">SKU {{ producto.codigo }} · <span data-stock="{{ producto.id }}">{{ producto.stock|floatformat:3 }} {{ producto.unidad_medida }}</span></div>
-            <div class="product-foot"><span class="product-price">${{ producto.precio_para|floatformat:0 }}</span><span class="product-add"><i class="bi bi-plus-lg"></i></span></div>
+            <div class="product-foot"><span class="product-price">{{ TIENDA.simbolo|default:"$" }}{{ producto.precio_para|floatformat:0 }}</span><span class="product-add"><i class="bi bi-plus-lg"></i></span></div>
           </button>
           {% empty %}
           <div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:2.5rem;"></i><p class="mt-2">No hay productos disponibles</p></div>
@@ -557,7 +562,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
     <button class="pos-action" onclick="limpiarCarrito()"><i class="bi bi-arrow-counterclockwise"></i><span class="txt">Cancelar</span></button>
     <button class="pos-action" data-bs-toggle="modal" data-bs-target="#misVentasModal"><i class="bi bi-receipt"></i><span class="txt">Mis ventas</span></button>
     <button class="pos-action" data-bs-toggle="modal" data-bs-target="#misEntradasModal"><i class="bi bi-box-arrow-in-down"></i><span class="txt">Entradas</span></button>
-    <div class="pos-paybar-total"><span class="tl">Total a pagar</span><span class="tv" id="totalDisplayBar">$0</span></div>
+    <div class="pos-paybar-total"><span class="tl">Total a pagar</span><span class="tv" id="totalDisplayBar">{{ TIENDA.simbolo|default:"$" }}0</span></div>
     <button class="btn-pay" onclick="procesarVenta()" id="btnPagarBar" disabled style="width:auto;"><i class="bi bi-check-circle"></i><span>Cobrar</span></button>
   </div>
 
@@ -607,7 +612,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
 <!-- Modal Mis Ventas -->
 <div class="modal fade" id="misVentasModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2"></i>Mis Ventas del Día</h5>
-    <div><span class="badge bg-success me-1" id="resumenDiaTotal">$0</span><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
+    <div><span class="badge bg-success me-1" id="resumenDiaTotal">{{ TIENDA.simbolo|default:"$" }}0</span><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
     <button class="btn btn-sm btn-outline-secondary ms-2" onclick="cargarMisVentas()"><i class="bi bi-arrow-clockwise"></i></button></div>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body p-0"><div class="table-responsive" style="max-height:400px;overflow-y:auto;">
@@ -650,8 +655,8 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cash-stack me-2"></i>Gasto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <form id="gastoForm"><div class="modal-body">
     <div class="mb-3"><label class="form-label">Categoría</label><select name="categoria" class="form-select" required><option value="caja">Salida de Caja</option><option value="servicio">Servicio</option><option value="sueldo">Sueldo/Pago</option><option value="material">Materiales</option><option value="otro">Otro</option></select></div>
-    <div class="mb-3"><label class="form-label">Efectivo</label><input type="text" id="gastoEfectivo" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="$0"></div>
-    <div class="mb-3"><label class="form-label">Transferencia</label><input type="text" id="gastoTransferencia" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="$0"></div>
+    <div class="mb-3"><label class="form-label">Efectivo</label><input type="text" id="gastoEfectivo" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="{{ TIENDA.simbolo|default:"$" }}0"></div>
+    <div class="mb-3"><label class="form-label">Transferencia</label><input type="text" id="gastoTransferencia" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="{{ TIENDA.simbolo|default:"$" }}0"></div>
     <div class="mb-3"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-control" rows="2" placeholder="Motivo del gasto..."></textarea></div>
   </div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-warning"><i class="bi bi-check-lg me-1"></i>Registrar</button></div></form>
 </div></div></div>
@@ -726,12 +731,12 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
               <div class="stock-hint" id="deuStockHint"></div>
             </div>
           </div>
-          <div class="deu-totalbox mt-2"><span class="lbl">Se suma a la deuda</span><span class="val" id="deuTotalPrev">$0</span></div>
+          <div class="deu-totalbox mt-2"><span class="lbl">Se suma a la deuda</span><span class="val" id="deuTotalPrev">{{ TIENDA.simbolo|default:"$" }}0</span></div>
           <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2" id="deuAgregarLinea"><i class="bi bi-plus-lg me-1"></i>Agregar producto a la deuda</button>
           <div id="deuLineasWrap" style="display:none;" class="mt-2">
             <label class="form-label mb-1">Productos en esta deuda (<span id="deuLineasCount">0</span>)</label>
             <div id="deuLineasBody"></div>
-            <div class="deu-totalbox mt-2"><span class="lbl">Total de la deuda</span><span class="val" id="deuGranTotal">$0</span></div>
+            <div class="deu-totalbox mt-2"><span class="lbl">Total de la deuda</span><span class="val" id="deuGranTotal">{{ TIENDA.simbolo|default:"$" }}0</span></div>
           </div>
           <div class="form-text mt-1" id="deuPresHelp">El precio es el de la presentación (ej. cartón ≠ huevo suelto). Se descuenta del stock en unidades base.</div>
         </div>
@@ -804,7 +809,8 @@ const $ = id => document.getElementById(id);
 /* setTxt tolerante: si un total no existe en esta variante del DOM (móvil/escritorio,
    caché vieja) no debe ensuciar la consola ni romper la venta. */
 function setTxt(id, v){ const el = document.getElementById(id); if (!el){ return; } el.textContent = v; }
-const money = n => '$' + Math.round(Number(n) || 0);
+const SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
+const money = n => SIMBOLO + Math.round(Number(n) || 0);
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const initials = n => (String(n||'P').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('') || 'P').toUpperCase();
 /* Búsqueda insensible a tildes: 'cafe' encuentra 'Café', 'jamon' -> 'Jamón', etc. */
@@ -977,7 +983,7 @@ function renderCart(){
     box.innerHTML = EMPTY_CART_HTML;
     setTxt('cartCount', '0 productos');
     currentTotal = 0;
-    setTxt('totalDisplay', '$0'); setTxt('totalDisplayM', '$0'); setTxt('totalDisplayBar', '$0');
+    setTxt('totalDisplay', SIMBOLO + '0'); setTxt('totalDisplayM', SIMBOLO + '0'); setTxt('totalDisplayBar', SIMBOLO + '0');
     const bc0 = $('btnClear'); if (bc0) bc0.disabled = true;
     btns.forEach(b=>{ if(b) b.disabled = true; });
     calcularResumen(); empujarMostrador(); return;
@@ -1117,7 +1123,7 @@ function enqueueOffline(payload){
 }
 function resetAfterSale(){
   cart = []; montoEfectivoStr='0'; montoTransferenciaStr='0';
-  setTxt('montoEfectivoDisplay','$0'); setTxt('montoTransferenciaDisplay','$0');
+  setTxt('montoEfectivoDisplay',SIMBOLO + '0'); setTxt('montoTransferenciaDisplay',SIMBOLO + '0');
   setTarget('efectivo'); saveCart(); renderCart(); updateMontoDisplay();
 }
 function showTicket(o){
@@ -1197,7 +1203,7 @@ async function buscarProductos(){
       return '<button type="button" class="product-card'+(out?' out':'')+'" '+(out?'disabled':'')+' onclick="addToCart('+p.id+')">'
         + '<div class="product-img">'+img+'</div><div class="product-name">'+esc(p.nombre)+'</div>'
         + '<div class="product-sku">SKU '+esc(p.codigo)+' · '+esc(p.stock_display || p.stock)+' '+esc(p.unidad || '')+'</div>'
-        + '<div class="product-foot"><span class="product-price">$'+Math.round(dp.precio)+'</span>'+badge+frac+'<span class="product-add"><i class="bi bi-plus-lg"></i></span></div></button>';
+        + '<div class="product-foot"><span class="product-price">'+SIMBOLO+Math.round(dp.precio)+'</span>'+badge+frac+'<span class="product-add"><i class="bi bi-plus-lg"></i></span></div></button>';
     }).join('');
   } catch(e){
     /* offline: filtrar cache local (insensible a tildes) */
@@ -1301,7 +1307,7 @@ $('detalleVentaModal').addEventListener('hidden.bs.modal', ()=>new bootstrap.Mod
 $('ticketModal').addEventListener('hide.bs.modal', ()=>{ try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch(e){} });
 
 /* ---------- gasto / deuda / donación (solo online) ---------- */
-$('gastoEfectivo').value = '$0'; $('gastoTransferencia').value = '$0';
+$('gastoEfectivo').value = SIMBOLO + '0'; $('gastoTransferencia').value = SIMBOLO + '0';
 $('gastoForm').addEventListener('submit', async function(e){
   e.preventDefault();
   if (!isOnline){ toast('Sin conexión: el gasto se registra solo online','warning'); return; }
@@ -1314,7 +1320,7 @@ $('gastoForm').addEventListener('submit', async function(e){
   if (!lockBtn(btn, true, 'Registrando...')) return;
   try {
     const r = await fetch('{% url "core:pos_registrar_gasto" %}', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF_TOKEN}, body:JSON.stringify(data)});
-    if (r.ok){ hidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value='$0'; $('gastoTransferencia').value='$0'; toast('Gasto registrado','success'); }
+    if (r.ok){ hidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); }
     else { const j = await r.json(); toast(j.error||'Error al registrar gasto','danger'); }
   } catch(err){ toast('Error al registrar gasto','danger'); }
   finally { lockBtn(btn, false); }
@@ -1404,16 +1410,16 @@ function deuTotalPrev(){
   if ($('deuMotivo').value === '' || $('deuMotivo').value === deuLastAuto){ $('deuMotivo').value = auto; }
   deuLastAuto = auto;
   const help = $('deuPresHelp');
-  if (help && p && pr){ help.textContent = '1 ' + pr.nombre + ' = ' + pr.factor + ' u. base · $' + Math.round(parseFloat(pr.precio)) + ' c/u.'; }
+  if (help && p && pr){ help.textContent = '1 ' + pr.nombre + ' = ' + pr.factor + ' u. base · ' + SIMBOLO + Math.round(parseFloat(pr.precio)) + ' c/u.'; }
 }
 function deuFillPresentaciones(){
   const p = deuProductos.find(x=>String(x.id)===$('deuProducto').value);
   const sel = $('deuPresentacion');
   const arr = (p && p.presentaciones) || [];
   if (!p){ sel.innerHTML = '<option value="">Seleccione el producto...</option>'; }
-  else if (!arr.length){ sel.innerHTML = '<option value="">Unidad · $'+Math.round(Number(p.precio))+'</option>'; }
+  else if (!arr.length){ sel.innerHTML = '<option value="">Unidad · '+SIMBOLO+Math.round(Number(p.precio))+'</option>'; }
   else {
-    sel.innerHTML = arr.map(x=>'<option value="'+x.id+'"'+(String(x.def)==='1'?' selected':'')+'>'+esc(x.nombre)+' · $'+Math.round(Number(x.precio))+'</option>').join('');
+    sel.innerHTML = arr.map(x=>'<option value="'+x.id+'"'+(String(x.def)==='1'?' selected':'')+'>'+esc(x.nombre)+' · '+SIMBOLO+Math.round(Number(x.precio))+'</option>').join('');
   }
   deuTotalPrev();
 }
@@ -1495,8 +1501,8 @@ async function registrarDeudaPOS(){
   }
   try {
     const j = await deuFetch(URL_DEUDA_CREAR, payload);
-    if (deuTipo === 'producto' && j.count > 1){ toast(j.count + ' deudas registradas ($' + Math.round(Number(j.monto)) + '): ' + (j.numeros || []).join(', '),'success'); }
-    else { toast('Deuda ' + j.numero + ' registrada ($' + Math.round(Number(j.monto)) + ')','success'); }
+    if (deuTipo === 'producto' && j.count > 1){ toast(j.count + ' deudas registradas (' + SIMBOLO + Math.round(Number(j.monto)) + '): ' + (j.numeros || []).join(', '),'success'); }
+    else { toast('Deuda ' + j.numero + ' registrada (' + SIMBOLO + Math.round(Number(j.monto)) + ')','success'); }
     $('deuMonto').value = ''; $('deuMotivo').value = ''; deuLastAuto = ''; $('deuFechaPago').value = '';
     deuLineas = []; deuRenderLineas(); deuResetPicker();
     hidePosModal('registrarDeudaModal');
@@ -1511,7 +1517,7 @@ async function liquidarDeudaPOS(){
   if (!lockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
   try {
     const j = await deuFetch(URL_DEUDA_ABONAR, {deudor_id:deuSel.id, monto:$('deuAbonoMonto').value, metodo:$('deuAbonoMetodo').value, nota:$('deuAbonoNota').value});
-    const det = j.aplicados.map(a=>a.numero+': $'+Math.round(Number(a.monto))).join(', ');
+    const det = j.aplicados.map(a=>a.numero+': '+SIMBOLO+Math.round(Number(a.monto))).join(', ');
     toast('Pago aplicado (' + det + ')','success');
     $('deuAbonoMonto').value = ''; $('deuAbonoNota').value = '';
     hidePosModal('registrarDeudaModal');
@@ -1553,7 +1559,7 @@ $('deuProducto').innerHTML = '<option value="">Seleccione...</option>' + deuProd
         + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
         + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
         + '<span class="cd">' + esc(p.codigo) + ' · Stock ' + esc(fmtS(p.stock)) + ' · ' + esc(np) + '</span></span>'
-        + '<span class="pr">$' + Math.round(Number(p.precio)) + '</span></button>';
+        + '<span class="pr">' + SIMBOLO + Math.round(Number(p.precio)) + '</span></button>';
     }).join('');
   }
   function showPicked(){
@@ -1565,7 +1571,7 @@ $('deuProducto').innerHTML = '<option value="">Seleccione...</option>' + deuProd
     if (has){
       $('deuPickedIni').textContent = ini(p.nombre);
       $('deuPickedName').textContent = p.codigo + ' - ' + p.nombre;
-      $('deuPickedSub').textContent = 'Stock ' + fmtS(p.stock) + ' · $' + Math.round(Number(p.precio));
+      $('deuPickedSub').textContent = 'Stock ' + fmtS(p.stock) + ' · ' + SIMBOLO + Math.round(Number(p.precio));
       search.value = '';
     }
     render('');
@@ -1645,7 +1651,7 @@ function donRenderSearch(q){
     + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
     + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
     + '<span class="cd">' + esc(p.codigo) + ' · Stock ' + esc(String(p.stock)) + '</span></span>'
-    + '<span class="pr">$' + Math.round(Number(p.precio)) + '</span></button>'
+    + '<span class="pr">' + SIMBOLO + Math.round(Number(p.precio)) + '</span></button>'
   ).join('');
 }
 function donRenderLineas(){

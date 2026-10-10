@@ -6,7 +6,10 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="mb-0"><i class="bi bi-warehouse me-2"></i>Almacén</h2>
-    <div class="d-flex gap-2 flex-wrap">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        {% if multi %}
+        <span class="badge bg-success"><i class="bi bi-hdd-stack me-1"></i>Multi-almacén</span>
+        {% endif %}
         <a href="{% url 'core:almacen_entrada_crear' %}" class="btn btn-success">
             <i class="bi bi-plus-circle me-1"></i> Nueva Entrada
         </a>
@@ -15,6 +18,53 @@
         </a>
     </div>
 </div>
+
+{% if multi %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label">Almacén</label>
+                <select name="almacen" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for a in almacenes %}
+                    <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    {% for info in almacenes_info %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-hdd-stack text-muted"></i>
+                    <h6 class="mb-0">{{ info.obj.nombre }}</h6>
+                    {% if info.obj.es_principal %}<span class="badge bg-secondary">principal</span>{% endif %}
+                    {% if almacen_actual and almacen_actual.pk == info.obj.pk %}<span class="badge bg-primary">viendo</span>{% endif %}
+                </div>
+                <h3 class="mb-0 mono">${{ info.valor|floatformat:2 }}</h3>
+                <small class="text-muted">{{ info.productos }} producto(s) con existencias</small>
+                <div class="mt-2">
+                    <a href="?almacen={{ info.obj.pk }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye me-1"></i>Ver
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-6">

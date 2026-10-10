@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+
+{% block title %}Configuración - BizMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-gear me-2"></i>Configuración</h2>
+    {% if multi %}
+    <span class="badge bg-success"><i class="bi bi-hdd-stack me-1"></i>Multi-almacén activo</span>
+    {% else %}
+    <span class="badge bg-secondary">1 almacén</span>
+    {% endif %}
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-2">
+        <ul class="nav nav-pills gap-1" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link {% if tab == 'tienda' %}active{% endif %}" href="?tab=tienda">
+                    <i class="bi bi-shop me-1"></i>Tienda
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if tab == 'almacenes' %}active{% endif %}" href="?tab=almacenes">
+                    <i class="bi bi-hdd-stack me-1"></i>Almacenes
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if tab == 'apariencia' %}active{% endif %}" href="?tab=apariencia">
+                    <i class="bi bi-palette me-1"></i>Apariencia
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if tab == 'regional' %}active{% endif %}" href="?tab=regional">
+                    <i class="bi bi-globe me-1"></i>Regional
+                </a>
+            </li>
+        </ul>
+    </div>
+</div>
+
+{% if tab == 'tienda' %}
+<form method="post" enctype="multipart/form-data" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="form_kind" value="tienda">
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="form-card-head">
+                <span class="section-icon"><i class="bi bi-shop"></i></span>
+                <div><h5>Datos del negocio</h5><small>Nombre, contacto y logo que se muestran en el menú y el acceso</small></div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form_tienda.nombre_tienda.id_for_label }}">Nombre del negocio *</label>
+                    {{ form_tienda.nombre_tienda }}
+                    {% if form_tienda.nombre_tienda.errors %}<div class="text-danger small mt-1">{{ form_tienda.nombre_tienda.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_tienda.telefono.id_for_label }}">Teléfono</label>
+                    {{ form_tienda.telefono }}
+                    {% if form_tienda.telefono.errors %}<div class="text-danger small mt-1">{{ form_tienda.telefono.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_tienda.direccion.id_for_label }}">Dirección</label>
+                    {{ form_tienda.direccion }}
+                    {% if form_tienda.direccion.errors %}<div class="text-danger small mt-1">{{ form_tienda.direccion.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="{{ form_tienda.logo.id_for_label }}">Logo (JPG/PNG)</label>
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <div class="flex-grow-1" style="min-width:220px;">{{ form_tienda.logo }}</div>
+                        {% if TIENDA.logo_url %}
+                        <img src="{{ TIENDA.logo_url }}" alt="Logo actual" class="img-thumbnail" style="height:56px;width:auto;">
+                        {% endif %}
+                    </div>
+                    {% if form_tienda.logo.errors %}<div class="text-danger small mt-1">{{ form_tienda.logo.errors.0 }}</div>{% endif %}
+                    <div class="form-text">Se muestra en el menú lateral y en la pantalla de acceso. Si no hay logo se usa el predeterminado.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-3 d-flex gap-2 justify-content-end flex-wrap">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-check-lg me-1"></i>Guardar tienda
+            </button>
+        </div>
+    </div>
+</form>
+
+{% elif tab == 'apariencia' %}
+<form method="post" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="form_kind" value="apariencia">
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="form-card-head">
+                <span class="section-icon"><i class="bi bi-palette"></i></span>
+                <div><h5>Apariencia</h5><small>Color de acento y tema inicial de la página</small></div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form_apariencia.color_acento.id_for_label }}">Color de acento</label>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div style="min-width:110px;">{{ form_apariencia.color_acento }}</div>
+                        <button type="button" class="swatch" data-c="#6f53d9" style="background:#6f53d9;" title="Morado"></button>
+                        <button type="button" class="swatch" data-c="#be185d" style="background:#be185d;" title="Rosa"></button>
+                        <button type="button" class="swatch" data-c="#0ea5e9" style="background:#0ea5e9;" title="Azul"></button>
+                        <button type="button" class="swatch" data-c="#2fae5e" style="background:#2fae5e;" title="Verde"></button>
+                        <button type="button" class="swatch" data-c="#f59e0b" style="background:#f59e0b;" title="Ámbar"></button>
+                    </div>
+                    {% if form_apariencia.color_acento.errors %}<div class="text-danger small mt-1">{{ form_apariencia.color_acento.errors.0 }}</div>{% endif %}
+                    <div class="form-text">Se aplica a botones, precios y resaltados en toda la página.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form_apariencia.tema_por_defecto.id_for_label }}">Tema por defecto</label>
+                    {{ form_apariencia.tema_por_defecto }}
+                    {% if form_apariencia.tema_por_defecto.errors %}<div class="text-danger small mt-1">{{ form_apariencia.tema_por_defecto.errors.0 }}</div>{% endif %}
+                    <div class="form-text">Se usa en la primera visita; luego se respeta el modo elegido por cada usuario.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-3 d-flex gap-2 justify-content-end flex-wrap">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-check-lg me-1"></i>Guardar apariencia
+            </button>
+        </div>
+    </div>
+</form>
+
+{% elif tab == 'regional' %}
+<form method="post" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="form_kind" value="regional">
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="form-card-head">
+                <span class="section-icon"><i class="bi bi-globe"></i></span>
+                <div><h5>Regional</h5><small>Moneda, impuesto e idioma de los documentos</small></div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_regional.moneda.id_for_label }}">Moneda</label>
+                    {{ form_regional.moneda }}
+                    {% if form_regional.moneda.errors %}<div class="text-danger small mt-1">{{ form_regional.moneda.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_regional.simbolo_moneda.id_for_label }}">Símbolo</label>
+                    {{ form_regional.simbolo_moneda }}
+                    {% if form_regional.simbolo_moneda.errors %}<div class="text-danger small mt-1">{{ form_regional.simbolo_moneda.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_regional.impuesto_defecto.id_for_label }}">Impuesto %</label>
+                    {{ form_regional.impuesto_defecto }}
+                    {% if form_regional.impuesto_defecto.errors %}<div class="text-danger small mt-1">{{ form_regional.impuesto_defecto.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="{{ form_regional.idioma.id_for_label }}">Idioma</label>
+                    {{ form_regional.idioma }}
+                    {% if form_regional.idioma.errors %}<div class="text-danger small mt-1">{{ form_regional.idioma.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-3 d-flex gap-2 justify-content-end flex-wrap">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-check-lg me-1"></i>Guardar regional
+            </button>
+        </div>
+    </div>
+</form>
+
+{% else %}
+{# ---- Tab Almacenes ---- #}
+{% if editando %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="form-card-head">
+            <span class="section-icon"><i class="bi bi-pencil"></i></span>
+            <div><h5>Editar almacén</h5><small>{{ editando.nombre }}</small></div>
+        </div>
+        <form method="post" action="{% url 'core:config_almacen_editar' editando.pk %}" autocomplete="off">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label" for="{{ form_almacen.nombre.id_for_label }}">Nombre *</label>
+                    {{ form_almacen.nombre }}
+                    {% if form_almacen.nombre.errors %}<div class="text-danger small mt-1">{{ form_almacen.nombre.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label" for="{{ form_almacen.descripcion.id_for_label }}">Descripción</label>
+                    {{ form_almacen.descripcion }}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="{{ form_almacen.activo.id_for_label }}">Activo</label>
+                    <div class="form-check">{{ form_almacen.activo }}</div>
+                </div>
+            </div>
+            <div class="d-flex gap-2 justify-content-end mt-3 flex-wrap">
+                <a href="{% url 'core:configuracion' %}?tab=almacenes" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-check-lg me-1"></i>Guardar cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="form-card-head">
+            <span class="section-icon"><i class="bi bi-plus-lg"></i></span>
+            <div><h5>Crear almacén</h5><small>Uno por uno, con nombre propio</small></div>
+        </div>
+        <form method="post" action="{% url 'core:config_almacen_crear' %}" autocomplete="off">
+            {% csrf_token %}
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label" for="nuevo-nombre">Nombre *</label>
+                    <input type="text" name="nombre" id="nuevo-nombre" class="form-control" placeholder="Ej. Almacén secundario" maxlength="100" required>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label" for="nuevo-desc">Descripción</label>
+                    <input type="text" name="descripcion" id="nuevo-desc" class="form-control" placeholder="Opcional">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary w-100" type="submit">
+                        <i class="bi bi-plus-lg me-1"></i>Crear almacén
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th class="text-end">Productos</th>
+                        <th class="text-end">Valor</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in almacenes %}
+                    <tr>
+                        <td>
+                            <span class="fw-bold">{{ a.nombre }}</span>
+                            {% if a.es_principal %}<span class="badge bg-secondary ms-1">principal</span>{% endif %}
+                            {% if a.descripcion %}<br><small class="text-muted">{{ a.descripcion }}</small>{% endif %}
+                        </td>
+                        <td>
+                            {% if a.activo %}<span class="badge bg-success">Activo</span>
+                            {% else %}<span class="badge bg-danger">Inactivo</span>{% endif %}
+                        </td>
+                        <td class="text-end mono">{{ a.info_productos|default:"0" }}</td>
+                        <td class="text-end mono">${{ a.info_valor|floatformat:2|default:"0.00" }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'core:config_almacen_editar' a.pk %}" class="btn btn-outline-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'core:config_almacen_toggle' a.pk %}" class="d-inline"
+                                      onsubmit="return confirm('¿{% if a.activo %}Desactivar{% else %}Activar{% endif %} el almacén {{ a.nombre|escapejs }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn {% if a.activo %}btn-outline-warning{% else %}btn-outline-success{% endif %}" title="{% if a.activo %}Desactivar{% else %}Activar{% endif %}">
+                                        <i class="bi bi-power"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No hay almacenes registrados</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.form-card-head { display:flex; align-items:center; gap:10px; margin-bottom:1rem; }
+.form-card-head .section-icon {
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    background:var(--accent-tint); color:var(--accent);
+    display:inline-flex; align-items:center; justify-content:center; font-size:17px;
+}
+.form-card-head h5 { font-size:14px; font-weight:700; margin:0; color:var(--ink); }
+.form-card-head small { display:block; font-size:12px; color:var(--ink-3); font-weight:400; }
+textarea.form-control { min-height:96px; resize:vertical; }
+input[type="color"].form-control { height:38px; padding:4px 8px; max-width:110px; }
+.swatch {
+    width:32px; height:32px; border-radius:8px; border:1px solid var(--line);
+    cursor:pointer; padding:0; flex-shrink:0;
+}
+.swatch.sel { outline:2px solid var(--accent); outline-offset:2px; }
+</style>
+
+<script>
+(function(){
+    var inp = document.querySelector('input[name="color_acento"]');
+    var swatches = Array.prototype.slice.call(document.querySelectorAll('.swatch'));
+    function paint(){
+        var v = (inp && inp.value || '').toLowerCase();
+        swatches.forEach(function(b){
+            b.classList.toggle('sel', b.dataset.c.toLowerCase() === v);
+        });
+    }
+    swatches.forEach(function(b){
+        b.addEventListener('click', function(){ if (inp){ inp.value = b.dataset.c; paint(); } });
+    });
+    if (inp){ inp.addEventListener('input', paint); paint(); }
+})();
+</script>
+{% endblock %}

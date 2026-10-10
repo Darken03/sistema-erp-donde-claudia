@@ -19,10 +19,21 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-8">
+            <div class="col-md-5">
                 <label class="form-label">Fecha</label>
                 <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
             </div>
+            {% if multi %}
+            <div class="col-md-3">
+                <label class="form-label">Almacén</label>
+                <select name="almacen" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for a in almacenes %}
+                    <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <div class="col-md-4">
                 <button type="submit" class="btn btn-outline-primary w-100">
                     <i class="bi bi-search me-1"></i> Consultar
@@ -61,11 +72,13 @@
                     <tr>
                         <th>No. Entrada</th>
                         <th>Fecha</th>
+                        {% if multi %}<th>Almacén</th>{% endif %}
                         <th>Producto</th>
                         <th>Cantidad</th>
                         <th>Costo Unitario</th>
                         <th>Costo Total</th>
                         <th>Proveedor</th>
+                        {% if request.user.perfil.es_admin %}<th class="text-end">Acción</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -73,15 +86,27 @@
                     <tr>
                         <td><small class="fw-bold">{{ e.numero_entrada }}</small></td>
                         <td>{{ e.fecha_entrada|date:"d/m/Y H:i" }}</td>
+                        {% if multi %}<td>{{ e.almacen.nombre|default:"—" }}</td>{% endif %}
                         <td>{{ e.producto.nombre }}</td>
                         <td><span class="badge bg-success">+{{ e.cantidad_fmt }}</span></td>
                         <td>${{ e.costo_unitario|floatformat:2 }}</td>
                         <td>${{ e.costo_total|floatformat:2 }}</td>
                         <td>{% if e.proveedor %}{{ e.proveedor }}{% else %}-{% endif %}</td>
+                        {% if request.user.perfil.es_admin %}
+                        <td class="text-end">
+                            <form method="post" action="{% url 'core:almacen_entrada_cancelar' e.pk %}" class="d-inline"
+                                  onsubmit="return confirm('¿Cancelar la entrada {{ e.numero_entrada }}? Se restará {{ e.cantidad_fmt }} de {{ e.producto.nombre }} del almacén.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar entrada">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="8" class="text-center text-muted py-4">
                             No hay entradas en esta fecha.
                         </td>
                     </tr>

@@ -1,10 +1,81 @@
+import io
+import os
 from django import forms
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms import inlineformset_factory
-from .models import Producto, Categoria, Empleado, PresentacionProducto, PerfilUsuario
+from PIL import Image
+from .models import Producto, Categoria, Empleado, PresentacionProducto, PerfilUsuario, Almacen, ConfiguracionTienda
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except Exception:
+    pass
+
+
+def _es_heic(nombre, content_type=None):
+    ext = os.path.splitext(nombre or '')[1].lower()
+    if ext in ('.heic', '.heif'):
+        return True
+    ct = (content_type or '').lower()
+    return ct in ('image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence')
+
+
+def _convertir_a_jpeg(uploaded_file):
+    """Convierte un archivo subido (HEIC/HEIF) a JPEG en memoria."""
+    uploaded_file.seek(0)
+    img = Image.open(uploaded_file)
+    if getattr(img, 'format', None) in ('HEIF', 'HEIC'):
+        pass
+    if img.mode in ('RGBA', 'LA', 'PA'):
+        fondo = Image.new('RGB', img.size, (255, 255, 255))
+        fondo.paste(img, mask=img.split()[-1])
+        img = fondo
+    else:
+        img = img.convert('RGB')
+    # Limita a 1920px para no guardar fotos gigantes de celular
+    img.thumbnail((1920, 1920), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', quality=90, optimize=True)
+    buf.seek(0)
+    base = os.path.splitext(getattr(uploaded_file, 'name', 'foto') or 'foto')[0]
+    return SimpleUploadedFile(f'{base}.jpg', buf.read(), content_type='image/jpeg')
 
 
 class ProductoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Convierte ANTES de que ImageField valide: si no, el .heic
+        # falla con "Suba una imagen valida" y clean_imagen ni se ejecuta.
+        try:
+            f = self.files.get('imagen') if hasattr(self, 'files') and self.files else None
+        except Exception:
+            f = None
+        if f and _es_heic(getattr(f, 'name', ''), getattr(f, 'content_type', '')):
+            try:
+                convertido = _convertir_a_jpeg(f)
+                if hasattr(self.files, 'setlist'):
+                    self.files.setlist('imagen', [convertido])
+                else:
+                    self.files['imagen'] = convertido
+            except Exception:
+                pass
+
+    def clean_imagen(self):
+        f = self.cleaned_data.get('imagen')
+        if not f:
+            return f
+        if _es_heic(getattr(f, 'name', ''), getattr(f, 'content_type', '')):
+            try:
+                return _convertir_a_jpeg(f)
+            except Exception:
+                raise forms.ValidationError(
+                    'No se pudo leer la imagen HEIC. Cambie el iPhone a '
+                    'Ajustes > Camara > Formatos > Mas compatible o use JPG.'
+                )
+        return f
+
     class Meta:
         model = Producto
         fields = [
@@ -59,6 +130,62 @@ PresentacionFormSet = inlineformset_factory(
     form=PresentacionProductoForm,
     extra=1, can_delete=True,
 )
+
+
+class AlmacenForm(forms.ModelForm):
+    class Meta:
+        model = Almacen
+        fields = ['nombre', 'descripcion', 'activo']
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre del almacén'}),
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'activo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_nombre(self):
+        nombre = (self.cleaned_data.get('nombre') or '').strip()
+        if not nombre:
+            raise forms.ValidationError('El nombre es obligatorio.')
+        qs = Almacen.objects.filter(nombre__iexact=nombre)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Ya existe un almacén con ese nombre.')
+        return nombre
+
+
+class ConfigTiendaForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['nombre_tienda', 'logo', 'telefono', 'direccion']
+        widgets = {
+            'nombre_tienda': forms.TextInput(attrs={'class': 'form-control'}),
+            'logo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control'}),
+            'direccion': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+
+class ConfigAparienciaForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['color_acento', 'tema_por_defecto']
+        widgets = {
+            'color_acento': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
+            'tema_por_defecto': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+
+class ConfigRegionalForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['moneda', 'simbolo_moneda', 'impuesto_defecto', 'idioma']
+        widgets = {
+            'moneda': forms.TextInput(attrs={'class': 'form-control'}),
+            'simbolo_moneda': forms.TextInput(attrs={'class': 'form-control'}),
+            'impuesto_defecto': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'idioma': forms.Select(attrs={'class': 'form-select'}, choices=[('es', 'Español')]),
+        }
 
 
 class CategoriaForm(forms.ModelForm):

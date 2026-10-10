@@ -43,8 +43,8 @@
     <p><strong>Cajero:</strong> {{ venta.cajero.get_full_name|default:venta.cajero.username }}</p>
     <p><strong>Pago:</strong> {{ venta.get_metodo_pago_display }}</p>
     {% if venta.metodo_pago == 'mixto' %}
-    <p style="font-size:11px;">  Efectivo: ${{ venta.monto_recibido|floatformat:0 }}</p>
-    <p style="font-size:11px;">  Transferencia: ${{ venta.monto_transferencia|floatformat:0 }}</p>
+    <p style="font-size:11px;">  Efectivo: {{ TIENDA.simbolo|default:"$" }}{{ venta.monto_recibido|floatformat:0 }}</p>
+    <p style="font-size:11px;">  Transferencia: {{ TIENDA.simbolo|default:"$" }}{{ venta.monto_transferencia|floatformat:0 }}</p>
     {% endif %}
     <div class="divider"></div>
     <table>
@@ -64,8 +64,8 @@
             <tr>
                 <td></td>
                 <td>{{ d.cantidad|floatformat:"-3" }}</td>
-                <td>${{ d.precio_unitario|floatformat:0 }}</td>
-                <td style="text-align:right">${{ d.subtotal|floatformat:0 }}</td>
+                <td>{{ TIENDA.simbolo|default:"$" }}{{ d.precio_unitario|floatformat:0 }}</td>
+                <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ d.subtotal|floatformat:0 }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -74,34 +74,34 @@
     <table>
         <tr class="total-section">
             <td>TOTAL:</td>
-            <td style="text-align:right">${{ venta.total|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.total|floatformat:0 }}</td>
         </tr>
         {% if venta.metodo_pago == 'efectivo' %}
         <tr>
             <td>Efectivo:</td>
-            <td style="text-align:right">${{ venta.monto_recibido|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.monto_recibido|floatformat:0 }}</td>
         </tr>
         <tr>
             <td>Cambio:</td>
-            <td style="text-align:right">${{ venta.cambio|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.cambio|floatformat:0 }}</td>
         </tr>
         {% elif venta.metodo_pago == 'transferencia' %}
         <tr>
             <td>Transferencia:</td>
-            <td style="text-align:right">${{ venta.monto_transferencia|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.monto_transferencia|floatformat:0 }}</td>
         </tr>
         {% elif venta.metodo_pago == 'mixto' %}
         <tr>
             <td>Efectivo:</td>
-            <td style="text-align:right">${{ venta.monto_recibido|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.monto_recibido|floatformat:0 }}</td>
         </tr>
         <tr>
             <td>Transferencia:</td>
-            <td style="text-align:right">${{ venta.monto_transferencia|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.monto_transferencia|floatformat:0 }}</td>
         </tr>
         <tr>
             <td>Cambio:</td>
-            <td style="text-align:right">${{ venta.cambio|floatformat:0 }}</td>
+            <td style="text-align:right">{{ TIENDA.simbolo|default:"$" }}{{ venta.cambio|floatformat:0 }}</td>
         </tr>
         {% endif %}
     </table>

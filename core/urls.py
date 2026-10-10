@@ -68,8 +68,10 @@ urlpatterns = [
     path('almacen/existencias/', views.almacen_stock, name='almacen_stock'),
     path('almacen/entradas/', views.almacen_entrada_lista, name='almacen_entrada_lista'),
     path('almacen/entradas/nueva/', views.almacen_entrada_crear, name='almacen_entrada_crear'),
+    path('almacen/entradas/<int:pk>/cancelar/', views.almacen_entrada_cancelar, name='almacen_entrada_cancelar'),
     path('almacen/traslados/', views.almacen_traslado_lista, name='almacen_traslado_lista'),
     path('almacen/traslados/nuevo/', views.almacen_traslado_crear, name='almacen_traslado_crear'),
+    path('almacen/traslados/<int:pk>/cancelar/', views.almacen_traslado_cancelar, name='almacen_traslado_cancelar'),
     path('almacen/movimientos/', views.almacen_movimientos, name='almacen_movimientos'),
     path('almacen/ajuste/', views.almacen_ajuste, name='almacen_ajuste'),
     # Retiros Donacion
@@ -121,5 +123,10 @@ urlpatterns = [
     path('mostrador/estado/', views.mostrador_estado, name='mostrador_estado'),
     path('pos/mostrador/empujar/', views.pos_mostrador_empujar, name='pos_mostrador_empujar'),
     path('pos/mostrador/limpiar/', views.pos_mostrador_limpiar, name='pos_mostrador_limpiar'),
+    # Configuración (solo admin)
+    path('configuracion/', views.configuracion, name='configuracion'),
+    path('configuracion/almacenes/crear/', views.config_almacen_crear, name='config_almacen_crear'),
+    path('configuracion/almacenes/<int:pk>/editar/', views.config_almacen_editar, name='config_almacen_editar'),
+    path('configuracion/almacenes/<int:pk>/toggle/', views.config_almacen_toggle, name='config_almacen_toggle'),
 ]
 

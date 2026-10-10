@@ -19,16 +19,29 @@
 <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle me-1"></i>
     Cada traslado descuenta del almacén, suma al punto de venta y genera la entrada que se ve en el IPB.
-    Los traslados no se pueden borrar.
+    {% if request.user.perfil.es_admin %}
+    Solo el administrador puede cancelarlos (revierte todo) y únicamente si el stock alcanza y el día del IPB sigue abierto.
+    {% endif %}
 </div>
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-8">
+            <div class="col-md-5">
                 <label class="form-label">Fecha</label>
                 <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
             </div>
+            {% if multi %}
+            <div class="col-md-3">
+                <label class="form-label">Almacén</label>
+                <select name="almacen" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for a in almacenes %}
+                    <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <div class="col-md-4">
                 <button type="submit" class="btn btn-outline-primary w-100">
                     <i class="bi bi-search me-1"></i> Consultar
@@ -46,11 +59,13 @@
                     <tr>
                         <th>No. Traslado</th>
                         <th>Fecha</th>
+                        {% if multi %}<th>Origen → Destino</th>{% endif %}
                         <th>Producto</th>
                         <th>Cantidad</th>
                         <th>Costo</th>
                         <th>Entrada IPB</th>
                         <th>Registrado por</th>
+                        {% if request.user.perfil.es_admin %}<th class="text-end">Acción</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -58,6 +73,7 @@
                     <tr>
                         <td><small class="fw-bold">{{ t.numero_traslado }}</small></td>
                         <td>{{ t.fecha_traslado|date:"d/m/Y H:i" }}</td>
+                        {% if multi %}<td><small>{{ t.origen.nombre|default:"—" }} → {% if t.destino_tipo == "ALMACEN" %}{{ t.destino_almacen.nombre }}{% else %}POS{% endif %}</small></td>{% endif %}
                         <td>{{ t.producto.nombre }}</td>
                         <td><span class="badge bg-warning text-dark">{{ t.cantidad_fmt }}</span></td>
                         <td class="mono">${{ t.costo_unitario|floatformat:2 }}</td>
@@ -67,10 +83,21 @@
                             {% else %}-{% endif %}
                         </td>
                         <td><small>{{ t.registrado_por.get_full_name|default:t.registrado_por.username }}</small></td>
+                        {% if request.user.perfil.es_admin %}
+                        <td class="text-end">
+                            <form method="post" action="{% url 'core:almacen_traslado_cancelar' t.pk %}" class="d-inline"
+                                  onsubmit="return confirm('¿Cancelar el traslado {{ t.numero_traslado }}? Se devolverá {{ t.cantidad_fmt }} de {{ t.producto.nombre }} al almacén y se eliminará su entrada del IPB.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar traslado">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                                </button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="8" class="text-center text-muted py-4">
                             No hay traslados en esta fecha.
                         </td>
                     </tr>

@@ -21,17 +21,88 @@
     <div class="card-body p-4">
         <form method="post" autocomplete="off" id="almEntradaForm">
             {% csrf_token %}
+            {% if multi %}
             <div class="mb-3">
-                <label class="form-label">Producto * <span class="text-muted fw-normal">(previamente creado en el sistema)</span></label>
-                <select name="producto" id="productoSelect" class="form-select" required>
-                    <option value="">Seleccione un producto...</option>
-                    {% for p in productos %}
-                    <option value="{{ p.id }}" data-costo="{{ p.precio_compra }}" data-unidad="{{ p.unidad_medida }}">
-                        {{ p.codigo }} - {{ p.nombre }} (costo actual ${{ p.precio_compra|floatformat:2 }})
-                    </option>
+                <label class="form-label">Almacén destino *</label>
+                <select name="almacen" class="form-select" required>
+                    <option value="">Seleccione almacén...</option>
+                    {% for a in almacenes %}
+                    <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
                     {% endfor %}
                 </select>
             </div>
+            {% elif almacen_actual %}
+            <input type="hidden" name="almacen" value="{{ almacen_actual.pk }}">
+            {% endif %}
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <label class="form-label mb-0">Producto * <span class="text-muted fw-normal" id="prodSelName"></span></label>
+                    {% if request.user.perfil.es_admin %}
+                    <a href="{{ next_crear|default:'/productos/crear/' }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-plus-lg me-1"></i> Nuevo producto
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="input-group mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="productoSearch" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
+                </div>
+                <select name="producto" id="productoSelect" hidden>
+                    <option value="">Seleccione un producto...</option>
+                    {% for p in productos %}
+                    <option value="{{ p.id }}" data-costo="{{ p.precio_compra }}" data-unidad="{{ p.unidad_medida }}" data-nombre="{{ p.nombre }}" {% if preseleccionado == p.id|stringformat:"s" %}selected{% endif %}>
+                        {{ p.codigo }} - {{ p.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="prod-grid" id="productoGrid" role="listbox" aria-label="Productos">
+                    {% for p in productos %}
+                    <button type="button" class="prod-card" role="option" aria-selected="false" data-id="{{ p.id }}" data-text="{{ p.codigo }} {{ p.nombre }}">
+                        <span class="prod-img">
+                            {% if p.imagen_url %}
+                            <img src="{{ p.imagen_url }}" alt="" loading="lazy" onerror="this.remove()">
+                            {% else %}
+                            <span class="prod-initial">{{ p.nombre|slice:":1"|upper }}</span>
+                            {% endif %}
+                        </span>
+                        <span class="prod-name">{{ p.nombre }}</span>
+                        <span class="prod-code mono">{{ p.codigo }}</span>
+                        <span class="prod-meta">${{ p.precio_compra|floatformat:2 }} · <span data-exist-for="{{ p.id }}">0</span> {{ p.unidad_medida }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <small class="text-muted" id="productoCount"></small>
+                    {% if request.user.perfil.es_admin %}
+                    <small class="text-muted">¿No existe? Créelo y volverá aquí con el producto ya seleccionado.</small>
+                    {% else %}
+                    <small class="text-muted">¿No existe? Pida al administrador que lo cree.</small>
+                    {% endif %}
+                </div>
+                {% if request.user.perfil.es_admin %}
+                <div class="alert alert-warning py-2 mt-2 mb-0" id="productoEmpty" style="display:none;">
+                    Sin coincidencias para esa búsqueda.
+                    <a href="{{ next_crear|default:'/productos/crear/' }}" class="alert-link">Crear el producto aquí</a>
+                    y volverá a esta entrada para seleccionarlo.
+                </div>
+                {% else %}
+                <div class="alert alert-warning py-2 mt-2 mb-0" id="productoEmpty" style="display:none;">
+                    Sin coincidencias para esa búsqueda.
+                </div>
+                {% endif %}
+            </div>
+<style>
+.prod-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; max-height:340px; overflow-y:auto; padding:2px; }
+.prod-card { display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 8px; border:1.5px solid var(--line, #e5e7eb); border-radius:12px; background:var(--surface, #fff); cursor:pointer; text-align:center; }
+.prod-card:hover { border-color:var(--accent, #6f53d9); }
+.prod-card.sel { border-color:var(--accent, #6f53d9); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent, #6f53d9) 25%, transparent); background:var(--accent-tint, #f1ecfd); }
+.prod-img { width:52px; height:52px; border-radius:10px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--soft, #f3f4f6); }
+.prod-img img { width:100%; height:100%; object-fit:cover; }
+.prod-initial { font-size:1.4rem; font-weight:700; color:var(--ink-3, #6b7280); }
+.prod-name { font-size:13px; font-weight:600; line-height:1.2; }
+.prod-code { font-size:11px; color:var(--ink-3, #6b7280); }
+.prod-meta { font-size:11px; color:var(--ink-3, #6b7280); }
+</style>
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">Cantidad * <span class="text-muted fw-normal" id="unidadLbl"></span></label>
@@ -74,30 +145,74 @@
     </div>
 </div>
 
+<script id="stockData" type="application/json">{{ stock_json|default:"{}"|safe }}</script>
 <script>
 (function(){
     var sel = document.getElementById('productoSelect');
     var cant = document.getElementById('inputCantidad');
     var costo = document.getElementById('inputCosto');
+    var search = document.getElementById('productoSearch');
+    var countEl = document.getElementById('productoCount');
+    var emptyEl = document.getElementById('productoEmpty');
+    var grid = document.getElementById('productoGrid');
+    var selName = document.getElementById('prodSelName');
+    var cards = grid ? Array.prototype.slice.call(grid.querySelectorAll('.prod-card')) : [];
+    function norm(s){ return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    try {
+        var sm = JSON.parse(document.getElementById('stockData').textContent || '{}');
+        Object.keys(sm).forEach(function(k){
+            var el = grid ? grid.querySelector('[data-exist-for="' + k + '"]') : null;
+            if (el) el.textContent = sm[k];
+        });
+    } catch(e){}
+    function pintarInfo(){
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value){
+            document.getElementById('unidadLbl').textContent = '· ' + (opt.getAttribute('data-unidad') || '');
+            if (selName) selName.textContent = '· ' + (opt.getAttribute('data-nombre') || opt.text);
+            if ((parseFloat(costo.value) || 0) === 0) costo.value = opt.getAttribute('data-costo') || '0';
+        } else {
+            document.getElementById('unidadLbl').textContent = '';
+            if (selName) selName.textContent = '';
+        }
+    }
+    function marcarTarjetas(){
+        cards.forEach(function(c){
+            var on = sel.value && c.getAttribute('data-id') === sel.value;
+            c.classList.toggle('sel', !!on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+    }
+    function elegir(id){
+        sel.value = id;
+        marcarTarjetas(); pintarInfo(); total();
+    }
     function total(){
         var c = parseFloat(cant.value) || 0, p = parseFloat(costo.value) || 0;
         document.getElementById('totalPreview').textContent = '$' + (c * p).toFixed(2);
     }
-    sel.addEventListener('change', function(){
-        var opt = sel.options[sel.selectedIndex];
-        if (opt && opt.value){
-            document.getElementById('unidadLbl').textContent = '· ' + (opt.getAttribute('data-unidad') || '');
-            if ((parseFloat(costo.value) || 0) === 0) costo.value = opt.getAttribute('data-costo') || '0';
-        } else {
-            document.getElementById('unidadLbl').textContent = '';
-        }
-        total();
+    function filtrar(){
+        var q = norm(search ? search.value : '');
+        var visibles = 0;
+        cards.forEach(function(c){
+            var hit = !q || norm(c.getAttribute('data-text')).indexOf(q) !== -1;
+            c.style.display = hit ? '' : 'none';
+            if (hit) visibles++;
+        });
+        if (countEl) countEl.textContent = visibles + ' de ' + cards.length + ' productos';
+        if (emptyEl) emptyEl.style.display = (q && visibles === 0) ? '' : 'none';
+    }
+    cards.forEach(function(c){
+        c.addEventListener('click', function(){ elegir(c.getAttribute('data-id')); });
     });
+    if (search) search.addEventListener('input', filtrar);
     cant.addEventListener('input', total);
     costo.addEventListener('input', total);
-    total();
+    marcarTarjetas(); pintarInfo(); total(); filtrar();
+    // Si viene ?producto= recién creado, asegura foco en cantidad
+    if (sel.value && cant) { try { cant.focus(); } catch(e){} }
     document.getElementById('almEntradaForm').addEventListener('submit', function(e){
-        if (!sel.value){ e.preventDefault(); alert('Seleccione un producto.'); return; }
+        if (!sel.value){ e.preventDefault(); alert('Seleccione un producto tocando su tarjeta.'); return; }
         var btn = document.getElementById('btnGuardar');
         if (btn.disabled){ e.preventDefault(); return; }
         btn.disabled = true;

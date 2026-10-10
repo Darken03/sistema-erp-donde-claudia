@@ -15,17 +15,101 @@
     <div class="card-body p-4">
         <form method="post" autocomplete="off" id="trasladoForm">
             {% csrf_token %}
+            {% if multi %}
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Almacén origen *</label>
+                    <select name="origen" class="form-select" required>
+                        <option value="">Seleccione origen...</option>
+                        {% for a in almacenes %}
+                        <option value="{{ a.pk }}" {% if almacen_actual and almacen_actual.pk == a.pk %}selected{% endif %}>{{ a.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Destino *</label>
+                    <select name="destino_tipo" id="destTipo" class="form-select">
+                        <option value="POS">Punto de venta (mostrador)</option>
+                        <option value="ALMACEN">Otro almacén</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="destAlmWrap" style="display:none;">
+                    <label class="form-label">Almacén destino *</label>
+                    <select name="destino_almacen" class="form-select">
+                        <option value="">Seleccione destino...</option>
+                        {% for a in almacenes %}
+                        <option value="{{ a.pk }}">{{ a.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <script>
+            (function(){var d=document.getElementById('destTipo'),w=document.getElementById('destAlmWrap');
+            function t(){if(w)w.style.display=(d&&d.value==='ALMACEN')?'':'none';}
+            if(d){d.addEventListener('change',t);t();}})();
+            </script>
+            {% elif almacen_actual %}
+            <input type="hidden" name="origen" value="{{ almacen_actual.pk }}">
+            <input type="hidden" name="destino_tipo" value="POS">
+            {% else %}
+            <input type="hidden" name="destino_tipo" value="POS">
+            {% endif %}
             <div class="mb-3">
-                <label class="form-label">Producto *</label>
-                <select name="producto" id="productoSelect" class="form-select" required>
+                <label class="form-label">Producto * <span class="text-muted fw-normal" id="prodSelName"></span></label>
+                <div class="input-group mb-2">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="productoSearch" class="form-control" placeholder="Buscar por código o nombre..." autocomplete="off">
+                </div>
+                <select name="producto" id="productoSelect" hidden>
                     <option value="">Seleccione un producto...</option>
                     {% for p in productos %}
-                    <option value="{{ p.id }}" {% if preseleccionado == p.id|stringformat:"s" %}selected{% endif %}>
+                    <option value="{{ p.id }}" data-nombre="{{ p.nombre }}" {% if preseleccionado == p.id|stringformat:"s" %}selected{% endif %}>
                         {{ p.codigo }} - {{ p.nombre }}
                     </option>
                     {% endfor %}
                 </select>
+                <div class="prod-grid" id="productoGrid" role="listbox" aria-label="Productos">
+                    {% for p in productos %}
+                    <button type="button" class="prod-card" role="option" aria-selected="false" data-id="{{ p.id }}" data-text="{{ p.codigo }} {{ p.nombre }}">
+                        <span class="prod-img">
+                            {% if p.imagen_url %}
+                            <img src="{{ p.imagen_url }}" alt="" loading="lazy" onerror="this.remove()">
+                            {% else %}
+                            <span class="prod-initial">{{ p.nombre|slice:":1"|upper }}</span>
+                            {% endif %}
+                        </span>
+                        <span class="prod-name">{{ p.nombre }}</span>
+                        <span class="prod-code mono">{{ p.codigo }}</span>
+                        <span class="prod-meta"><span data-exist-for="{{ p.id }}">0</span> en almacén</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <small class="text-muted" id="productoCount"></small>
+                </div>
+                {% if not productos %}
+                <div class="alert alert-info py-2 mt-2 mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Sin existencias en el almacén. Registre primero una
+                    <a href="{% url 'core:almacen_entrada_crear' %}" class="alert-link">Entrada al almacén</a>.
+                </div>
+                {% endif %}
+                <div class="alert alert-warning py-2 mt-2 mb-0" id="productoEmpty" style="display:none;">
+                    Sin coincidencias para esa búsqueda.
+                </div>
             </div>
+<style>
+.prod-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; max-height:340px; overflow-y:auto; padding:2px; }
+.prod-card { display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 8px; border:1.5px solid var(--line, #e5e7eb); border-radius:12px; background:var(--surface, #fff); cursor:pointer; text-align:center; }
+.prod-card:hover { border-color:var(--accent, #6f53d9); }
+.prod-card.sel { border-color:var(--accent, #6f53d9); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent, #6f53d9) 25%, transparent); background:var(--accent-tint, #f1ecfd); }
+.prod-img { width:52px; height:52px; border-radius:10px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--soft, #f3f4f6); }
+.prod-img img { width:100%; height:100%; object-fit:cover; }
+.prod-initial { font-size:1.4rem; font-weight:700; color:var(--ink-3, #6b7280); }
+.prod-name { font-size:13px; font-weight:600; line-height:1.2; }
+.prod-code { font-size:11px; color:var(--ink-3, #6b7280); }
+.prod-meta { font-size:11px; color:var(--ink-3, #6b7280); }
+</style>
             <div class="alert alert-light border d-flex justify-content-between align-items-center" id="dispBox" style="display:none;">
                 <span class="fw-bold text-muted small">DISPONIBLE EN ALMACÉN</span>
                 <span class="fs-5 fw-bold mono" id="dispVal">0</span>
@@ -55,8 +139,21 @@
     var sel = document.getElementById('productoSelect');
     var box = document.getElementById('dispBox');
     var val = document.getElementById('dispVal');
+    var search = document.getElementById('productoSearch');
+    var countEl = document.getElementById('productoCount');
+    var emptyEl = document.getElementById('productoEmpty');
+    var grid = document.getElementById('productoGrid');
+    var selName = document.getElementById('prodSelName');
+    var cards = grid ? Array.prototype.slice.call(grid.querySelectorAll('.prod-card')) : [];
     var map = {};
     try { map = JSON.parse(document.getElementById('stockData').textContent || '{}'); } catch(e){ map = {}; }
+    function norm(s){ return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    try {
+        Object.keys(map).forEach(function(k){
+            var el = grid ? grid.querySelector('[data-exist-for="' + k + '"]') : null;
+            if (el) el.textContent = map[k];
+        });
+    } catch(e){}
     function pintar(){
         if (sel.value && map.hasOwnProperty(sel.value)){
             box.style.display = '';
@@ -67,9 +164,39 @@
         } else {
             box.style.display = 'none';
         }
+        var opt = sel.options[sel.selectedIndex];
+        if (selName) selName.textContent = (opt && opt.value) ? '· ' + (opt.getAttribute('data-nombre') || opt.text) : '';
     }
-    sel.addEventListener('change', pintar);
-    pintar();
+    function marcarTarjetas(){
+        cards.forEach(function(c){
+            var on = sel.value && c.getAttribute('data-id') === sel.value;
+            c.classList.toggle('sel', !!on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+    }
+    function elegir(id){
+        sel.value = id;
+        marcarTarjetas(); pintar();
+    }
+    function filtrar(){
+        var q = norm(search ? search.value : '');
+        var visibles = 0;
+        cards.forEach(function(c){
+            var hit = !q || norm(c.getAttribute('data-text')).indexOf(q) !== -1;
+            c.style.display = hit ? '' : 'none';
+            if (hit) visibles++;
+        });
+        if (countEl) countEl.textContent = visibles + ' de ' + cards.length + ' productos';
+        if (emptyEl) emptyEl.style.display = (q && visibles === 0) ? '' : 'none';
+    }
+    cards.forEach(function(c){
+        c.addEventListener('click', function(){ elegir(c.getAttribute('data-id')); });
+    });
+    if (search) search.addEventListener('input', filtrar);
+    marcarTarjetas(); pintar(); filtrar();
+    document.getElementById('trasladoForm').addEventListener('submit', function(e){
+        if (!sel.value){ e.preventDefault(); alert('Seleccione un producto tocando su tarjeta.'); }
+    });
 })();
 </script>
 {% endblock %}

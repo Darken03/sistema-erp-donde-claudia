@@ -16,10 +16,11 @@
     {# Capa responsive S20/tablet: excluye .pos-shell, tickets e impresión #}
     <link href="{% static 'css/responsive.css' %}" rel="stylesheet">
     <link rel="icon" type="image/png" href="{% static 'img/logo-donde-clau.png' %}">
+    {% if TIENDA.color_acento %}<style>:root{--accent:{{ TIENDA.color_acento }};}</style>{% endif %}
     <script>
     /* Tema claro/oscuro global — se aplica antes del primer pintado para evitar flash */
     (function(){ try {
-      var t = localStorage.getItem('bizm_theme') || 'light';
+      var t = localStorage.getItem('bizm_theme') || '{{ TIENDA.tema|default:"light" }}';
       document.documentElement.setAttribute('data-theme', t);
     } catch(e){ document.documentElement.setAttribute('data-theme','light'); } })();
     </script>
@@ -31,8 +32,9 @@
         {% block sidebar %}
         <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau" class="sidebar-store-logo">
-                <div><div class="sidebar-name">BizMaster</div><div class="sidebar-sub">Donde Clau</div></div>
+                {% if TIENDA.logo_url %}<img src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}" class="sidebar-store-logo">
+                {% else %}<img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau" class="sidebar-store-logo">{% endif %}
+                <div><div class="sidebar-name">BizMaster</div><div class="sidebar-sub">{{ TIENDA.nombre|default:"Donde Clau" }}</div></div>
             </div>
             <div class="sidebar-menu">
                 <ul class="nav flex-column">
@@ -53,15 +55,15 @@
                         </div>
                     </li>
                     <li class="nav-item side-group">
-                        <button type="button" class="side-group-btn {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideInventario" aria-expanded="{% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
+                        <button type="button" class="side-group-btn {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or request.resolver_match.url_name == 'entrada_lista' or request.resolver_match.url_name == 'ajuste_inventario' %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideInventario" aria-expanded="{% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or request.resolver_match.url_name == 'entrada_lista' or request.resolver_match.url_name == 'ajuste_inventario' %}true{% else %}false{% endif %}">
                             <i class="bi bi-box-seam me-2"></i> Inventario
                             <i class="bi bi-chevron-down chev"></i>
                         </button>
-                        <div class="collapse side-group-collapse {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or 'entrada' in request.resolver_match.url_name or 'ajuste' in request.resolver_match.url_name %}show{% endif %}" id="sideInventario">
+                        <div class="collapse side-group-collapse {% if 'producto' in request.resolver_match.url_name or 'categoria' in request.resolver_match.url_name or request.resolver_match.url_name == 'entrada_lista' or request.resolver_match.url_name == 'ajuste_inventario' %}show{% endif %}" id="sideInventario">
                             <a class="side-sub-link {% if 'producto' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:producto_lista' %}">Productos</a>
                             <a class="side-sub-link {% if 'categoria' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:categoria_lista' %}">Categorías</a>
-                            <a class="side-sub-link {% if 'entrada' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:entrada_lista' %}">Entradas</a>
-                            <a class="side-sub-link {% if 'ajuste' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:ajuste_inventario' %}">Ajustes</a>
+                            <a class="side-sub-link {% if request.resolver_match.url_name == 'entrada_lista' %}active{% endif %}" href="{% url 'core:entrada_lista' %}">Entradas</a>
+                            <a class="side-sub-link {% if request.resolver_match.url_name == 'ajuste_inventario' %}active{% endif %}" href="{% url 'core:ajuste_inventario' %}">Ajustes</a>
                         </div>
                     </li>
                     <li class="nav-item side-group">
@@ -76,7 +78,7 @@
                     </li>
                     <li class="nav-item side-group">
                         <button type="button" class="side-group-btn {% if 'almacen' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideAlmacen" aria-expanded="{% if 'almacen' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
-                            <i class="bi bi-warehouse me-2"></i> Almacén
+                            <i class="bi bi-shop me-2"></i> Almacén
                             <i class="bi bi-chevron-down chev"></i>
                         </button>
                         <div class="collapse side-group-collapse {% if 'almacen' in request.resolver_match.url_name %}show{% endif %}" id="sideAlmacen">
@@ -97,11 +99,16 @@
                             <i class="bi bi-calculator me-2"></i> Arqueos
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'configuracion' in request.resolver_match.url_name or 'config_' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:configuracion' %}">
+                            <i class="bi bi-gear me-2"></i> Configuración
+                        </a>
+                    </li>
                     {% elif request.user.perfil.es_almacenero %}
                     {# Almacenero: solo el almacén #}
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'almacen_panel' %}active{% endif %}" href="{% url 'core:almacen_panel' %}">
-                            <i class="bi bi-warehouse me-2"></i> Almacén
+                            <i class="bi bi-shop me-2"></i> Almacén
                         </a>
                     </li>
                     <li class="nav-item">
@@ -180,6 +187,11 @@
                     <button type="button" class="theme-toggle" id="themeToggle" title="Alternar modo oscuro / claro" aria-label="Alternar modo oscuro">
                         <i class="bi bi-moon-stars" id="themeToggleIcon"></i>
                     </button>
+                    {% if request.user.perfil.es_admin %}
+                    <a class="theme-toggle" id="configBtn" href="{% url 'core:configuracion' %}" title="Configuración" aria-label="Configuración">
+                        <i class="bi bi-gear"></i>
+                    </a>
+                    {% endif %}
                 </div>
             </nav>
             {% endblock %}

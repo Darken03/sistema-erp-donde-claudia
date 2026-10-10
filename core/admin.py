@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Producto, Categoria, PerfilUsuario, Venta, DetalleVenta, Empleado, Turno, Deudor, Deuda, AbonoDeuda, PresentacionProducto, MostradorEstado, ArqueoTurno, ConteoCiego, ConteoCiegoLinea
+from .models import Producto, Categoria, PerfilUsuario, Venta, DetalleVenta, Empleado, Turno, Deudor, Deuda, AbonoDeuda, PresentacionProducto, MostradorEstado, ArqueoTurno, ConteoCiego, ConteoCiegoLinea, Almacen, ConfiguracionTienda, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento
 
 
 @admin.register(Categoria)
@@ -120,3 +120,39 @@ class ConteoCiegoAdmin(admin.ModelAdmin):
     list_display = ['id', 'turno', 'estado', 'creado_por', 'fecha_creacion', 'fecha_cierre']
     list_filter = ['estado']
     inlines = [ConteoCiegoLineaInline]
+
+
+@admin.register(Almacen)
+class AlmacenAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'activo', 'es_principal', 'fecha_creacion']
+    list_filter = ['activo', 'es_principal']
+    search_fields = ['nombre']
+
+
+@admin.register(ConfiguracionTienda)
+class ConfiguracionTiendaAdmin(admin.ModelAdmin):
+    list_display = ['nombre_tienda', 'moneda', 'color_acento', 'tema_por_defecto']
+
+
+@admin.register(AlmacenStock)
+class AlmacenStockAdmin(admin.ModelAdmin):
+    list_display = ['producto', 'almacen', 'cantidad', 'fecha_actualizacion']
+    list_filter = ['almacen']
+
+
+@admin.register(AlmacenEntrada)
+class AlmacenEntradaAdmin(admin.ModelAdmin):
+    list_display = ['numero_entrada', 'producto', 'almacen', 'cantidad', 'fecha_entrada']
+    list_filter = ['almacen']
+
+
+@admin.register(AlmacenTraslado)
+class AlmacenTrasladoAdmin(admin.ModelAdmin):
+    list_display = ['numero_traslado', 'producto', 'origen', 'destino_tipo', 'destino_almacen', 'cantidad', 'fecha_traslado']
+    list_filter = ['destino_tipo', 'origen']
+
+
+@admin.register(AlmacenMovimiento)
+class AlmacenMovimientoAdmin(admin.ModelAdmin):
+    list_display = ['fecha', 'producto', 'almacen', 'tipo', 'cantidad']
+    list_filter = ['tipo', 'almacen']

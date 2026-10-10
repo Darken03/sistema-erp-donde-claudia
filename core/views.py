@@ -22,9 +22,13 @@ from .models import (
     Producto, Categoria, Venta, DetalleVenta, PerfilUsuario, Empleado, Turno, Gasto, EntradaProducto, RetiroDonacion, InventarioDiario, MovimientoInventario, Deuda, Deudor, AbonoDeuda, MostradorEstado,
     fmt_cantidad_unidad, ArqueoTurno, ConteoCiego, ConteoCiegoLinea,
     DENOMINACIONES_CUP, DENOMINACIONES_CUP_VALOR,
-    ALMACEN_PROVEEDOR, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento,
+    ALMACEN_PROVEEDOR, almacen_proveedor_nombre, Almacen, ConfiguracionTienda,
+    get_almacen_unico, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento,
 )
-from .forms import ProductoForm, CategoriaForm, EmpleadoForm, PresentacionFormSet
+from .forms import (
+    ProductoForm, CategoriaForm, EmpleadoForm, PresentacionFormSet,
+    AlmacenForm, ConfigTiendaForm, ConfigAparienciaForm, ConfigRegionalForm,
+)
 
 
 def ahora_servidor():
@@ -239,10 +243,36 @@ def producto_detalle(request, pk):
 
 @requiere_admin
 def producto_crear(request):
+    def _next_seguro(valor):
+        if not valor:
+            return ''
+        valor = str(valor).strip()
+        # Solo rutas internas (evita open-redirect): /algo, sin // ni esquema.
+        if not valor.startswith('/') or valor.startswith('//'):
+            return ''
+        if ' ' in valor or '\\' in valor:
+            return ''
+        return valor
+
+    next_url = _next_seguro(request.POST.get('next') or request.GET.get('next'))
+    desde_almacen = next_url.startswith('/almacen/')
     if request.method == 'POST':
         form = ProductoForm(request.POST, request.FILES)
         if form.is_valid():
             producto = form.save()
+            if desde_almacen:
+                # Nace solo en almacén: sin stock en el POS e invisible
+                # hasta su primer traslado. La mercancía entra vía Entrada.
+                producto.stock = Decimal('0')
+                producto.visible_pos = False
+                producto.save(update_fields=['stock', 'visible_pos'])
+                messages.info(
+                    request,
+                    f'{producto.nombre} nace solo en el almacén (sin stock en el POS). '
+                    'Regístrele una Entrada y trasládelo para publicarlo.')
+            else:
+                producto.visible_pos = True
+                producto.save(update_fields=['visible_pos'])
             formset = PresentacionFormSet(request.POST, instance=producto)
             if formset.is_valid():
                 formset.save()
@@ -250,6 +280,9 @@ def producto_crear(request):
             else:
                 _asegurar_presentacion_default(producto)
                 messages.warning(request, 'Producto creado, pero revise las presentaciones.')
+            if next_url:
+                sep = '&' if '?' in next_url else '?'
+                return redirect(f'{next_url}{sep}producto={producto.pk}')
             return redirect('core:producto_lista')
         else:
             formset = PresentacionFormSet(request.POST)
@@ -258,6 +291,7 @@ def producto_crear(request):
         formset = PresentacionFormSet()
     return render(request, 'core/producto_form.html', {
         'form': form, 'formset': formset, 'titulo': 'Crear Producto',
+        'next': next_url,
     })
 
 
@@ -1134,8 +1168,8 @@ def pos(request):
     except PerfilUsuario.DoesNotExist:
         pass
 
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
-    categorias = Categoria.objects.filter(productos__activo=True, productos__stock__gt=0).distinct()
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
+    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True, productos__stock__gt=0).distinct()
     
     es_admin = request.user.perfil.es_admin if hasattr(request.user, 'perfil') else False
 
@@ -1181,7 +1215,7 @@ def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
     categoria_id = request.POST.get('categoria', '')
 
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related(
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
         'categoria').prefetch_related('presentaciones')
     if categoria_id:
         productos = productos.filter(categoria_id=categoria_id)
@@ -1240,6 +1274,8 @@ def pos_procesar_venta(request):
 
         for item in items:
             producto = get_object_or_404(Producto, pk=item['id'])
+            if not producto.activo or not producto.visible_pos:
+                return JsonResponse({'error': f'{producto.nombre} no está disponible en el punto de venta.'}, status=400)
             try:
                 cantidad = Decimal(str(item['cantidad']))
             except Exception:
@@ -1335,11 +1371,11 @@ def pos_ping(request):
 @login_required
 def pos_catalogo(request):
     """Catálogo completo para cache offline del POS (productos + categorías)."""
-    productos = Producto.objects.filter(activo=True).select_related(
+    productos = Producto.objects.filter(activo=True, visible_pos=True).select_related(
         'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
     data = [_serializar_producto_pos(p) for p in productos]
     categorias = list(Categoria.objects.filter(
-        productos__activo=True).distinct().values('id', 'nombre'))
+        productos__activo=True, productos__visible_pos=True).distinct().values('id', 'nombre'))
     return JsonResponse({'productos': data, 'categorias': categorias})
 
 
@@ -1414,7 +1450,8 @@ def _obtener_datos_ipb(fecha):
     
     inventarios = InventarioDiario.objects.filter(
         fecha=fecha,
-        producto__activo=True
+        producto__activo=True,
+        producto__visible_pos=True
     ).select_related('producto__categoria').order_by('producto__nombre')
     
     entradas_dia = EntradaProducto.objects.filter(
@@ -1655,8 +1692,8 @@ def _sincronizar_inventario_dia(fecha):
     if fecha < FECHA_INICIO_SISTEMA:
         return
 
-    productos = Producto.objects.filter(activo=True)
-    
+    productos = Producto.objects.filter(activo=True, visible_pos=True)
+
     ventas_dia = DetalleVenta.objects.filter(
         venta__fecha_venta__date=fecha,
         venta__cancelada=False
@@ -2378,10 +2415,12 @@ def entrada_lista(request):
 # ============================================================
 
 def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
-                        usuario=None, referencia_id=None, descripcion=''):
+                        usuario=None, referencia_id=None, descripcion='',
+                        almacen=None):
     """Auditoría propia del almacén (no toca IPB ni MovimientoInventario)."""
     AlmacenMovimiento.objects.create(
         producto=producto,
+        almacen=almacen,
         tipo=tipo,
         cantidad=cantidad,
         stock_anterior=stock_anterior,
@@ -2396,16 +2435,35 @@ def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
 def almacen_panel(request):
     """Panel del almacén: existencias valorizadas y actividad del día."""
     hoy = ahora_servidor().date()
+    almacen_f, multi = _resolver_almacen(request)
     existencias = AlmacenStock.objects.select_related(
-        'producto').order_by('producto__nombre')
+        'producto', 'almacen').order_by('producto__nombre')
+    movs = AlmacenMovimiento.objects.select_related('producto', 'almacen')
+    entradas_qs = AlmacenEntrada.objects.filter(fecha_entrada__date=hoy)
+    traslados_qs = AlmacenTraslado.objects.filter(fecha_traslado__date=hoy)
+    if almacen_f:
+        existencias = existencias.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        entradas_qs = entradas_qs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        traslados_qs = traslados_qs.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f) | Q(origen__isnull=True))
     valor = sum((s.valor for s in existencias), Decimal('0'))
+    almacenes_info = []
+    if multi:
+        for a in Almacen.activos():
+            st = AlmacenStock.objects.filter(
+                Q(almacen=a) | Q(almacen__isnull=True)).select_related('producto') if a.es_principal else AlmacenStock.objects.filter(almacen=a).select_related('producto')
+            v = sum((s.valor for s in st), Decimal('0'))
+            almacenes_info.append({'obj': a, 'productos': st.count(), 'valor': v})
     context = {
         'total_productos': existencias.count(),
         'valor_almacen': valor,
-        'entradas_hoy': AlmacenEntrada.objects.filter(fecha_entrada__date=hoy).count(),
-        'traslados_hoy': AlmacenTraslado.objects.filter(fecha_traslado__date=hoy).count(),
-        'recientes': AlmacenMovimiento.objects.select_related(
-            'producto').order_by('-fecha')[:10],
+        'entradas_hoy': entradas_qs.count(),
+        'traslados_hoy': traslados_qs.count(),
+        'recientes': movs.order_by('-fecha')[:10],
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+        'almacenes_info': almacenes_info,
     }
     return render(request, 'core/almacen_panel.html', context)
 
@@ -2414,8 +2472,11 @@ def almacen_panel(request):
 def almacen_stock(request):
     """Existencias del almacén con acceso a trasladar (y ajustar si admin)."""
     query = (request.GET.get('q') or '').strip()
+    almacen_f, multi = _resolver_almacen(request)
     stocks = AlmacenStock.objects.select_related(
-        'producto__categoria').order_by('producto__nombre')
+        'producto__categoria', 'almacen').order_by('producto__nombre')
+    if almacen_f:
+        stocks = stocks.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
     if query:
         q_norm = _norm_sin_tildes(query)
         ids_codigo = [s.producto_id for s in stocks
@@ -2429,6 +2490,8 @@ def almacen_stock(request):
         es_admin = True
     return render(request, 'core/almacen_stock.html', {
         'stocks': stocks, 'q': query, 'es_admin': es_admin,
+        'almacenes': Almacen.activos(), 'almacen_actual': almacen_f,
+        'multi': multi,
     })
 
 
@@ -2443,14 +2506,20 @@ def almacen_entrada_lista(request):
             fecha = hoy
     else:
         fecha = hoy
+    almacen_f, multi = _resolver_almacen(request)
     entradas = AlmacenEntrada.objects.filter(
-        fecha_entrada__date=fecha).select_related('producto').order_by('-fecha_entrada')
+        fecha_entrada__date=fecha).select_related('producto', 'almacen').order_by('-fecha_entrada')
+    if almacen_f:
+        entradas = entradas.filter(almacen=almacen_f)
     resumen = entradas.aggregate(total=Sum('costo_total'), cantidad=Count('id'))
     return render(request, 'core/almacen_entrada_lista.html', {
         'entradas': entradas,
         'fecha': fecha.strftime('%Y-%m-%d'),
         'resumen_total': float(resumen['total'] or 0),
         'resumen_cantidad': resumen['cantidad'] or 0,
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
     })
 
 
@@ -2470,6 +2539,10 @@ def almacen_entrada_crear(request):
             costo_unitario = Decimal('0')
         proveedor = request.POST.get('proveedor', '').strip()
         descripcion = request.POST.get('descripcion', '').strip()
+        almacen_f, multi = _resolver_almacen(request)
+        if multi and not almacen_f:
+            messages.error(request, 'Seleccione el almacén destino.')
+            return redirect('core:almacen_entrada_crear')
         if not producto_id or cantidad <= 0:
             messages.error(request, 'Seleccione un producto y cantidad mayor a 0 (admite 3 decimales, ej. 2.500 lb).')
             return redirect('core:almacen_entrada_crear')
@@ -2482,25 +2555,81 @@ def almacen_entrada_crear(request):
             entrada = AlmacenEntrada.objects.create(
                 numero_entrada=AlmacenEntrada.generar_numero(),
                 producto=producto,
+                almacen=almacen_f,
                 cantidad=cantidad,
                 costo_unitario=costo_unitario,
                 proveedor=proveedor,
                 descripcion=descripcion,
                 registrado_por=request.user,
             )
-            stock, _ = AlmacenStock.objects.get_or_create(
-                producto=producto, defaults={'cantidad': Decimal('0')})
+            stock, _ = _get_or_create_stock(producto, almacen_f)
             anterior = stock.cantidad
             stock.cantidad = anterior + cantidad
             stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
             _movimiento_almacen(producto, 'entrada', cantidad, anterior,
                                 stock.cantidad, request.user, entrada.id,
-                                f'Entrada almacén #{entrada.numero_entrada}')
+                                f'Entrada almacén #{entrada.numero_entrada}',
+                                almacen=almacen_f)
         messages.success(
             request,
             f'Entrada {entrada.numero_entrada} al almacén: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre}.')
         return redirect('core:almacen_entrada_lista')
-    return render(request, 'core/almacen_entrada_form.html', {'productos': productos})
+    preseleccionado = request.GET.get('producto', '') or request.POST.get('producto', '')
+    from urllib.parse import quote as _quote
+    _aqui = request.get_full_path()
+    next_crear = f'/productos/crear/?next={_quote(_aqui, safe="")}'
+    almacen_f, multi = _resolver_almacen(request)
+    stock_map = _stock_map_para(almacen_f)
+    return render(request, 'core/almacen_entrada_form.html', {
+        'productos': productos,
+        'preseleccionado': str(preseleccionado),
+        'next_crear': next_crear,
+        'stock_map': stock_map,
+        'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_admin
+@require_POST
+def almacen_entrada_cancelar(request, pk):
+    """Cancela una entrada al almacén revirtiendo su stock (solo admin).
+
+    El costo del producto no se revierte (pudo cambiar con entradas
+    posteriores). Se bloquea si el almacén ya no tiene suficiente
+    (parte de la mercancía se trasladó al POS).
+    """
+    from django.urls import reverse as _reverse
+    entrada = get_object_or_404(AlmacenEntrada, pk=pk)
+    producto = entrada.producto
+    cantidad = entrada.cantidad
+    numero = entrada.numero_entrada
+    fecha_qs = entrada.fecha_entrada.date().isoformat()
+    with transaction.atomic():
+        stock = _stock_de(producto, entrada.almacen)
+        disponible = stock.cantidad if stock else Decimal('0')
+        if disponible < cantidad:
+            messages.error(
+                request,
+                f'No se puede cancelar la entrada {numero}: el almacén solo tiene '
+                f'{"%g" % float(disponible)} {producto.unidad_medida} de {producto.nombre} '
+                '(parte ya se trasladó al punto de venta).')
+            return redirect(f"{_reverse('core:almacen_entrada_lista')}?fecha={fecha_qs}")
+        anterior = stock.cantidad
+        stock.cantidad = anterior - cantidad
+        stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+        entrada.delete()
+        _movimiento_almacen(producto, 'ajuste', cantidad, anterior,
+                            stock.cantidad, request.user, None,
+                            f'Cancelación entrada almacén #{numero}',
+                            almacen=stock.almacen)
+    messages.success(
+        request,
+        f'Entrada {numero} cancelada: {"%g" % float(cantidad)} {producto.unidad_medida} '
+        f'de {producto.nombre} devueltos (existencia actual: {"%g" % float(stock.cantidad)}).')
+    return redirect(f"{_reverse('core:almacen_entrada_lista')}?fecha={fecha_qs}")
 
 
 @requiere_almacen
@@ -2514,21 +2643,34 @@ def almacen_traslado_lista(request):
             fecha = hoy
     else:
         fecha = hoy
+    almacen_f, multi = _resolver_almacen(request)
     traslados = AlmacenTraslado.objects.filter(
-        fecha_traslado__date=fecha).select_related('producto').order_by('-fecha_traslado')
+        fecha_traslado__date=fecha).select_related(
+        'producto', 'origen', 'destino_almacen').order_by('-fecha_traslado')
+    if almacen_f:
+        traslados = traslados.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f))
     return render(request, 'core/almacen_traslado_lista.html', {
         'traslados': traslados,
         'fecha': fecha.strftime('%Y-%m-%d'),
         'resumen_cantidad': traslados.count(),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
     })
 
 
 @requiere_almacen
 def almacen_traslado_crear(request):
-    """Traslado almacén -> POS: genera la entrada visible en el IPB."""
-    productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('nombre')
-    stock_map = {s.producto_id: s.cantidad
-                 for s in AlmacenStock.objects.all()}
+    """Traslado con origen y destino (POS o almacén).
+
+    - destino POS: genera EntradaProducto (proveedor 'Almacén: <nombre>')
+      visible en IPB/POS.
+    - destino ALMACEN: mueve entre stocks sin tocar el POS.
+    """
+    almacen_sel, multi = _resolver_almacen(request, campo='origen')
+    productos = Producto.objects.filter(
+        activo=True, almacen_stock__cantidad__gt=0).select_related('categoria').order_by('nombre')
+    stock_map = _stock_map_para(almacen_sel)
     preseleccionado = request.GET.get('producto', '')
     if request.method == 'POST':
         producto_id = request.POST.get('producto')
@@ -2536,56 +2678,206 @@ def almacen_traslado_crear(request):
             cantidad = Decimal(str(request.POST.get('cantidad', '0')))
         except Exception:
             cantidad = Decimal('0')
+        origen, multi_post = _resolver_almacen(request, campo='origen')
+        destino_tipo = (request.POST.get('destino_tipo') or 'POS').upper()
+        if destino_tipo not in ('POS', 'ALMACEN'):
+            destino_tipo = 'POS'
+        destino_almacen = None
+        if destino_tipo == 'ALMACEN':
+            try:
+                destino_almacen = Almacen.objects.get(
+                    pk=int(request.POST.get('destino_almacen') or 0), activo=True)
+            except (Almacen.DoesNotExist, ValueError, TypeError):
+                destino_almacen = None
+            if not destino_almacen:
+                messages.error(request, 'Seleccione el almacén destino.')
+                return redirect('core:almacen_traslado_crear')
+        if multi_post and not origen:
+            messages.error(request, 'Seleccione el almacén origen.')
+            return redirect('core:almacen_traslado_crear')
+        if destino_tipo == 'ALMACEN' and origen and destino_almacen and origen.pk == destino_almacen.pk:
+            messages.error(request, 'El origen y el destino no pueden ser el mismo almacén.')
+            return redirect('core:almacen_traslado_crear')
         if not producto_id or cantidad <= 0:
             messages.error(request, 'Seleccione un producto y cantidad mayor a 0.')
             return redirect('core:almacen_traslado_crear')
         producto = get_object_or_404(Producto, pk=producto_id)
         with transaction.atomic():
-            stock = AlmacenStock.objects.select_for_update().filter(
-                producto=producto).first()
+            stock = _stock_de(producto, origen)
             disponible = stock.cantidad if stock else Decimal('0')
             if disponible < cantidad:
                 messages.error(
                     request,
-                    f'Sin existencias suficientes en almacén para {producto.nombre} (disponible: {"%g" % float(disponible)}).')
+                    f'Sin existencias suficientes en {origen.nombre if origen else "almacén"} para {producto.nombre} (disponible: {"%g" % float(disponible)}).')
                 return redirect('core:almacen_traslado_crear')
             costo = producto.precio_compra or Decimal('0')
             num_traslado = AlmacenTraslado.generar_numero()
-            num_entrada = EntradaProducto.generar_numero()
-            entrada = EntradaProducto.objects.create(
-                numero_entrada=num_entrada,
-                producto=producto,
-                cantidad=cantidad,
-                costo_unitario=costo,
-                proveedor=ALMACEN_PROVEEDOR,
-                descripcion=f'Traslado {num_traslado} del almacén al punto de venta',
-            )
-            _registrar_movimiento(producto, 'entrada', cantidad, request.user,
-                                  entrada.id, f'Entrada #{num_entrada} (traslado {num_traslado} del almacén)')
+            entrada = None
+            num_entrada = None
+            if destino_tipo == 'POS':
+                num_entrada = EntradaProducto.generar_numero()
+                entrada = EntradaProducto.objects.create(
+                    numero_entrada=num_entrada,
+                    producto=producto,
+                    cantidad=cantidad,
+                    costo_unitario=costo,
+                    proveedor=almacen_proveedor_nombre(origen.nombre if origen else ''),
+                    descripcion=f'Traslado {num_traslado} de {origen.nombre if origen else "almacén"} al punto de venta',
+                )
+                _registrar_movimiento(producto, 'entrada', cantidad, request.user,
+                                      entrada.id, f'Entrada #{num_entrada} (traslado {num_traslado} del almacén)')
             traslado = AlmacenTraslado.objects.create(
                 numero_traslado=num_traslado,
                 producto=producto,
                 cantidad=cantidad,
                 costo_unitario=costo,
+                origen=origen,
+                destino_tipo=destino_tipo,
+                destino_almacen=destino_almacen,
                 registrado_por=request.user,
                 entrada_generada=entrada,
             )
             anterior = stock.cantidad
             stock.cantidad = anterior - cantidad
             stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
-            _movimiento_almacen(producto, 'traslado', cantidad, anterior,
-                                stock.cantidad, request.user, traslado.id,
-                                f'Traslado #{num_traslado} al punto de venta (entrada {num_entrada})')
-            _sincronizar_inventario_dia(ahora_servidor().date())
-        messages.success(
-            request,
-            f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} al punto de venta (entrada {num_entrada} en el IPB).')
+            if destino_tipo == 'POS':
+                if not producto.visible_pos:
+                    producto.visible_pos = True
+                    producto.save(update_fields=['visible_pos'])
+                _movimiento_almacen(producto, 'traslado', cantidad, anterior,
+                                    stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} al punto de venta (entrada {num_entrada})',
+                                    almacen=origen)
+                _sincronizar_inventario_dia(ahora_servidor().date())
+                messages.success(
+                    request,
+                    f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} al punto de venta (entrada {num_entrada} en el IPB, ahora visible en el POS).')
+            else:
+                dest_stock, _ = _get_or_create_stock(producto, destino_almacen)
+                ant_dest = dest_stock.cantidad
+                dest_stock.cantidad = ant_dest + cantidad
+                dest_stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+                _movimiento_almacen(producto, 'traslado', cantidad, anterior,
+                                    stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} a {destino_almacen.nombre}',
+                                    almacen=origen)
+                _movimiento_almacen(producto, 'entrada', cantidad, ant_dest,
+                                    dest_stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} desde {origen.nombre if origen else "?"}',
+                                    almacen=destino_almacen)
+                messages.success(
+                    request,
+                    f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} de {origen.nombre} a {destino_almacen.nombre}.')
         return redirect('core:almacen_traslado_lista')
     return render(request, 'core/almacen_traslado_form.html', {
         'productos': productos, 'stock_map': stock_map,
         'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
         'preseleccionado': str(preseleccionado),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_sel,
+        'multi': multi,
     })
+
+
+@requiere_admin
+@require_POST
+def almacen_traslado_cancelar(request, pk):
+    """Cancela un traslado devolviendo todo a la normalidad (solo admin).
+
+    Devuelve la cantidad al almacén, la descuenta del punto de venta,
+    elimina la entrada IPB generada y el traslado, con rastro en ambas
+    auditorías. Se bloquea si el POS ya no tiene suficiente (se vendió)
+    o si el día del IPB está cerrado. Si el producto había sido publicado
+    por este traslado y queda sin más traslados ni stock en el POS, vuelve
+    a ocultarse.
+    """
+    from django.urls import reverse as _reverse
+    traslado = get_object_or_404(AlmacenTraslado, pk=pk)
+    producto = traslado.producto
+    cantidad = traslado.cantidad
+    numero = traslado.numero_traslado
+    fecha = traslado.fecha_traslado.date()
+    fecha_qs = fecha.isoformat()
+    if InventarioDiario.objects.filter(
+            producto=producto, fecha=fecha, cerrado=True).exists():
+        messages.error(
+            request,
+            f'No se puede cancelar el traslado {numero}: el IPB del '
+            f'{fecha.strftime("%d/%m/%Y")} ya está cerrado.')
+        return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+    with transaction.atomic():
+        producto = Producto.objects.select_for_update().get(pk=producto.pk)
+        origen = traslado.origen
+        if traslado.destino_tipo == 'ALMACEN' and traslado.destino_almacen_id:
+            dest = _stock_de(producto, traslado.destino_almacen)
+            disp_dest = dest.cantidad if dest else Decimal('0')
+            if disp_dest < cantidad:
+                messages.error(
+                    request,
+                    f'No se puede cancelar el traslado {numero}: el almacén destino solo tiene '
+                    f'{"%g" % float(disp_dest)} {producto.unidad_medida} de {producto.nombre}.')
+                return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+            stock = _stock_de(producto, origen)
+            if stock is None:
+                stock, _ = _get_or_create_stock(producto, origen)
+            ant_alm = stock.cantidad
+            stock.cantidad = ant_alm + cantidad
+            stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            ant_dest = dest.cantidad
+            dest.cantidad = ant_dest - cantidad
+            dest.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            num_entrada = None
+            traslado.delete()
+            _movimiento_almacen(producto, 'ajuste', cantidad, ant_dest,
+                                dest.cantidad, request.user, None,
+                                f'Cancelación traslado #{numero} (devolución a origen)',
+                                almacen=dest.almacen)
+            messages.success(request, f'Traslado {numero} cancelado: devuelto al almacén origen.')
+            return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+        if producto.stock < cantidad:
+            messages.error(
+                request,
+                f'No se puede cancelar el traslado {numero}: el punto de venta solo tiene '
+                f'{"%g" % float(producto.stock)} {producto.unidad_medida} de {producto.nombre} '
+                '(parte ya se vendió).')
+            return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+        stock = _stock_de(producto, origen)
+        if stock is None:
+            stock, _ = _get_or_create_stock(producto, origen)
+        ant_alm = stock.cantidad
+        ant_pos = producto.stock
+        producto.stock = ant_pos - cantidad
+        campos = ['stock']
+        otros = AlmacenTraslado.objects.filter(producto=producto).exclude(pk=traslado.pk).exists()
+        if producto.stock == 0 and not otros:
+            producto.visible_pos = False
+            campos.append('visible_pos')
+        producto.save(update_fields=campos)
+        stock.cantidad = ant_alm + cantidad
+        stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+        entrada = traslado.entrada_generada
+        num_entrada = entrada.numero_entrada if entrada else None
+        if entrada is not None:
+            entrada.delete()
+        traslado.delete()
+        _movimiento_almacen(producto, 'ajuste', cantidad, ant_alm,
+                            stock.cantidad, request.user, None,
+                            f'Cancelación traslado #{numero} (devolución al almacén)',
+                            almacen=origen)
+        MovimientoInventario.objects.create(
+            producto=producto, tipo='ajuste', cantidad=-cantidad,
+            stock_anterior=ant_pos, stock_nuevo=producto.stock,
+            referencia_id=None,
+            descripcion=(f'Cancelación traslado #{numero}' +
+                         (f' (entrada {num_entrada} eliminada)' if num_entrada else '')),
+            usuario=request.user,
+        )
+        _sincronizar_inventario_dia(fecha)
+    messages.success(
+        request,
+        f'Traslado {numero} cancelado: {"%g" % float(cantidad)} {producto.unidad_medida} '
+        f'de {producto.nombre} devueltos al almacén.')
+    return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
 
 
 @requiere_almacen
@@ -2593,7 +2885,10 @@ def almacen_movimientos(request):
     """Auditoría propia del almacén (entradas, traslados y ajustes)."""
     query = (request.GET.get('q') or '').strip()
     tipo = request.GET.get('tipo', '')
-    movs = AlmacenMovimiento.objects.select_related('producto', 'usuario').order_by('-fecha')
+    almacen_f, multi = _resolver_almacen(request)
+    movs = AlmacenMovimiento.objects.select_related('producto', 'usuario', 'almacen').order_by('-fecha')
+    if almacen_f:
+        movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
     if tipo in ('entrada', 'traslado', 'ajuste'):
         movs = movs.filter(tipo=tipo)
     if query:
@@ -2603,6 +2898,8 @@ def almacen_movimientos(request):
         movs = movs.filter(producto_id__in=ids)
     return render(request, 'core/almacen_movimientos.html', {
         'movimientos': movs[:300], 'q': query, 'tipo': tipo,
+        'almacenes': Almacen.activos(), 'almacen_actual': almacen_f,
+        'multi': multi,
     })
 
 
@@ -2610,8 +2907,8 @@ def almacen_movimientos(request):
 def almacen_ajuste(request):
     """Ajuste de existencias del almacén (solo admin)."""
     productos = Producto.objects.filter(activo=True).order_by('nombre')
-    stock_map = {s.producto_id: s.cantidad
-                 for s in AlmacenStock.objects.all()}
+    almacen_f, multi = _resolver_almacen(request)
+    stock_map = _stock_map_para(almacen_f)
     preseleccionado = request.GET.get('producto', '') or request.POST.get('producto', '')
     if request.method == 'POST':
         producto_id = request.POST.get('producto')
@@ -2620,6 +2917,10 @@ def almacen_ajuste(request):
         except Exception:
             nueva = None
         motivo = (request.POST.get('motivo') or '').strip()
+        almacen_post, multi_post = _resolver_almacen(request)
+        if multi_post and not almacen_post:
+            messages.error(request, 'Seleccione el almacén del ajuste.')
+            return redirect('core:almacen_ajuste')
         if not producto_id or nueva is None or nueva < 0:
             messages.error(request, 'Seleccione un producto y una cantidad válida (0 o más).')
             return redirect('core:almacen_ajuste')
@@ -2628,13 +2929,13 @@ def almacen_ajuste(request):
             return redirect('core:almacen_ajuste')
         producto = get_object_or_404(Producto, pk=producto_id)
         with transaction.atomic():
-            stock, _ = AlmacenStock.objects.get_or_create(
-                producto=producto, defaults={'cantidad': Decimal('0')})
+            stock, _ = _get_or_create_stock(producto, almacen_post)
             anterior = stock.cantidad
             stock.cantidad = nueva
             stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
             _movimiento_almacen(producto, 'ajuste', nueva, anterior, nueva,
-                                request.user, None, f'Ajuste: {motivo}')
+                                request.user, None, f'Ajuste: {motivo}',
+                                almacen=almacen_post)
         messages.success(
             request, f'Existencia de {producto.nombre} ajustada a {"%g" % float(nueva)}.')
         return redirect('core:almacen_stock')
@@ -2642,7 +2943,251 @@ def almacen_ajuste(request):
         'productos': productos, 'stock_map': stock_map,
         'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
         'preseleccionado': str(preseleccionado),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
     })
+
+
+# ============================================================
+# CONFIGURACIÓN (tienda + almacenes + apariencia + regional, solo admin)
+# ============================================================
+
+def _tienda_context():
+    try:
+        cfg = ConfiguracionTienda.get_solo()
+    except Exception:
+        cfg = None
+    if cfg is None:
+        return {'TIENDA': {'nombre': 'Donde Clau', 'logo_url': None,
+                           'color_acento': '#6f53d9', 'tema': 'light'}}
+    return {'TIENDA': {'nombre': cfg.nombre_tienda, 'logo_url': cfg.logo_url,
+                       'color_acento': cfg.color_acento or '#6f53d9',
+                       'tema': cfg.tema_por_defecto or 'light',
+                       'moneda': cfg.moneda, 'simbolo': cfg.simbolo_moneda,
+                       'objeto': cfg}}
+
+
+def configuracion_tienda(request):
+    """Context processor: nombre/logo/acento disponibles en base.html."""
+    try:
+        return _tienda_context()
+    except Exception:
+        return {}
+
+
+def _resolver_almacen(request, campo='almacen'):
+    """Devuelve el almacén activo según GET→sesión→único.
+
+    Con 1 solo almacén devuelve ese sin exigir selector (compatibilidad).
+    Con 2+ exige selección explícita (GET o sesión) o None.
+    """
+    try:
+        activos = list(Almacen.activos())
+    except Exception:
+        return None, False
+    if len(activos) == 1:
+        return activos[0], False
+    if not activos:
+        return None, True
+    # GET manda: si el parámetro viene presente pero vacío ("Todos"),
+    # limpia la sesión para volver a ver todos los almacenes.
+    if campo in request.GET or 'origen' in request.GET or 'almacen' in request.GET:
+        raw = request.GET.get(campo, '')
+        if not raw and campo != 'origen':
+            raw = request.GET.get('origen', '')
+        if not raw and campo != 'almacen':
+            raw = request.GET.get('almacen', '')
+        if not raw:
+            request.session.pop('almacen_id', None)
+            return None, True
+        try:
+            elegido = next((a for a in activos if a.pk == int(raw)), None)
+        except (ValueError, TypeError):
+            elegido = None
+        if elegido:
+            request.session['almacen_id'] = elegido.pk
+        return elegido, True
+    aid = request.POST.get(campo) or request.session.get('almacen_id')
+    # Compat: el formulario de traslados usa campo 'origen'; acéptalo como alias.
+    if not aid and campo != 'origen':
+        aid = request.POST.get('origen')
+    if not aid and campo != 'almacen':
+        aid = request.POST.get('almacen')
+    try:
+        aid = int(aid) if aid else None
+    except (ValueError, TypeError):
+        aid = None
+    return next((a for a in activos if a.pk == aid), None), True
+
+
+def _stock_de(producto, almacen):
+    """Stock del (producto, almacén) con compat legacy (almacen NULL→origen)."""
+    if almacen is None:
+        return AlmacenStock.objects.select_for_update().filter(
+            producto=producto, almacen__isnull=True).first()
+    stock = AlmacenStock.objects.select_for_update().filter(
+        producto=producto, almacen=almacen).first()
+    if stock is None:
+        # Migra fila legacy sin almacén para no perder existencias previas.
+        legacy = AlmacenStock.objects.select_for_update().filter(
+            producto=producto, almacen__isnull=True).first()
+        if legacy is not None:
+            legacy.almacen = almacen
+            legacy.save(update_fields=['almacen'])
+            return legacy
+    return stock
+
+
+def _get_or_create_stock(producto, almacen):
+    """Get_or_create por (producto, almacén) reutilizando fila legacy NULL."""
+    if almacen is None:
+        s = AlmacenStock.objects.filter(
+            producto=producto, almacen__isnull=True).first()
+        if s is not None:
+            return s, False
+        return AlmacenStock.objects.create(
+            producto=producto, almacen=None, cantidad=Decimal('0')), True
+    try:
+        return AlmacenStock.objects.get(producto=producto, almacen=almacen), False
+    except AlmacenStock.DoesNotExist:
+        pass
+    legacy = AlmacenStock.objects.filter(
+        producto=producto, almacen__isnull=True).first()
+    if legacy is not None:
+        legacy.almacen = almacen
+        legacy.save(update_fields=['almacen'])
+        return legacy, False
+    return AlmacenStock.objects.create(
+        producto=producto, almacen=almacen, cantidad=Decimal('0')), True
+
+
+def _stock_map_para(almacen_f):
+    """Mapa producto_id→cantidad incluyendo filas legacy NULL si filtra."""
+    qs = AlmacenStock.objects.all()
+    rows = list(qs)
+    m = {}
+    for s in rows:
+        if almacen_f and s.almacen_id not in (almacen_f.pk, None):
+            continue
+        # El stock del almacén manda; el legacy solo si no hay propio.
+        if s.producto_id not in m or (s.almacen_id == (almacen_f.pk if almacen_f else None)):
+            m[s.producto_id] = s.cantidad
+    return m
+
+
+@requiere_admin
+def configuracion(request):
+    cfg = ConfiguracionTienda.get_solo()
+    tab = request.GET.get('tab', 'tienda')
+    if request.method == 'POST':
+        form_kind = request.POST.get('form_kind', 'tienda')
+        if form_kind == 'tienda':
+            f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
+        elif form_kind == 'apariencia':
+            f = ConfigAparienciaForm(request.POST, instance=cfg)
+        else:
+            f = ConfigRegionalForm(request.POST, instance=cfg)
+        if f.is_valid():
+            f.save()
+            messages.success(request, 'Configuración guardada.')
+        else:
+            messages.error(request, 'Revise los datos del formulario.')
+        return redirect(f"{reverse_configuracion()}?tab={form_kind}")
+    almacenes = list(Almacen.objects.all().order_by('nombre'))
+    # Enriquece con stock valorizado.
+    stocks = AlmacenStock.objects.select_related('producto', 'almacen')
+    por_alm = {}
+    for s in stocks:
+        d = por_alm.setdefault(s.almacen_id, {'productos': 0, 'valor': Decimal('0')})
+        d['productos'] += 1
+        try:
+            d['valor'] += s.cantidad * (s.producto.precio_compra or 0)
+        except Exception:
+            pass
+    for a in almacenes:
+        d = por_alm.get(a.pk, {'productos': 0, 'valor': Decimal('0')})
+        a.info_productos = d['productos']
+        a.info_valor = d['valor']
+    return render(request, 'core/configuracion.html', {
+        'cfg': cfg, 'tab': tab,
+        'form_tienda': ConfigTiendaForm(instance=cfg),
+        'form_apariencia': ConfigAparienciaForm(instance=cfg),
+        'form_regional': ConfigRegionalForm(instance=cfg),
+        'form_almacen': AlmacenForm(),
+        'almacenes': almacenes, 'por_alm': por_alm,
+        'multi': Almacen.objects.filter(activo=True).count() > 1,
+    })
+
+
+def reverse_configuracion():
+    from django.urls import reverse
+    return reverse('core:configuracion')
+
+
+@requiere_admin
+def config_almacen_crear(request):
+    if request.method != 'POST':
+        return redirect('core:configuracion')
+    form = AlmacenForm(request.POST)
+    if form.is_valid():
+        form.save()
+        messages.success(request, f"Almacén '{form.instance.nombre}' creado.")
+    else:
+        messages.error(request, 'No se pudo crear: ' + '; '.join(
+            f"{k}: {', '.join(v)}" for k, v in form.errors.items()))
+    return redirect('/configuracion/?tab=almacenes')
+
+
+@requiere_admin
+def config_almacen_editar(request, pk):
+    alm = get_object_or_404(Almacen, pk=pk)
+    if request.method == 'POST':
+        form = AlmacenForm(request.POST, instance=alm)
+        if form.is_valid():
+            # No permitir desactivar aquí si viola reglas (lo valida el toggle).
+            if not form.cleaned_data.get('activo') and alm.activo:
+                return config_almacen_toggle(request, pk)
+            form.save()
+            messages.success(request, f"Almacén '{alm.nombre}' actualizado.")
+        else:
+            messages.error(request, 'No se pudo guardar: nombre duplicado o inválido.')
+        return redirect('/configuracion/?tab=almacenes')
+    return render(request, 'core/configuracion.html', {
+        'cfg': ConfiguracionTienda.get_solo(), 'tab': 'almacenes',
+        'form_tienda': ConfigTiendaForm(instance=ConfiguracionTienda.get_solo()),
+        'form_apariencia': ConfigAparienciaForm(instance=ConfiguracionTienda.get_solo()),
+        'form_regional': ConfigRegionalForm(instance=ConfiguracionTienda.get_solo()),
+        'form_almacen': AlmacenForm(instance=alm),
+        'almacenes': Almacen.objects.all().order_by('nombre'),
+        'por_alm': {}, 'multi': Almacen.objects.filter(activo=True).count() > 1,
+        'editando': alm,
+    })
+
+
+@requiere_admin
+@require_POST
+def config_almacen_toggle(request, pk):
+    alm = get_object_or_404(Almacen, pk=pk)
+    if alm.activo:
+        # Bloqueos: único activo o con stock.
+        if Almacen.objects.filter(activo=True).count() <= 1:
+            messages.error(request, 'No se puede desactivar el único almacén activo.')
+            return redirect('/configuracion/?tab=almacenes')
+        tiene = AlmacenStock.objects.filter(almacen=alm, cantidad__gt=0).exists()
+        if tiene:
+            messages.error(
+                request,
+                f"No se puede desactivar '{alm.nombre}': aún tiene existencias. Trasládelas primero.")
+            return redirect('/configuracion/?tab=almacenes')
+        alm.activo = False
+        alm.save(update_fields=['activo'])
+        messages.success(request, f"Almacén '{alm.nombre}' desactivado.")
+    else:
+        alm.activo = True
+        alm.save(update_fields=['activo'])
+        messages.success(request, f"Almacén '{alm.nombre}' activado.")
+    return redirect('/configuracion/?tab=almacenes')
 
 
 # ============================================================
@@ -2692,7 +3237,7 @@ def retiro_donacion_lista(request):
 
 @requiere_admin
 def retiro_donacion_crear(request):
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related('categoria').order_by('categoria__nombre', 'nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').order_by('categoria__nombre', 'nombre')
 
     if request.method == 'POST':
         beneficiario_nombre = request.POST.get('beneficiario_nombre', '').strip()
@@ -3209,7 +3754,7 @@ def deuda_crear(request):
             return redirect('core:deuda_crear')
 
     deudores = Deudor.objects.filter(activo=True).order_by('nombre', 'apellido')
-    productos = Producto.objects.filter(activo=True, stock__gt=0).prefetch_related('presentaciones').order_by('nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).prefetch_related('presentaciones').order_by('nombre')
     preselect = request.GET.get('deudor', '')
     return render(request, 'core/deuda_form.html', {
         'titulo': 'Registrar Deuda',
@@ -3594,9 +4139,9 @@ def catalogo(request):
     from .models import Categoria
 
     categorias = list(
-        Categoria.objects.filter(productos__activo=True).distinct().order_by('nombre'))
+        Categoria.objects.filter(productos__activo=True, productos__visible_pos=True).distinct().order_by('nombre'))
     productos = list(
-        Producto.objects.filter(activo=True).select_related('categoria')
+        Producto.objects.filter(activo=True, visible_pos=True).select_related('categoria')
         .prefetch_related('presentaciones').order_by('nombre'))
     sin_cat = [p for p in productos if p.categoria_id is None]
 
@@ -4123,8 +4668,8 @@ def conteo_contar(request, pk):
         return redirect('core:mi_panel')
     if conteo.estado != 'abierto':
         return redirect('core:conteo_comparar', pk=conteo.pk)
-    productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('categoria__nombre', 'nombre')
-    categorias = Categoria.objects.filter(productos__activo=True).distinct().order_by('nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True).select_related('categoria').order_by('categoria__nombre', 'nombre')
+    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True).distinct().order_by('nombre')
     actuales = {l.producto_id: l.cantidad for l in conteo.lineas.all()}
     if request.method == 'POST':
         for p in productos:
@@ -4197,7 +4742,7 @@ def conteo_autosave(request, pk):
         pids = [int(pid) for pid in lineas.keys()]
     except Exception:
         return JsonResponse({'ok': False, 'error': 'IDs de producto inválidos.'}, status=400)
-    productos = {p.pk: p for p in Producto.objects.filter(pk__in=pids, activo=True)}
+    productos = {p.pk: p for p in Producto.objects.filter(pk__in=pids, activo=True, visible_pos=True)}
     guardados = 0
     eliminados = 0
     errores = {}
@@ -4249,7 +4794,7 @@ def conteo_cerrar(request, pk):
         return redirect('core:conteo_comparar', pk=conteo.pk)
     # Productos sin línea quedan en 0 contado.
     vistos = set(conteo.lineas.values_list('producto_id', flat=True))
-    for p in Producto.objects.filter(activo=True):
+    for p in Producto.objects.filter(activo=True, visible_pos=True):
         linea, _ = ConteoCiegoLinea.objects.get_or_create(
             conteo=conteo, producto=p, defaults={'cantidad': Decimal('0')})
         linea.stock_sistema = p.stock

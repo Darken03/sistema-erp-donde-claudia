@@ -192,6 +192,8 @@ class Producto(models.Model):
     permite_decimal = models.BooleanField(default=False)
     imagen = models.ImageField(upload_to='productos/', blank=True, null=True)
     activo = models.BooleanField(default=True)
+    # False = solo existe en almacén hasta su primer traslado al POS.
+    visible_pos = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -1109,10 +1111,107 @@ class ConteoCiegoLinea(models.Model):
 ALMACEN_PROVEEDOR = 'Almacén'
 
 
+def almacen_proveedor_nombre(nombre_almacen):
+    """Proveedor trazable por almacén (IPB).
+
+    Compat histórico: el Principal keeps 'Almacén' exacto (tests + IPB
+    previo); el resto usa 'Almacén: <nombre>'.
+    """
+    base = (nombre_almacen or '').strip()
+    if not base or base == 'Almacén Principal':
+        return ALMACEN_PROVEEDOR
+    return f"{ALMACEN_PROVEEDOR}: {base}"
+
+
+class Almacen(models.Model):
+    """Almacén físico/lógico con nombre propio, creado por el cliente."""
+    nombre = models.CharField(max_length=100, unique=True)
+    descripcion = models.TextField(blank=True, default='')
+    activo = models.BooleanField(default=True)
+    es_principal = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Almacén'
+        verbose_name_plural = 'Almacenes'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def activos(cls):
+        return cls.objects.filter(activo=True).order_by('nombre')
+
+    @classmethod
+    def get_unico(cls):
+        """Devuelve el único almacén activo o None si hay 0 o 2+."""
+        qs = list(cls.objects.filter(activo=True).order_by('id')[:2])
+        return qs[0] if len(qs) == 1 else None
+
+
+def get_almacen_unico():
+    return Almacen.get_unico()
+
+
+class ConfiguracionTienda(models.Model):
+    """Singleton (pk=1) con datos de tienda, apariencia y regional."""
+    nombre_tienda = models.CharField(max_length=150, default='Donde Clau')
+    logo = models.ImageField(upload_to='tienda/', blank=True, null=True)
+    telefono = models.CharField(max_length=30, blank=True, default='')
+    direccion = models.CharField(max_length=255, blank=True, default='')
+    moneda = models.CharField(max_length=10, default='CUP')
+    simbolo_moneda = models.CharField(max_length=5, default='$')
+    impuesto_defecto = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    color_acento = models.CharField(max_length=7, default='#6f53d9')
+    tema_por_defecto = models.CharField(
+        max_length=5, choices=[('light', 'Claro'), ('dark', 'Oscuro')],
+        default='light')
+    idioma = models.CharField(max_length=5, default='es')
+
+    class Meta:
+        verbose_name = 'Configuración de Tienda'
+        verbose_name_plural = 'Configuración de Tienda'
+
+    def __str__(self):
+        return f"Configuración: {self.nombre_tienda}"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'nombre_tienda': 'Donde Clau', 'moneda': 'CUP',
+                'simbolo_moneda': '$', 'color_acento': '#6f53d9',
+                'tema_por_defecto': 'light', 'idioma': 'es',
+            })
+        return obj
+
+    @property
+    def logo_url(self):
+        try:
+            if self.logo and self.logo.storage.exists(self.logo.name):
+                return self.logo.url
+        except Exception:
+            pass
+        return None
+
+
 class AlmacenStock(models.Model):
-    """Existencia de un producto en el almacén (unidad base, 3 decimales)."""
-    producto = models.OneToOneField(
+    """Existencia de un producto en un almacén (unidad base, 3 decimales)."""
+    producto = models.ForeignKey(
         Producto, on_delete=models.CASCADE, related_name='almacen_stock')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.CASCADE, related_name='stocks',
+        null=True, blank=True)
+    # Compat: acceso legacy producto.almacen_stock (primer stock si existe).
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Existencia de Almacén'
+        verbose_name_plural = 'Existencias de Almacén'
+        unique_together = ['producto', 'almacen']
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -1141,6 +1240,9 @@ class AlmacenEntrada(models.Model):
     numero_entrada = models.CharField(max_length=20, unique=True)
     producto = models.ForeignKey(
         Producto, on_delete=models.PROTECT, related_name='almacen_entradas')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='entradas',
+        null=True, blank=True)
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     costo_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1184,7 +1286,8 @@ class AlmacenTraslado(models.Model):
 
     Al confirmarse genera una EntradaProducto (proveedor 'Almacén') con el
     costo vigente: eso es lo que el IPB muestra como entrada del día.
-    Los traslados son inmutables (si hay error se corrige con ajuste).
+    Solo el admin puede cancelarlo (revierte stocks y elimina la entrada
+    generada); si no, los errores se corrigen con ajuste.
     """
     numero_traslado = models.CharField(max_length=20, unique=True)
     producto = models.ForeignKey(
@@ -1192,6 +1295,14 @@ class AlmacenTraslado(models.Model):
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     # Foto del costo vigente al trasladar (sin costo de transporte: mismo local).
     costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    origen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='traslados_origen',
+        null=True, blank=True)
+    DESTINOS = [('POS', 'Punto de venta'), ('ALMACEN', 'Otro almacén')]
+    destino_tipo = models.CharField(max_length=10, choices=DESTINOS, default='POS')
+    destino_almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='traslados_destino',
+        null=True, blank=True)
     registrado_por = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='almacen_traslados_registrados')
     entrada_generada = models.ForeignKey(
@@ -1235,6 +1346,9 @@ class AlmacenMovimiento(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
     producto = models.ForeignKey(
         Producto, on_delete=models.CASCADE, related_name='almacen_movimientos')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.CASCADE, related_name='movimientos',
+        null=True, blank=True)
     tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
     cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     stock_anterior = models.DecimalField(max_digits=12, decimal_places=3, default=0)
