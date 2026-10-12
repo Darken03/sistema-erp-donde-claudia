@@ -1124,6 +1124,9 @@ class ConteoCiegoLinea(models.Model):
 # Proveedor que identifica en el IPB las entradas venidas del almacén.
 ALMACEN_PROVEEDOR = 'Almacén'
 
+# Días antes del vencimiento para marcar un lote como próximo a vencer.
+DIAS_AVISO_CADUCIDAD = 30
+
 
 def almacen_proveedor_nombre(nombre_almacen):
     """Proveedor trazable por almacén (IPB).
@@ -1297,6 +1300,8 @@ class AlmacenEntrada(models.Model):
     costo_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     proveedor = models.CharField(max_length=200, blank=True, null=True)
     descripcion = models.TextField(blank=True, null=True)
+    # Fecha de caducidad del lote (opcional). Sin fecha no se marca.
+    fecha_caducidad = models.DateField(blank=True, null=True)
     registrado_por = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='almacen_entradas_registradas')
     fecha_entrada = models.DateTimeField(auto_now_add=True)
@@ -1313,6 +1318,24 @@ class AlmacenEntrada(models.Model):
     def cantidad_fmt(self):
         unidad = self.producto.unidad_medida if self.producto_id else 'unidades'
         return fmt_cantidad_unidad(self.cantidad, unidad)
+
+    @property
+    def dias_para_vencer(self):
+        """Días restantes hasta la caducidad (negativo = vencido, None = sin fecha)."""
+        if not self.fecha_caducidad:
+            return None
+        from django.utils import timezone
+        return (self.fecha_caducidad - timezone.localdate()).days
+
+    @property
+    def estado_caducidad(self):
+        """'vencido' | 'por_vencer' (<=30 días) | 'ok' (sin fecha o lejana)."""
+        dias = self.dias_para_vencer
+        if dias is None or dias > DIAS_AVISO_CADUCIDAD:
+            return 'ok'
+        if dias < 0:
+            return 'vencido'
+        return 'por_vencer'
 
     def save(self, *args, **kwargs):
         self.costo_total = self.cantidad * self.costo_unitario

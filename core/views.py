@@ -3089,6 +3089,9 @@ def almacen_panel(request):
         entradas_qs = entradas_qs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
         traslados_qs = traslados_qs.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f) | Q(origen__isnull=True))
     valor = sum((s.valor for s in existencias), Decimal('0'))
+    mapa_cad = _mapa_caducidad(almacen_f)
+    cad_por_vencer = sum(1 for v in mapa_cad.values() if v == 'por_vencer')
+    cad_vencidos = sum(1 for v in mapa_cad.values() if v == 'vencido')
     almacenes_info = []
     if multi:
         for a in Almacen.activos():
@@ -3106,6 +3109,8 @@ def almacen_panel(request):
         'almacen_actual': almacen_f,
         'multi': multi,
         'almacenes_info': almacenes_info,
+        'cad_por_vencer': cad_por_vencer,
+        'cad_vencidos': cad_vencidos,
     }
     return render(request, 'core/almacen_panel.html', context)
 
@@ -3131,6 +3136,10 @@ def almacen_stock(request):
         es_admin = request.user.perfil.es_admin
     except PerfilUsuario.DoesNotExist:
         es_admin = True
+    mapa_cad = _mapa_caducidad(almacen_f)
+    stocks = list(stocks)
+    for s in stocks:
+        s.caducidad = mapa_cad.get(s.producto_id, 'ok')
     return render(request, 'core/almacen_stock.html', {
         'stocks': stocks, 'q': query, 'es_admin': es_admin,
         'almacenes': Almacen.activos(), 'almacen_actual': almacen_f,
@@ -3184,6 +3193,13 @@ def almacen_entrada_crear(request):
             costo_unitario = Decimal('0')
         proveedor = request.POST.get('proveedor', '').strip()
         descripcion = request.POST.get('descripcion', '').strip()
+        fecha_caducidad = (request.POST.get('fecha_caducidad') or '').strip() or None
+        if fecha_caducidad:
+            try:
+                timezone.datetime.strptime(fecha_caducidad, '%Y-%m-%d')
+            except ValueError:
+                messages.error(request, 'Fecha de caducidad inválida.')
+                return redirect('core:almacen_entrada_crear')
         almacen_f, multi = _resolver_almacen(request)
         if multi and not almacen_f:
             messages.error(request, 'Seleccione el almacén destino.')
@@ -3205,6 +3221,7 @@ def almacen_entrada_crear(request):
                 costo_unitario=costo_unitario,
                 proveedor=proveedor,
                 descripcion=descripcion,
+                fecha_caducidad=fecha_caducidad,
                 registrado_por=request.user,
             )
             stock, _ = _get_or_create_stock(producto, almacen_f)
@@ -3727,6 +3744,28 @@ def _get_or_create_stock(producto, almacen):
         return legacy, False
     return AlmacenStock.objects.create(
         producto=producto, almacen=almacen, cantidad=Decimal('0')), True
+
+
+def _mapa_caducidad(almacen_f):
+    """Peor estado de caducidad por producto: vencido > por_vencer > ok."""
+    from .models import DIAS_AVISO_CADUCIDAD
+    hoy = ahora_servidor().date()
+    limite = hoy + timedelta(days=DIAS_AVISO_CADUCIDAD)
+    qs = AlmacenEntrada.objects.filter(fecha_caducidad__isnull=False)
+    if almacen_f:
+        qs = qs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+    orden = {'ok': 0, 'por_vencer': 1, 'vencido': 2}
+    mapa = {}
+    for e in qs.values('producto_id', 'fecha_caducidad'):
+        if e['fecha_caducidad'] < hoy:
+            est = 'vencido'
+        elif e['fecha_caducidad'] <= limite:
+            est = 'por_vencer'
+        else:
+            est = 'ok'
+        if orden[est] > orden[mapa.get(e['producto_id'], 'ok')]:
+            mapa[e['producto_id']] = est
+    return mapa
 
 
 def _stock_map_para(almacen_f):

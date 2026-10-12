@@ -66,6 +66,18 @@
 </div>
 {% endif %}
 
+{% if cad_por_vencer or cad_vencidos %}
+<div class="alert d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:var(--accent-soft);border:1px solid var(--line);" role="alert">
+    <div>
+        <i class="bi bi-calendar-event me-1" style="color:var(--accent-strong);"></i>
+        <strong>Caducidad:</strong>
+        {% if cad_por_vencer %}<span class="badge ms-1" style="background:var(--accent);">{{ cad_por_vencer }} por vencer</span>{% endif %}
+        {% if cad_vencidos %}<span class="badge bg-danger ms-1">{{ cad_vencidos }} vencidos</span>{% endif %}
+    </div>
+    <a href="{% url 'core:almacen_stock' %}" class="btn btn-sm btn-outline-primary">Ver existencias</a>
+</div>
+{% endif %}
+
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-6">
         <div class="card border-0 shadow-sm border-start border-primary border-4 h-100">

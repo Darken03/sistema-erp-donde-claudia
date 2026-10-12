@@ -149,7 +149,7 @@ class AlmacenStockAdmin(admin.ModelAdmin):
 
 @admin.register(AlmacenEntrada)
 class AlmacenEntradaAdmin(admin.ModelAdmin):
-    list_display = ['numero_entrada', 'producto', 'almacen', 'cantidad', 'fecha_entrada']
+    list_display = ['numero_entrada', 'producto', 'almacen', 'cantidad', 'fecha_caducidad', 'fecha_entrada']
     list_filter = ['almacen']
 
 

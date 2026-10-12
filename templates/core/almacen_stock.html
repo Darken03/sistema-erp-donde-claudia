@@ -60,10 +60,10 @@
                 </thead>
                 <tbody>
                     {% for s in stocks %}
-                    <tr>
+                    <tr class="{% if s.caducidad == 'por_vencer' %}caducidad-por-vencer{% elif s.caducidad == 'vencido' %}caducidad-vencido{% endif %}">
                         {% if multi %}<td><small>{{ s.almacen.nombre|default:"Principal" }}</small></td>{% endif %}
                         <td><strong>{{ s.producto.codigo }}</strong> · {{ s.producto.nombre }}<br>
-                            <small class="text-muted">{{ s.producto.unidad_medida }}</small></td>
+                            <small class="text-muted">{{ s.producto.unidad_medida }}</small>{% if s.caducidad == 'por_vencer' %}<br><span class="badge" style="background:var(--accent-soft);color:var(--accent-strong);"><i class="bi bi-calendar-event me-1"></i>Por vencer</span>{% elif s.caducidad == 'vencido' %}<br><span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Vencido</span>{% endif %}</td>
                         <td>{% if s.producto.categoria %}{{ s.producto.categoria.nombre }}{% else %}-{% endif %}</td>
                         <td class="text-end"><span class="badge bg-primary">{{ s.cantidad_fmt }}</span></td>
                         <td class="text-end mono">${{ s.producto.precio_compra|floatformat:2 }}</td>
@@ -93,4 +93,9 @@
         </div>
     </div>
 </div>
+<style>
+tr.caducidad-por-vencer > td { background: var(--accent-soft); }
+tr.caducidad-por-vencer:hover > td { background: var(--accent-soft); }
+tr.caducidad-vencido > td { background: var(--danger-soft); }
+</style>
 {% endblock %}

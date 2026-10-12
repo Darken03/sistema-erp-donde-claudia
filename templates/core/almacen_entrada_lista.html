@@ -77,6 +77,7 @@
                         <th>Cantidad</th>
                         <th>Costo Unitario</th>
                         <th>Costo Total</th>
+                        <th>Caducidad</th>
                         <th>Proveedor</th>
                         {% if request.user.perfil.es_admin %}<th class="text-end">Acción</th>{% endif %}
                     </tr>
@@ -91,6 +92,7 @@
                         <td><span class="badge bg-success">+{{ e.cantidad_fmt }}</span></td>
                         <td>${{ e.costo_unitario|floatformat:2 }}</td>
                         <td>${{ e.costo_total|floatformat:2 }}</td>
+                        <td>{% if e.fecha_caducidad %}{% if e.estado_caducidad == 'vencido' %}<span class="badge bg-danger">Vencido {{ e.fecha_caducidad|date:"d/m/Y" }}</span>{% elif e.estado_caducidad == 'por_vencer' %}<span class="badge" style="background:var(--accent-soft);color:var(--accent-strong);">Vence {{ e.fecha_caducidad|date:"d/m/Y" }}</span>{% else %}<span class="text-muted">{{ e.fecha_caducidad|date:"d/m/Y" }}</span>{% endif %}{% else %}-{% endif %}</td>
                         <td>{% if e.proveedor %}{{ e.proveedor }}{% else %}-{% endif %}</td>
                         {% if request.user.perfil.es_admin %}
                         <td class="text-end">
@@ -106,7 +108,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">
+                        <td colspan="{% if multi %}10{% else %}9{% endif %}" class="text-center text-muted py-4">
                             No hay entradas en esta fecha.
                         </td>
                     </tr>

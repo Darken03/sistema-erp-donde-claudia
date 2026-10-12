@@ -124,11 +124,21 @@
                 <span class="fw-bold text-muted small">COSTO TOTAL</span>
                 <span class="fs-4 fw-bold mono text-success" id="totalPreview">$0.00</span>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Proveedor <span class="text-muted fw-normal">(opcional)</span></label>
-                <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-truck"></i></span>
-                    <input type="text" name="proveedor" class="form-control" placeholder="Nombre del proveedor">
+            <div class="row g-3">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Proveedor <span class="text-muted fw-normal">(opcional)</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-truck"></i></span>
+                        <input type="text" name="proveedor" class="form-control" placeholder="Nombre del proveedor">
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Fecha de caducidad <span class="text-muted fw-normal">(opcional)</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                        <input type="date" name="fecha_caducidad" class="form-control">
+                    </div>
+                    <div class="form-text">Si vence en 30 días o menos se marcará en morado; vencido, en rojo.</div>
                 </div>
             </div>
             <div class="mb-3">
