@@ -13,9 +13,10 @@ db.sqlite3-*
 
 # Archivos generados por collectstatic
 staticfiles/
-
+media/
 # Sistema / editor
 Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+*.zip
