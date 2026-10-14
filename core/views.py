@@ -42,6 +42,41 @@ def ahora_servidor():
 FECHA_INICIO_SISTEMA = datetime(2026, 9, 22).date()
 
 
+def _log_cambio_precio(producto, compra_antes, compra_despues,
+                       venta_antes, venta_despues,
+                       accion='edicion_manual', motivo='', usuario=None,
+                       costo_entrada=None, entrada=None):
+    """Audita un cambio de costo/venta (Cuba: precios volátiles).
+
+    Sin cambio real no crea fila (devuelve None). Minimal para que el IPB
+    futuro pueda mostrar el precio del día en vez del actual.
+    """
+    from decimal import Decimal as _D
+    from .models import HistorialPrecio
+    try:
+        ca = _D(str(compra_antes or 0))
+        cd = _D(str(compra_despues or 0))
+        va = _D(str(venta_antes or 0))
+        vd = _D(str(venta_despues or 0))
+    except Exception:
+        return None
+    if ca == cd and va == vd:
+        return None
+    try:
+        margen = (vd - cd) / cd if cd > 0 else _D('0')
+    except Exception:
+        margen = _D('0')
+    return HistorialPrecio.objects.create(
+        producto=producto,
+        precio_compra_antes=ca, precio_compra_despues=cd,
+        precio_venta_antes=va, precio_venta_despues=vd,
+        costo_entrada=(None if costo_entrada is None else _D(str(costo_entrada))),
+        entrada=entrada,
+        margen_resultante=margen,
+        accion=accion, motivo=motivo or '', usuario=usuario,
+    )
+
+
 def _norm_sin_tildes(texto):
     """Normaliza para búsqueda insensible a tildes/mayúsculas.
 
@@ -415,9 +450,17 @@ def producto_editar(request, pk):
                     ': tiene venta(s) en el día de hoy.'
                 )
             else:
+                compra_antes = producto.precio_compra
+                venta_antes = producto.precio_venta
                 form.save()
                 formset.save()
                 _asegurar_presentacion_default(producto)
+                producto.refresh_from_db()
+                _log_cambio_precio(
+                    producto, compra_antes, producto.precio_compra,
+                    venta_antes, producto.precio_venta,
+                    accion='edicion_manual', motivo='',
+                    usuario=request.user)
                 return redirect('core:producto_detalle', pk=producto.pk)
     else:
         form = ProductoForm(instance=producto)
@@ -665,7 +708,7 @@ def producto_eliminar_definitivo(request, pk):
 
 @requiere_admin
 def categoria_lista(request):
-    categorias = Categoria.objects.annotate(num_productos=Count('productos'))
+    categorias = Categoria.objects.select_related('padre').annotate(num_productos=Count('productos'))
     return render(request, 'core/categoria_lista.html', {'categorias': categorias})
 
 
@@ -1050,6 +1093,7 @@ def venta_crear(request):
                         cantidad_base=cantidad_base,
                         precio_unitario=precio,
                         subtotal=precio * cantidad,
+                        costo_unitario_base=producto.precio_compra or 0,
                     )
                     _registrar_movimiento(producto, 'venta', cantidad_base, request.user,
                                           venta.id, f'Venta #{venta.numero_venta} manual ({fecha_elegida:%d/%m/%Y})')
@@ -1145,7 +1189,8 @@ def venta_editar(request, pk):
                         cantidad=cantidad,
                         cantidad_base=cantidad_base,
                         precio_unitario=precio,
-                        subtotal=precio * cantidad
+                        subtotal=precio * cantidad,
+                        costo_unitario_base=producto.precio_compra or 0,
                     )
 
                 _registrar_movimiento(producto, 'venta', cantidad_base, request.user, venta.id, f'Venta #{venta.numero_venta} - Producto agregado en edición')
@@ -1541,6 +1586,7 @@ def pos_procesar_venta(request):
                 'cantidad_base': cantidad_base,
                 'precio_unitario': precio_entero,
                 'subtotal': item_subtotal,
+                'costo_unitario_base': producto.precio_compra or Decimal('0'),
             })
 
         total = subtotal.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
@@ -1585,6 +1631,7 @@ def pos_procesar_venta(request):
                     cantidad_base=d['cantidad_base'],
                     precio_unitario=d['precio_unitario'],
                     subtotal=d['subtotal'],
+                    costo_unitario_base=d.get('costo_unitario_base', 0),
                 )
                 if es_multi:
                     # Descuento directo del almacén del POS (Producto.stock
@@ -1763,6 +1810,22 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
         venta__fecha_venta__date=fecha, venta__cancelada=False
     ).values('producto_id').annotate(ingreso_real=Sum('subtotal'))
     ingreso_map = {v['producto_id']: Decimal(str(v['ingreso_real'] or 0)) for v in ventas_det}
+    # Precio histórico del día: PU dominante cobrado ese día por producto.
+    # Sin esto, un cambio 520→540 reescribe el IPB viejo con el precio actual.
+    pu_qs = DetalleVenta.objects.filter(
+        venta__fecha_venta__date=fecha, venta__cancelada=False
+    ).values('producto_id', 'precio_unitario').annotate(cant=Sum('cantidad'))
+    _pu_best = {}
+    for r in pu_qs:
+        pid = r['producto_id']
+        try:
+            c = Decimal(str(r['cant'] or 0))
+            pu = Decimal(str(r['precio_unitario'] or 0))
+        except Exception:
+            continue
+        if pid not in _pu_best or c > _pu_best[pid][1]:
+            _pu_best[pid] = (pu, c)
+    precio_hist_map = {pid: pu for pid, (pu, _c) in _pu_best.items()}
     # Desglose por presentación para mostrar el mix (ej. "2 x Cartón 30").
     # Solo presentaciones distintas a la unidad base (factor != 1): las ventas
     # en unidades no ensucian el IPB.
@@ -1838,7 +1901,8 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
         if inv.stock_final == 0 and inv.ventas > 0:
             productos_sin_stock += 1
         
-        precio_venta = Decimal(str(inv.producto.precio_venta))
+        precio_venta = precio_hist_map.get(
+            inv.producto.id, Decimal(str(inv.producto.precio_venta)))
         
         entrada_info = entrada_costo_map.get(inv.producto.id)
         if entrada_info and entrada_info['cantidad'] > 0:
@@ -2983,6 +3047,8 @@ def entrada_crear(request):
         producto = get_object_or_404(Producto, pk=producto_id)
 
         if costo_unitario > 0:
+            compra_antes = producto.precio_compra
+            venta_antes = producto.precio_venta
             producto.precio_compra = costo_unitario
             producto.save(update_fields=['precio_compra'])
             producto.refresh_from_db()
@@ -2996,6 +3062,13 @@ def entrada_crear(request):
             proveedor=proveedor,
             descripcion=descripcion,
         )
+        if costo_unitario > 0:
+            _log_cambio_precio(
+                producto, compra_antes, producto.precio_compra,
+                venta_antes, producto.precio_venta,
+                accion='entrada_ok', motivo=f'Entrada {numero_entrada}',
+                usuario=request.user, costo_entrada=costo_unitario,
+                entrada=entrada)
 
         if not producto.visible_pos:
             producto.visible_pos = True
@@ -4984,6 +5057,182 @@ def catalogo(request):
     return render(request, 'core/catalogo.html', {
         'grupos': grupos,
         'total': len(productos),
+    })
+
+
+def _store_stock_map_suma():
+    """Suma de `AlmacenStock.cantidad` por producto (vitrina /store).
+
+    Solo almacenes activos. Si un producto tiene filas propias por
+    almacén, solo esas suman; la fila legacy (`almacen=NULL`) cuenta
+    únicamente cuando no hay ninguna propia (evita doble conteo tras
+    migrar a multi-almacén).
+    """
+    filas = (AlmacenStock.objects
+             .filter(Q(almacen__isnull=True) | Q(almacen__activo=True))
+             .values('producto_id', 'almacen_id')
+             .annotate(total=Sum('cantidad')))
+    por_prod = {}
+    for f in filas:
+        por_prod.setdefault(f['producto_id'], []).append(f)
+    m = {}
+    for pid, entries in por_prod.items():
+        propias = [e for e in entries if e['almacen_id'] is not None]
+        base = propias if propias else entries
+        m[pid] = sum((e['total'] for e in base), Decimal('0'))
+    return m
+
+
+def _store_items():
+    """Items de la vitrina /store desde la misma fuente que el POS.
+
+    En `multi_pos` el stock es la suma de `AlmacenStock` (se ignora
+    `visible_pos`, igual que el POS); en el resto de modos es
+    `Producto.stock` con `activo + visible_pos`. Se listan también los
+    agotados. Límite 2000, ordenados por nombre.
+    """
+    if modo_actual() == 'multi_pos':
+        mapa = _store_stock_map_suma()
+        productos = list(Producto.objects.filter(
+            activo=True).select_related('categoria')
+            .prefetch_related('presentaciones').order_by('nombre')[:2000])
+        for p in productos:
+            # Solo memoria (NO guardar): el stock vive en AlmacenStock.
+            p.stock = mapa.get(p.id, Decimal('0'))
+    else:
+        productos = list(Producto.objects.filter(
+            activo=True, visible_pos=True).select_related('categoria')
+            .prefetch_related('presentaciones').order_by('nombre')[:2000])
+    items = []
+    for p in productos:
+        # En memoria sobre el prefetch (sin N+1): equivale a
+        # presentacion_default() = activas ordenadas por -es_default, factor.
+        candidatas = [pr for pr in p.presentaciones.all() if pr.activo]
+        candidatas.sort(key=lambda pr: (not pr.es_default, pr.factor))
+        pres = candidatas[0] if candidatas else None
+        if pres is not None:
+            precio = pres.precio
+            etiqueta = pres.nombre
+        else:
+            precio = p.precio_venta
+            etiqueta = dict(getattr(p, 'UNIDADES_MEDIDA', [])).get(
+                p.unidad_medida, '') or 'Unidad'
+        stock = p.stock if p.stock is not None else Decimal('0')
+        items.append({
+            'id': p.id,
+            'codigo': p.codigo,
+            'nombre': p.nombre,
+            'categoria': p.categoria.nombre if p.categoria else '',
+            'categoria_id': p.categoria_id,
+            'imagen': p.imagen_url,
+            'precio': precio,
+            'etiqueta': etiqueta,
+            'stock': stock,
+            'stock_fmt': fmt_cantidad_unidad(stock, p.unidad_medida),
+            'disponible': stock > 0,
+            'pocas': Decimal('0') < stock <= (p.stock_minimo or Decimal('0')),
+        })
+    # Visibilidad de tienda por rama: una categoría oculta oculta a sus hijas.
+    cats = {c.id: c for c in Categoria.objects.all()}
+
+    def _rama_visible(cid):
+        """(visible, top_id) siguiendo padres; top_id None = sin categoría."""
+        if cid is None:
+            return True, None
+        top = None
+        actual = cats.get(cid)
+        while actual is not None:
+            if not actual.visible_store:
+                return False, None
+            top = actual.id
+            actual = cats.get(actual.padre_id)
+        if top is None:
+            return False, None
+        return True, top
+
+    visibles = []
+    for it in items:
+        ok, top = _rama_visible(it['categoria_id'])
+        if not ok:
+            continue
+        it['padre_top'] = top
+        visibles.append(it)
+    return visibles
+
+
+def _store_nombres_categoria():
+    """Mapa id→nombre de categorías (para el árbol padre/hijas)."""
+    return dict(Categoria.objects.values_list('id', 'nombre'))
+
+
+def store(request):
+    """Vitrina pública /store (Marketplace). Sin login ni compra.
+
+    Server-render con stock exacto actual; el refresco vivo lo hace
+    `store_api_estado` por polling. Convive con `/catalogo` (intacto).
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    items = _store_items()
+    grupos = []
+    por_hoja = {}
+    for it in items:
+        key = it['categoria_id'] or 'otros'
+        if key not in por_hoja:
+            por_hoja[key] = {
+                'categoria': it['categoria'] or 'Otros',
+                'items': [],
+                'padre_top': it['padre_top'],
+            }
+            grupos.append(por_hoja[key])
+        por_hoja[key]['items'].append(it)
+    grupos.sort(key=lambda g: (g['categoria'] == 'Otros', g['categoria'].lower()))
+    for g in grupos:
+        top = g['padre_top']
+        g['padre_key'] = ('p%d' % top) if top is not None else 'otros'
+    # Árbol para el selector visual: padres visibles con sus hijas.
+    nombres = _store_nombres_categoria()
+    arbol = []
+    por_top = {}
+    for g in grupos:
+        top = g['padre_top']
+        if top is None:
+            clave, nombre = 'otros', 'Otros'
+        else:
+            clave, nombre = ('p%d' % top), nombres.get(top, '')
+        if clave not in por_top:
+            por_top[clave] = {'key': clave, 'nombre': nombre, 'total': 0, 'hijas': []}
+            arbol.append(por_top[clave])
+        por_top[clave]['total'] += len(g['items'])
+        if top is not None and g['categoria'] != nombre:
+            por_top[clave]['hijas'].append({'nombre': g['categoria'], 'total': len(g['items'])})
+    arbol.sort(key=lambda a: (a['key'] == 'otros', a['nombre'].lower()))
+    return render(request, 'core/store.html', {
+        'grupos': grupos,
+        'arbol': arbol,
+        'total': len(items),
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def store_api_estado(request):
+    """JSON público con precios y existencias para el polling de /store/.
+
+    Solo GET, sin login. Nunca expone costos ni mínimos de stock.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    items = _store_items()
+    return JsonResponse({
+        'productos': [{
+            'id': it['id'],
+            'precio': str(it['precio']),
+            'stock': str(it['stock']),
+            'stock_fmt': it['stock_fmt'],
+            'disponible': it['disponible'],
+            'pocas': it['pocas'],
+        } for it in items],
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
     })
 
 
