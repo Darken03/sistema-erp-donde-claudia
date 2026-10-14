@@ -3,9 +3,10 @@ from decimal import Decimal
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.urls import reverse
 from .models import (
     Producto, Venta, DetalleVenta, PresentacionProducto, HistorialPrecio,
-    Almacen, PuntoVenta, AlmacenStock,
+    Almacen, PuntoVenta, AlmacenStock, PerfilUsuario,
 )
 from .views import (
     _obtener_datos_ipb, _sincronizar_inventario_dia, ahora_servidor,
@@ -107,3 +108,27 @@ class IpbPorPosPrecioHistoricoTest(TestCase):
         fila = [r for r in datos['reporte'] if r['producto'].pk == prod.pk][0]
         self.assertEqual(fila['ingreso'], Decimal('520'))
         self.assertEqual(fila['precio_venta'], Decimal('520'))
+
+
+class SubmayorHistorialPrecioTest(TestCase):
+    def test_submayor_muestra_historial_de_precios(self):
+        from django.contrib.auth.models import User as _U
+        admin = _U.objects.create_user(username='admin_submayor', password='x12345')
+        PerfilUsuario.objects.filter(user=admin).update(rol='admin')
+        admin.refresh_from_db()
+        prod = Producto.objects.create(
+            nombre='Submayor Hist', unidad_medida='unidades',
+            precio_compra=10, precio_venta=Decimal('25'),
+            stock=Decimal('10'))
+        HistorialPrecio.objects.create(
+            producto=prod,
+            precio_compra_antes=Decimal('10'), precio_compra_despues=Decimal('10'),
+            precio_venta_antes=Decimal('20'), precio_venta_despues=Decimal('25'),
+            accion='edicion_manual', motivo='sube a 25', usuario=admin)
+        self.client.login(username='admin_submayor', password='x12345')
+        r = self.client.get(reverse('core:submayor_detalle', args=[prod.pk]))
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn('Historial de precios', html)
+        self.assertIn('20', html)
+        self.assertIn('25', html)

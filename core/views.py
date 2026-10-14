@@ -4287,10 +4287,16 @@ def submayor_detalle(request, producto_id):
         fecha__date__gte=fecha_inicio,
         fecha__date__lte=fecha_fin
     ).order_by('-fecha')
-    
+
+    historial = producto.historial_precios.filter(
+        fecha__date__gte=fecha_inicio,
+        fecha__date__lte=fecha_fin
+    ).order_by('-fecha')
+
     context = {
         'producto': producto,
         'movimientos': movimientos,
+        'historial': historial,
         'fecha_inicio': fecha_inicio,
         'fecha_fin': fecha_fin,
     }

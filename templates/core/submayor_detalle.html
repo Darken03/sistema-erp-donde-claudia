@@ -115,5 +115,45 @@
             </div>
         </div>
     </div>
+
+    <div class="card mt-3">
+        <div class="card-header">
+            <i class="bi bi-tag me-1"></i>Historial de precios
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Compra</th>
+                            <th>Venta</th>
+                            <th>Acción</th>
+                            <th>Motivo</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in historial %}
+                        <tr>
+                            <td>{{ h.fecha|date:"d/m/Y H:i" }}</td>
+                            <td>${{ h.precio_compra_antes|floatformat:2 }} → ${{ h.precio_compra_despues|floatformat:2 }}</td>
+                            <td class="fw-bold">${{ h.precio_venta_antes|floatformat:2 }} → ${{ h.precio_venta_despues|floatformat:2 }}</td>
+                            <td><small>{{ h.get_accion_display }}</small></td>
+                            <td><small>{{ h.motivo|default:"-" }}</small></td>
+                            <td>{{ h.usuario.get_full_name|default:h.usuario.username|default:"Sistema" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <p class="mt-2">Sin cambios de precio en el período seleccionado</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
