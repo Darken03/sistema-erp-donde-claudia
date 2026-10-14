@@ -141,7 +141,7 @@
                             <td class="fw-bold">${{ h.precio_venta_antes|floatformat:2 }} → ${{ h.precio_venta_despues|floatformat:2 }}</td>
                             <td><small>{{ h.get_accion_display }}</small></td>
                             <td><small>{{ h.motivo|default:"-" }}</small></td>
-                            <td>{{ h.usuario.get_full_name|default:h.usuario.username|default:"Sistema" }}</td>
+                            <td>{% if h.usuario %}{{ h.usuario.get_full_name|default:h.usuario.username }}{% else %}Sistema{% endif %}</td>
                         </tr>
                         {% empty %}
                         <tr>

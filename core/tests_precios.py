@@ -132,3 +132,22 @@ class SubmayorHistorialPrecioTest(TestCase):
         self.assertIn('Historial de precios', html)
         self.assertIn('20', html)
         self.assertIn('25', html)
+
+    def test_submayor_historial_sin_usuario_muestra_sistema(self):
+        from django.contrib.auth.models import User as _U
+        admin = _U.objects.create_user(username='admin_submayor2', password='x12345')
+        PerfilUsuario.objects.filter(user=admin).update(rol='admin')
+        admin.refresh_from_db()
+        prod = Producto.objects.create(
+            nombre='Submayor Hist Sin User', unidad_medida='unidades',
+            precio_compra=10, precio_venta=Decimal('25'),
+            stock=Decimal('10'))
+        HistorialPrecio.objects.create(
+            producto=prod,
+            precio_compra_antes=Decimal('10'), precio_compra_despues=Decimal('10'),
+            precio_venta_antes=Decimal('20'), precio_venta_despues=Decimal('25'),
+            accion='edicion_manual', motivo='reparación', usuario=None)
+        self.client.login(username='admin_submayor2', password='x12345')
+        r = self.client.get(reverse('core:submayor_detalle', args=[prod.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Sistema', r.content.decode())
