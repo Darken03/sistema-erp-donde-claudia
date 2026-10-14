@@ -2044,6 +2044,20 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
         for v in ventas_qs.values('producto_id').annotate(
             ingreso_real=_Sum('subtotal'))
     }
+    # Precio histórico del día por POS (igual que el IPB global):
+    # PU dominante cobrado ese día en ese POS.
+    _pu_best = {}
+    for r in ventas_qs.values(
+            'producto_id', 'precio_unitario').annotate(cant=_Sum('cantidad')):
+        pid = r['producto_id']
+        try:
+            c = _dec(r['cant'])
+            pu = _dec(r['precio_unitario'])
+        except Exception:
+            continue
+        if pid not in _pu_best or c > _pu_best[pid][1]:
+            _pu_best[pid] = (pu, c)
+    precio_hist_map = {pid: pu for pid, (pu, _c) in _pu_best.items()}
     mix_map = {}
     for m in ventas_qs.values(
             'producto_id', 'presentacion__nombre',
@@ -2127,7 +2141,7 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
         if stock_final == 0 and ventas > 0:
             productos_sin_stock += 1
 
-        precio_venta = Decimal(str(producto.precio_venta))
+        precio_venta = precio_hist_map.get(producto.id, Decimal(str(producto.precio_venta)))
         costo_unit = producto.precio_compra
         costo_venta = ventas * costo_unit
         ingreso = ingreso_map.get(producto.id, ventas * precio_venta)

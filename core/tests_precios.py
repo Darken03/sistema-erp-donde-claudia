@@ -3,7 +3,10 @@ from decimal import Decimal
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.utils import timezone
-from .models import Producto, Venta, DetalleVenta, PresentacionProducto, HistorialPrecio
+from .models import (
+    Producto, Venta, DetalleVenta, PresentacionProducto, HistorialPrecio,
+    Almacen, PuntoVenta, AlmacenStock,
+)
 from .views import (
     _obtener_datos_ipb, _sincronizar_inventario_dia, ahora_servidor,
     _log_cambio_precio,
@@ -72,3 +75,35 @@ class HistorialPrecioLogTest(TestCase):
         self.assertIsNone(h)
         self.assertEqual(
             HistorialPrecio.objects.filter(producto=prod).count(), 0)
+
+
+class IpbPorPosPrecioHistoricoTest(TestCase):
+    def test_ipb_por_pos_muestra_precio_del_dia(self):
+        u = User.objects.create_user(username='caja_pos_hist', password='x')
+        alm = Almacen.objects.create(nombre='Almacén POS Hist')
+        pos = PuntoVenta.objects.create(nombre='Caja POS Hist', almacen=alm)
+        prod = Producto.objects.create(
+            nombre='Refresco POS Hist', unidad_medida='unidades',
+            precio_compra=470, precio_venta=Decimal('540'),
+            stock=Decimal('0'), permite_decimal=False)
+        AlmacenStock.objects.create(
+            producto=prod, almacen=alm, cantidad=Decimal('10'))
+        pres = PresentacionProducto.objects.create(
+            producto=prod, nombre='Unidad', factor=1, precio=Decimal('540'),
+            es_default=True, activo=True)
+        ayer = (ahora_servidor() - timedelta(days=1)).date()
+        v = Venta.objects.create(
+            numero_venta='VTA-POSHIST1', cajero=u, punto_venta=pos,
+            subtotal=520, total=520, metodo_pago='efectivo',
+            monto_recibido=520, monto_transferencia=0, cambio=0)
+        DetalleVenta.objects.create(
+            venta=v, producto=prod, presentacion=pres,
+            cantidad=1, cantidad_base=1,
+            precio_unitario=Decimal('520'), subtotal=Decimal('520'))
+        aware_ayer = timezone.make_aware(
+            timezone.datetime.combine(ayer, timezone.datetime.min.time()))
+        Venta.objects.filter(pk=v.pk).update(fecha_venta=aware_ayer)
+        datos = _obtener_datos_ipb(ayer, punto_venta=pos)
+        fila = [r for r in datos['reporte'] if r['producto'].pk == prod.pk][0]
+        self.assertEqual(fila['ingreso'], Decimal('520'))
+        self.assertEqual(fila['precio_venta'], Decimal('520'))
