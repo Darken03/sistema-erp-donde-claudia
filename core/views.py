@@ -5625,6 +5625,62 @@ def store_api_estado(request):
     })
 
 
+def _store_detalle(pk):
+    """Detalle público de un producto para el modal de /store.
+
+    Reutiliza `_store_items` (misma visibilidad y stock que la
+    vitrina). Devuelve None si no existe o está oculto de la tienda.
+    Nunca expone costos ni mínimos.
+    """
+    try:
+        pid = int(pk)
+    except (TypeError, ValueError):
+        return None
+    base = next((it for it in _store_items() if it['id'] == pid), None)
+    if base is None:
+        return None
+    p = Producto.objects.filter(pk=pid).select_related(
+        'categoria__padre').prefetch_related('presentaciones').first()
+    if p is None:
+        return None
+    pres = [{
+        'nombre': pr.nombre,
+        'precio': str(pr.precio),
+    } for pr in p.presentaciones.all() if pr.activo]
+    cat = p.categoria
+    from django.urls import reverse as _reverse
+    return {
+        'id': base['id'],
+        'codigo': base['codigo'],
+        'nombre': base['nombre'],
+        'descripcion': p.descripcion or '',
+        'categoria': base['categoria'],
+        'categoria_id': base['categoria_id'],
+        'categoria_padre': cat.padre.nombre if cat and cat.padre else '',
+        'categoria_url': _reverse('core:store_categoria', args=[base['categoria_id']]) if base['categoria_id'] else _reverse('core:store'),
+        'imagen': base['imagen'],
+        'precio': str(base['precio']),
+        'etiqueta': base['etiqueta'],
+        'presentaciones': pres,
+        'stock_fmt': base['stock_fmt'],
+        'disponible': base['disponible'],
+        'pocas': base['pocas'],
+    }
+
+
+def store_producto_detalle(request, pk):
+    """JSON público con el detalle de un producto para el modal.
+
+    Solo GET, sin login. Nunca expone costos ni mínimos de stock.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    det = _store_detalle(pk)
+    if det is None:
+        return JsonResponse({'error': 'No encontrado.'}, status=404)
+    return JsonResponse(det)
+
+
 def mostrador_estado(request):
     """JSON que el mostrador consulta por polling. Público."""
     pantalla = _mostrador_pantalla(request)

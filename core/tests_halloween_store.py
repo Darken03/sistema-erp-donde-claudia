@@ -331,3 +331,53 @@ class StoreBuscarTest(TestCase):
         html = self.client.get(reverse('core:store_buscar') + '?q=zzzznada').content.decode()
         self.assertEqual(self.client.get(reverse('core:store_buscar') + '?q=zzzznada').status_code, 200)
         self.assertIn('Sin resultados', html)
+
+
+class StoreProductoModalTest(TestCase):
+    def setUp(self):
+        from .models import PresentacionProducto
+        self.cat = Categoria.objects.create(nombre='CatModal')
+        self.prod = Producto.objects.create(
+            nombre='ProdModal', descripcion='Descripción rica del producto',
+            unidad_medida='unidades', precio_compra=10, precio_venta=25,
+            stock=Decimal('7'), categoria=self.cat)
+        PresentacionProducto.objects.create(
+            producto=self.prod, nombre='Unidad', factor=1,
+            precio=25, es_default=True)
+
+    def test_api_detalle_producto(self):
+        r = self.client.get(reverse('core:store_producto_api', args=[self.prod.pk]))
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(d['nombre'], 'ProdModal')
+        self.assertEqual(d['descripcion'], 'Descripción rica del producto')
+        self.assertEqual(d['precio'], '25.00')
+        self.assertIn('Unidad', str(d['presentaciones']))
+        # Nunca expone costos ni mínimos.
+        payload = str(d)
+        self.assertNotIn('precio_compra', payload)
+        self.assertNotIn('stock_minimo', payload)
+        self.assertNotIn('proveedor', payload)
+
+    def test_api_404_oculto_e_inexistente(self):
+        oculta = Categoria.objects.create(nombre='OcultaM', visible_store=False)
+        fantasma = Producto.objects.create(
+            nombre='FantasmaM', unidad_medida='unidades',
+            precio_compra=1, precio_venta=2, stock=Decimal('9'),
+            categoria=oculta)
+        self.assertEqual(
+            self.client.get(reverse('core:store_producto_api', args=[fantasma.pk])).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse('core:store_producto_api', args=[999999])).status_code, 404)
+
+    def test_api_solo_get(self):
+        r = self.client.post(reverse('core:store_producto_api', args=[self.prod.pk]))
+        self.assertEqual(r.status_code, 405)
+
+    def test_paginas_traen_modal_y_cards_clicables(self):
+        for url in (reverse('core:store'),
+                    reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[self.cat.pk])):
+            html = self.client.get(url).content.decode()
+            self.assertIn('id="prodModal"', html)
+            self.assertIn('data-prod=', html)

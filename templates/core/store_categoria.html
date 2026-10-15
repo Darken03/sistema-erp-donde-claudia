@@ -249,7 +249,7 @@ function toggleStoreTheme(){
     <h2 class="cat-title">{{ g.categoria }} <span class="n">{{ g.items|length }}</span></h2>
     <div class="grid">
       {% for it in g.items %}
-      <article class="product-card{% if not it.disponible %} agotado{% endif %}" data-id="{{ it.id }}" data-disp="{% if it.disponible %}1{% else %}0{% endif %}" data-nombre="{{ it.nombre|lower }} {{ it.codigo|lower }}" data-precio="{{ it.precio }}" data-stock="{{ it.stock }}" data-idx="{{ forloop.counter0 }}">
+      <article class="product-card{% if not it.disponible %} agotado{% endif %}" data-id="{{ it.id }}" data-prod="{{ it.id }}" tabindex="0" role="button" aria-label="Ver {{ it.nombre }}" data-disp="{% if it.disponible %}1{% else %}0{% endif %}" data-nombre="{{ it.nombre|lower }} {{ it.codigo|lower }}" data-precio="{{ it.precio }}" data-stock="{{ it.stock }}" data-idx="{{ forloop.counter0 }}">
         <div class="img-zone">
           {% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
           <span class="noimg" style="{% if it.imagen %}display:none;{% endif %}">{{ it.nombre|slice:":2"|upper }}</span>
@@ -350,5 +350,6 @@ function toggleStoreTheme(){
   setInterval(refrescar, STORE_POLL_MS);
 })();
 </script>
+{% include "core/store_producto_modal.html" %}
 </body>
 </html>

@@ -300,7 +300,7 @@ function toggleStoreTheme(){
     <div class="sec-sub">Los productos que más buscan nuestros clientes, seleccionados por disponibilidad y orden</div>
     <div class="trend-grid">
       {% for it in tendencias %}
-      <div class="trend-card">
+      <div class="trend-card" data-prod="{{ it.id }}" tabindex="0" role="button" aria-label="Ver {{ it.nombre }}">
         <div class="img-zone">{% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy">{% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}</div>
         <div class="name">{{ it.nombre }}</div>
         <div class="sku">{{ it.codigo }} · {{ it.etiqueta }}</div>
@@ -369,5 +369,6 @@ function toggleStoreTheme(){
   setInterval(refrescar, 20000);
 })();
 </script>
+{% include "core/store_producto_modal.html" %}
 </body>
 </html>

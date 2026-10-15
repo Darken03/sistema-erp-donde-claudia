@@ -1,0 +1,134 @@
+{# Ventana flotante de detalle de producto para /store (landing, categoría y buscar). #}
+<style>
+  .product-card[data-prod], .trend-card[data-prod] { cursor:pointer; }
+  .pmodal-backdrop { display:none; position:fixed; inset:0; z-index:1400; background:rgba(15,15,30,.55); padding:16px; overflow-y:auto; }
+  .pmodal-backdrop.show { display:grid; place-items:center; }
+  .pmodal { position:relative; width:560px; max-width:100%; max-height:92vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:18px; box-shadow:0 24px 60px -12px rgba(20,20,40,.45); display:grid; grid-template-columns:220px 1fr; }
+  .pmodal-close { position:absolute; top:10px; right:10px; z-index:2; width:34px; height:34px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); font-size:15px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .pmodal-close:hover { background:var(--soft); color:var(--ink); }
+  .pmodal-img { min-height:220px; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; border-radius:18px 0 0 18px; }
+  .pmodal-img img { width:100%; height:100%; min-height:220px; object-fit:cover; display:block; }
+  .pmodal-img .noimg { font-family:var(--font-mono); font-weight:700; font-size:44px; color:rgba(31,26,20,.45); }
+  .pmodal-body { padding:22px 20px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .pmodal-cat { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); font-family:var(--font-display); }
+  .pmodal-body h3 { font-size:22px; font-weight:800; letter-spacing:-0.01em; font-family:var(--font-display); }
+  .pmodal-sku { font-size:11px; color:var(--ink-3); font-family:var(--font-mono); }
+  .pmodal-desc { font-size:13.5px; color:var(--ink-2); line-height:1.6; }
+  .pmodal-pres { display:flex; flex-direction:column; gap:4px; }
+  .pmodal-pres .prow { display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; }
+  .pmodal-pres .prow b { font-family:var(--font-mono); color:var(--accent); }
+  .pmodal-foot { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .pmodal-foot .price { font-size:22px; font-weight:700; font-family:var(--font-mono); color:var(--accent); }
+  .pmodal-foot .stockqty { font-size:11px; font-family:var(--font-mono); color:var(--ink-2); }
+  @media (max-width:560px){
+    .pmodal { grid-template-columns:1fr; width:100%; }
+    .pmodal-img { border-radius:18px 18px 0 0; min-height:200px; }
+    .pmodal-img img { min-height:200px; max-height:46vh; }
+  }
+</style>
+<div class="pmodal-backdrop" id="prodModal" aria-hidden="true">
+  <div class="pmodal" role="dialog" aria-modal="true" aria-label="Detalle del producto">
+    <button type="button" class="pmodal-close" id="prodModalClose" aria-label="Cerrar">✕</button>
+    <div class="pmodal-img" id="prodModalImgWrap"><span class="noimg" id="prodModalInitials"></span></div>
+    <div class="pmodal-body">
+      <div class="pmodal-cat" id="prodModalCat"></div>
+      <h3 id="prodModalName">Cargando…</h3>
+      <div class="pmodal-sku" id="prodModalSku"></div>
+      <p class="pmodal-desc" id="prodModalDesc" style="display:none;"></p>
+      <div class="pmodal-pres" id="prodModalPres" style="display:none;"></div>
+      <div class="pmodal-foot">
+        <span class="price" id="prodModalPrice"></span>
+        <span class="stockqty" id="prodModalStock"></span>
+        <span class="pill pill-open" id="prodModalPill"></span>
+      </div>
+      <a class="link-more" id="prodModalCatLink" href="#">Ver categoría →</a>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var backdrop = document.getElementById('prodModal');
+  if (!backdrop || backdrop.dataset.ready) return;
+  backdrop.dataset.ready = '1';
+  var SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
+  var API = "{% url 'core:store_producto_api' 0 %}";
+  function apiUrl(id){ return API.replace(/0\/$/, id + '/'); }
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function initials(nombre){
+    var parts = String(nombre || '?').trim().split(/\s+/);
+    return ((parts[0] || '?').charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : (parts[0] || '?').charAt(1) || '')).toUpperCase();
+  }
+  function cerrar(){ backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; }
+  function pillCls(disp, pocas){
+    if (!disp) return 'pill pill-closed';
+    return pocas ? 'pill pill-low' : 'pill pill-open';
+  }
+  function pillTxt(disp, pocas, stockFmt){
+    if (!disp) return 'Agotado';
+    if (pocas) return '¡Solo ' + stockFmt + '!';
+    return 'Disponible';
+  }
+  function abrir(id){
+    $('prodModalName').textContent = 'Cargando…';
+    $('prodModalSku').textContent = '';
+    $('prodModalDesc').style.display = 'none';
+    $('prodModalPres').style.display = 'none';
+    $('prodModalPres').innerHTML = '';
+    $('prodModalPrice').textContent = '';
+    $('prodModalStock').textContent = '';
+    $('prodModalCat').textContent = '';
+    $('prodModalInitials').textContent = '?';
+    backdrop.classList.add('show');
+    backdrop.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    fetch(apiUrl(id), {headers:{'Accept':'application/json'}})
+      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d){
+        $('prodModalCat').textContent = [d.categoria_padre, d.categoria].filter(Boolean).join(' / ');
+        $('prodModalName').textContent = d.nombre;
+        $('prodModalSku').textContent = d.codigo + ' · ' + d.etiqueta;
+        if (d.descripcion){
+          $('prodModalDesc').textContent = d.descripcion;
+          $('prodModalDesc').style.display = '';
+        }
+        if (d.presentaciones && d.presentaciones.length > 1){
+          $('prodModalPres').innerHTML = d.presentaciones.map(function(p){
+            return '<span class="prow"><span>' + esc(p.nombre) + '</span><b>' + esc(SIMBOLO + p.precio) + '</b></span>';
+          }).join('');
+          $('prodModalPres').style.display = '';
+        }
+        $('prodModalPrice').textContent = SIMBOLO + d.precio;
+        $('prodModalStock').textContent = 'Stock: ' + d.stock_fmt;
+        var pill = $('prodModalPill');
+        pill.className = 'js-pill ' + pillCls(d.disponible, d.pocas);
+        pill.textContent = pillTxt(d.disponible, d.pocas, d.stock_fmt);
+        var wrap = $('prodModalImgWrap');
+        if (d.imagen){
+          wrap.innerHTML = '<img src="' + esc(d.imagen) + '" alt="' + esc(d.nombre) + '">';
+        } else {
+          wrap.innerHTML = '<span class="noimg" id="prodModalInitials">' + esc(initials(d.nombre)) + '</span>';
+        }
+        $('prodModalCatLink').href = d.categoria_url;
+      })
+      .catch(function(){
+        $('prodModalName').textContent = 'No se pudo cargar el producto.';
+      });
+  }
+  document.addEventListener('click', function(e){
+    var card = e.target.closest ? e.target.closest('[data-prod]') : null;
+    if (!card) return;
+    if (e.target.closest('a')) return;
+    abrir(card.getAttribute('data-prod'));
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') cerrar();
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.matches && e.target.matches('[data-prod]')){
+      e.preventDefault();
+      abrir(e.target.getAttribute('data-prod'));
+    }
+  });
+  $('prodModalClose').addEventListener('click', cerrar);
+  backdrop.addEventListener('click', function(e){ if (e.target === backdrop) cerrar(); });
+})();
+</script>

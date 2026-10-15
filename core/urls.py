@@ -128,6 +128,7 @@ urlpatterns = [
     path('store/buscar/', views.store_buscar, name='store_buscar'),
     path('store/categoria/<int:pk>/', views.store_categoria, name='store_categoria'),
     path('store/api/estado/', views.store_api_estado, name='store_api'),
+    path('store/api/producto/<int:pk>/', views.store_producto_detalle, name='store_producto_api'),
     path('mostrador/estado/', views.mostrador_estado, name='mostrador_estado'),
     path('pos/mostrador/empujar/', views.pos_mostrador_empujar, name='pos_mostrador_empujar'),
     path('pos/mostrador/limpiar/', views.pos_mostrador_limpiar, name='pos_mostrador_limpiar'),
