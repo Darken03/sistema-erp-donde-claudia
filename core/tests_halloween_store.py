@@ -381,3 +381,18 @@ class StoreProductoModalTest(TestCase):
             html = self.client.get(url).content.decode()
             self.assertIn('id="prodModal"', html)
             self.assertIn('data-prod=', html)
+
+    def test_modal_sin_enlace_ver_categoria(self):
+        for url in (reverse('core:store'),
+                    reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[self.cat.pk])):
+            html = self.client.get(url).content.decode()
+            self.assertNotIn('id="prodModalCatLink"', html)
+
+    def test_modal_reinicia_imagen_al_abrir(self):
+        # Regresión: al reabrir, el reset no depende del span de
+        # iniciales (desaparece cuando el producto anterior tenía
+        # foto); el wrap siempre vuelve a su esqueleto.
+        html = self.client.get(reverse('core:store')).content.decode()
+        self.assertIn('prodModalImgWrap', html)
+        self.assertNotIn("$('prodModalInitials').textContent", html)
