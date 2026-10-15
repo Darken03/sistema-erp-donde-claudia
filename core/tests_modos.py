@@ -10,6 +10,7 @@ from django.template.loader import render_to_string
 from .models import (
     ConfiguracionTienda, PerfilUsuario, Producto, EntradaProducto,
     Almacen, AlmacenStock, AlmacenTraslado, Empleado, Turno, PuntoVenta, Venta,
+    Categoria,
 )
 from .views import (
     modo_actual, ahora_servidor, FECHA_INICIO_SISTEMA, _obtener_datos_ipb,
@@ -517,6 +518,40 @@ class TestVentasMultiPos(TestCase):
         r = self.client.get(reverse('core:pos'))
         self.assertEqual(r.status_code, 200)
         self.assertIn('Sin punto de venta asignado', r.content.decode())
+
+
+class TestPosSinStock(TestCase):
+    """El POS nunca ofrece productos agotados: ni al buscar por
+    categoría (online) ni en el catálogo de la caché offline."""
+
+    def setUp(self):
+        _usuario('sinstock_cajero', 'cajero')
+        self.cat = Categoria.objects.create(nombre='CatStock')
+        self.con = Producto.objects.create(
+            nombre='ConStock', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'),
+            categoria=self.cat)
+        self.sin = Producto.objects.create(
+            nombre='SinStock', unidad_medida='unidades',
+            precio_compra=1, precio_venta=6, stock=Decimal('0'),
+            categoria=self.cat)
+        self.client.login(username='sinstock_cajero', password='x12345')
+
+    def test_buscar_por_categoria_excluye_agotados(self):
+        r = self.client.post(
+            reverse('core:pos_buscar'),
+            {'q': '', 'categoria': str(self.cat.pk)})
+        self.assertEqual(r.status_code, 200)
+        ids = [p['id'] for p in r.json()['productos']]
+        self.assertIn(self.con.pk, ids)
+        self.assertNotIn(self.sin.pk, ids)
+
+    def test_catalogo_offline_excluye_agotados(self):
+        r = self.client.get(reverse('core:pos_catalogo'))
+        self.assertEqual(r.status_code, 200)
+        ids = [p['id'] for p in r.json()['productos']]
+        self.assertIn(self.con.pk, ids)
+        self.assertNotIn(self.sin.pk, ids)
 
 
 class TestReportesPorPos(TestCase):

@@ -39,6 +39,25 @@ class IconoCategoriaTest(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Categoria.objects.get(nombre='Frutas').icono, '🍎')
 
+    def test_pos_icono_sin_fondo(self):
+        cajero = _usuario('ico_cajero2', 'cajero')
+        empleado = Empleado.objects.create(user=cajero, salario=0, activo=True)
+        Turno.objects.create(empleado=empleado, abierto=True)
+        padre = Categoria.objects.create(nombre='PadreNBG', icono='🎃')
+        hija = Categoria.objects.create(nombre='HijaNBG', padre=padre)
+        Producto.objects.create(
+            nombre='ProdNBG', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('4'),
+            categoria=hija)
+        self.client.login(username='ico_cajero2', password='x12345')
+        r = self.client.get(reverse('core:pos'))
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        # Con icono: solo el icono, sin fondo degradado.
+        self.assertIn('<span class="cicon no-bg">🎃</span>', html)
+        # Sin icono: inicial sobre el degradado.
+        self.assertIn('<span class="cicon">H</span>', html)
+
     def test_pos_muestra_icono_y_submenu_en_cascada(self):
         cajero = _usuario('ico_cajero', 'cajero')
         empleado = Empleado.objects.create(user=cajero, salario=0, activo=True)

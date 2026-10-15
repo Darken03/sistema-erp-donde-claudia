@@ -170,6 +170,7 @@ textarea.form-control { min-height:96px; resize:vertical; }
         if (!iconoPreview || !iconoInput) return;
         var v = (iconoInput.value || '').trim();
         iconoPreview.textContent = '';
+        iconoPreview.style.background = v ? 'transparent' : '';
         if (v.slice(0, 3) === 'bi-'){
             var i = document.createElement('i');
             i.className = 'bi ' + v;

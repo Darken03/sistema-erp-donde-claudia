@@ -147,6 +147,17 @@ class StoreTest(TestCase):
         self.assertContains(r, 'Viveres')
         self.assertContains(r, f'/store/categoria/{cat.pk}/')
 
+    def test_store_icono_sin_fondo(self):
+        Categoria.objects.create(nombre='Frutas', icono='🍎')
+        Categoria.objects.create(nombre='Canasta', icono='bi-basket')
+        Categoria.objects.create(nombre='Verduras')
+        html = self.client.get(reverse('core:store')).content.decode()
+        # Con icono: solo el icono, sin fondo degradado.
+        self.assertIn('<span class="nav-dd-ico no-bg">🍎</span>', html)
+        self.assertIn('<span class="nav-dd-ico no-bg"><i class="bi bi-basket"></i></span>', html)
+        # Sin icono: inicial sobre el degradado.
+        self.assertIn('<span class="nav-dd-ico">V</span>', html)
+
     def test_categoria_jerarquia_padre_hijas(self):
         padre = Categoria.objects.create(nombre='Alimentos')
         h1 = Categoria.objects.create(nombre='Granos', padre=padre)

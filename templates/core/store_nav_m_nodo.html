@@ -1,7 +1,7 @@
 {# Nodo del menú lateral móvil de la store (recursivo, acordeón). #}
 <div class="nav-m-item">
   <div class="nav-m-row">
-    <a href="{% url 'core:store_categoria' nodo.id %}"><span class="nav-dd-ico sm">{% include "core/store_cat_icon.html" with icono=nodo.icono nombre=nodo.nombre %}</span><span>{{ nodo.nombre }}</span></a>
+    <a href="{% url 'core:store_categoria' nodo.id %}">{% include "core/store_cat_icon.html" with icono=nodo.icono nombre=nodo.nombre cls="nav-dd-ico sm" %}<span>{{ nodo.nombre }}</span></a>
     {% if nodo.hijas %}<button type="button" class="nav-m-toggle" aria-expanded="false" title="Ver subcategorías"><i class="bi bi-chevron-down"></i></button>{% endif %}
   </div>
   {% if nodo.hijas %}<div class="nav-m-sub">{% for h in nodo.hijas %}{% include "core/store_nav_m_nodo.html" with nodo=h %}{% endfor %}</div>{% endif %}

@@ -1,2 +1,2 @@
-{# Icono de categoría: emoji, clase Bootstrap o inicial del nombre. #}
-{% if icono|slice:":3" == "bi-" %}<i class="bi {{ icono }}"></i>{% elif icono %}{{ icono }}{% else %}{{ nombre|slice:":1"|upper }}{% endif %}
+{# Icono de categoría: solo el icono sin fondo si hay icono, degradado con inicial si no. #}
+{% if icono|slice:":3" == "bi-" %}<span class="{{ cls|default:'nav-dd-ico' }} no-bg"><i class="bi {{ icono }}"></i></span>{% elif icono %}<span class="{{ cls|default:'nav-dd-ico' }} no-bg">{{ icono }}</span>{% else %}<span class="{{ cls|default:'nav-dd-ico' }}">{{ nombre|slice:":1"|upper }}</span>{% endif %}

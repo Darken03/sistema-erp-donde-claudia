@@ -1,7 +1,7 @@
 {# Selector de categorías en cascada estilo POS: padres + flyout lateral de hijas. #}
 <div class="nav-dd" id="navCatSel">
   <button type="button" class="nav-dd-btn" aria-haspopup="true" aria-expanded="false">
-    <span class="nav-dd-ico">{% if categoria %}{% include "core/store_cat_icon.html" with icono=categoria.icono nombre=categoria.nombre %}{% else %}📁{% endif %}</span>
+    {% if categoria %}{% include "core/store_cat_icon.html" with icono=categoria.icono nombre=categoria.nombre cls="nav-dd-ico" %}{% else %}<span class="nav-dd-ico">📁</span>{% endif %}
     <span class="nav-dd-label">{% if categoria %}{{ categoria.nombre }}{% else %}Categorías{% endif %}</span>
     <i class="bi bi-chevron-down nav-dd-chev"></i>
   </button>

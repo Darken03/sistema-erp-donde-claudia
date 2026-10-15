@@ -1482,8 +1482,6 @@ def _serializar_producto_pos(p, stock_override=None):
     }
 
 
-@login_required
-@require_POST
 def _subarbol_categoria_ids(categoria_id):
     """Id de la categoría + todos sus descendientes (para filtrar familia)."""
     try:
@@ -1557,6 +1555,8 @@ def _limpiar_ids(nodo):
         _limpiar_ids(h)
 
 
+@login_required
+@require_POST
 def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
     categoria_id = request.POST.get('categoria', '')
@@ -1808,11 +1808,12 @@ def pos_catalogo(request):
         categorias = list(Categoria.objects.filter(
             productos__id__in=ids_multi).distinct().values('id', 'nombre'))
         return JsonResponse({'productos': data, 'categorias': categorias})
-    productos = Producto.objects.filter(activo=True, visible_pos=True).select_related(
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
         'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
     data = [_serializar_producto_pos(p) for p in productos]
     categorias = list(Categoria.objects.filter(
-        productos__activo=True, productos__visible_pos=True).distinct().values('id', 'nombre'))
+        productos__activo=True, productos__visible_pos=True,
+        productos__stock__gt=0).distinct().values('id', 'nombre'))
     return JsonResponse({'productos': data, 'categorias': categorias})
 
 

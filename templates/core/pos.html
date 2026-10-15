@@ -171,6 +171,7 @@
 .cat-item:hover { background:var(--bg); border-color:var(--line); }
 .cat-item.active { background:var(--accent-tint); border-color:var(--accent); color:var(--accent); font-weight:700; }
 .cat-item .cicon { width:36px; height:36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:#fff; background:linear-gradient(135deg,#6f53d9,#8a6cf0); flex:0 0 36px; }
+.cat-item .cicon.no-bg { background:transparent; font-size:22px; }
 .cat-item .cname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cat-node { position:relative; }
 .cat-caret { margin-left:auto; width:26px; height:26px; flex:0 0 26px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:12px; }
@@ -1243,7 +1244,7 @@ async function buscarProductos(){
       const list = (c && c.data && c.data.productos) || [];
       const ql = normSinTildes(q);
       const fam = familiaActiva();
-      const f = list.filter(p => (!cat || fam.has(String(p.categoria_id))) && (!ql || normSinTildes(p.nombre).includes(ql) || normSinTildes(p.codigo).includes(ql)));
+      const f = list.filter(p => (parseFloat(p.stock) || 0) > 0 && (!cat || fam.has(String(p.categoria_id))) && (!ql || normSinTildes(p.nombre).includes(ql) || normSinTildes(p.codigo).includes(ql)));
       grid.innerHTML = f.map(p=>{
         POS_CATALOG[p.id] = POS_CATALOG[p.id] || {
           id: p.id, nombre: p.nombre, precio: parseFloat(p.precio) || 0,
