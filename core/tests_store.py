@@ -210,7 +210,9 @@ class StoreTest(TestCase):
             precio_compra=10, precio_venta=20, stock=Decimal('12'), categoria=hija)
         r = self.client.get(reverse('core:store_categoria', args=[padre.pk]))
         self.assertContains(r, 'Alimentos')
-        self.assertContains(r, 'data-parent=')
+        # La página del padre enlaza a la hija (no vuelca sus productos).
+        self.assertContains(r, 'Granos')
+        self.assertContains(r, f'/store/categoria/{hija.pk}/')
 
     def test_store_sin_chips_duplicados(self):
         r = self.client.get(reverse('core:store'))

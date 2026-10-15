@@ -5501,10 +5501,12 @@ def _store_arbol(grupos, nombres):
 
 
 def store_categoria(request, pk):
-    """Página pública de una categoría: solo sus productos (+ subcategorías).
+    """Página pública de una categoría con selector lateral de hijas.
 
-    Sin login ni compra. La rama oculta (`visible_store=False` en la
-    categoría o en algún padre) devuelve 404.
+    - Con hijas: lista las hijas (cards) + sus productos directos; los
+      productos se ven al elegir una hija en el lateral.
+    - Hoja: sus productos + lateral con las hermanas.
+    Sin login ni compra. Rama oculta → 404.
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Solo GET.'}, status=405)
@@ -5528,18 +5530,68 @@ def store_categoria(request, pk):
             ids.add(h.id)
             pendientes.extend(list(h.hijas.all()))
     todos = _store_items()
-    items = [it for it in todos if it['categoria_id'] in ids]
+    hijas = sorted(
+        [h for h in cat.hijas.all() if h.visible_store],
+        key=lambda h: h.nombre.lower())
+    es_padre = bool(hijas)
+    if es_padre:
+        # Solo los directos del padre; lo demás vive en cada hija.
+        items = [it for it in todos if it['categoria_id'] == cat.id]
+        # Conteo del subárbol por hija (para sus cards).
+        conteo = {}
+        for it in todos:
+            cid = it['categoria_id']
+            if cid in ids:
+                conteo[cid] = conteo.get(cid, 0) + 1
+
+        def _cuenta_sub(hoja):
+            total = conteo.get(hoja.id, 0)
+            for n in hoja.hijas.all():
+                total += _cuenta_sub(n)
+            return total
+
+        hijas_info = [{
+            'id': h.id, 'nombre': h.nombre,
+            'icono': (h.icono or '').strip(),
+            'descripcion': h.descripcion or '',
+            'total': _cuenta_sub(h),
+        } for h in hijas]
+        lateral_titulo = f'Subcategorías de {cat.nombre}'
+        lateral = [{
+            'id': h.id, 'nombre': h.nombre,
+            'icono': (h.icono or '').strip(), 'actual': False,
+        } for h in hijas]
+    else:
+        items = [it for it in todos if it['categoria_id'] in ids]
+        hijas_info = []
+        if cat.padre_id:
+            hermanas = sorted(
+                [h for h in cat.padre.hijas.all() if h.visible_store],
+                key=lambda h: h.nombre.lower())
+            lateral_titulo = f'Más de {cat.padre.nombre}'
+            lateral = [{
+                'id': h.id, 'nombre': h.nombre,
+                'icono': (h.icono or '').strip(),
+                'actual': h.id == cat.id,
+            } for h in hermanas]
+        else:
+            lateral_titulo = 'Categorías'
+            lateral = [{
+                'id': a['id'], 'nombre': a['nombre'], 'icono': a['icono'],
+                'actual': a['id'] == cat.id,
+            } for a in _nav_categorias()]
     grupos = _store_grupos(items)
     # Selector del header: mismo árbol global de /store/.
     nombres = _store_nombres_categoria()
     arbol_global = _store_arbol(_store_grupos(todos), nombres)
-    hijas = sorted(
-        [h for h in cat.hijas.all() if h.visible_store],
-        key=lambda h: h.nombre.lower())
     return render(request, 'core/store_categoria.html', {
         'categoria': cat,
         'migas': migas,
         'hijas': hijas,
+        'hijas_info': hijas_info,
+        'es_padre': es_padre,
+        'lateral_titulo': lateral_titulo,
+        'lateral': lateral,
         'grupos': grupos,
         'arbol': arbol_global,
         'nav': _nav_categorias(),

@@ -88,9 +88,46 @@ class StoreCategoriaPaginaTest(TestCase):
         hija = Categoria.objects.create(nombre='HijaX', padre=padre)
         Producto.objects.create(nombre='ProdHija', unidad_medida='unidades',
             precio_compra=1, precio_venta=7, stock=Decimal('2'), categoria=hija)
-        r = self.client.get(reverse('core:store_categoria', args=[padre.pk]))
+        # La página de la hija muestra sus productos.
+        r = self.client.get(reverse('core:store_categoria', args=[hija.pk]))
         self.assertEqual(r.status_code, 200)
         self.assertIn('ProdHija', r.content.decode())
+
+    def test_pagina_padre_lista_hijas_y_no_vuelca_productos(self):
+        padre = Categoria.objects.create(nombre='PadreL')
+        hija = Categoria.objects.create(nombre='HijaL', padre=padre)
+        Producto.objects.create(nombre='ProdL', unidad_medida='unidades',
+            precio_compra=1, precio_venta=7, stock=Decimal('2'), categoria=hija)
+        html = self.client.get(reverse('core:store_categoria', args=[padre.pk])).content.decode()
+        # Cards de hijas + selector lateral, sin tarjetas de producto.
+        self.assertIn('HijaL', html)
+        self.assertIn(f'/store/categoria/{hija.pk}/', html)
+        self.assertIn('cat-side', html)
+        self.assertNotIn('ProdL', html)
+        self.assertNotIn('<article', html)
+
+    def test_pagina_padre_muestra_sus_productos_directos(self):
+        padre = Categoria.objects.create(nombre='PadreD')
+        hija = Categoria.objects.create(nombre='HijaD', padre=padre)
+        Producto.objects.create(nombre='DirectoD', unidad_medida='unidades',
+            precio_compra=1, precio_venta=7, stock=Decimal('2'), categoria=padre)
+        Producto.objects.create(nombre='DeHijaD', unidad_medida='unidades',
+            precio_compra=1, precio_venta=8, stock=Decimal('2'), categoria=hija)
+        html = self.client.get(reverse('core:store_categoria', args=[padre.pk])).content.decode()
+        self.assertIn('DirectoD', html)
+        self.assertNotIn('DeHijaD', html)
+
+    def test_pagina_hoja_con_lateral_de_hermanas(self):
+        padre = Categoria.objects.create(nombre='PadreH')
+        alfa = Categoria.objects.create(nombre='AlfaH', padre=padre)
+        beta = Categoria.objects.create(nombre='BetaH', padre=padre)
+        Producto.objects.create(nombre='ProdBeta', unidad_medida='unidades',
+            precio_compra=1, precio_venta=7, stock=Decimal('2'), categoria=beta)
+        html = self.client.get(reverse('core:store_categoria', args=[beta.pk])).content.decode()
+        self.assertIn('ProdBeta', html)
+        self.assertIn('cat-side', html)
+        self.assertIn('AlfaH', html)
+        self.assertIn(f'/store/categoria/{alfa.pk}/', html)
 
     def test_pagina_categoria_oculta_da_404(self):
         oculta = Categoria.objects.create(nombre='OcultaX', visible_store=False)
@@ -108,6 +145,16 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertNotIn('href="#categorias"', html)
         self.assertIn('id="navCatSel"', html)
         self.assertIn(f'/store/categoria/{cat.pk}/', html)
+
+    def test_panel_selector_no_queda_recortado(self):
+        # El contenedor del nav no debe recortar el panel desplegable.
+        cat = Categoria.objects.create(nombre='Recorte')
+        Producto.objects.create(nombre='ProdRec', unidad_medida='unidades',
+            precio_compra=1, precio_venta=3, stock=Decimal('1'), categoria=cat)
+        for url in (reverse('core:store'), reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[cat.pk])):
+            html = self.client.get(url).content.decode()
+            self.assertNotRegex(html, r'\.ml-nav-inner \{[^}]*overflow-x')
 
 
 class StoreBuscarTest(TestCase):
