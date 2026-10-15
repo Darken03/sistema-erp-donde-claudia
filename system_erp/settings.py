@@ -34,7 +34,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
-    '192.168.86.213',
+    '192.168.86.206',
     'dondeclaudia.pythonanywhere.com',
 ]
 
