@@ -244,6 +244,17 @@ class StoreCategoriaPaginaTest(TestCase):
             reverse('core:store_categoria', args=[cat.pk])).content.decode()
         self.assertIn('.cat-main{min-width:0', html)
 
+    def test_header_flexible_sin_aplaste(self):
+        # El buscador y la marca deben ceder (min-width:0 + ellipsis),
+        # como el header del panel admin: nada se aplasta en móvil.
+        cat = Categoria.objects.create(nombre='Head')
+        for url in (reverse('core:store'),
+                    reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[cat.pk])):
+            html = self.client.get(url).content.decode()
+            self.assertIn('.ml-search input{min-width:0', html)
+            self.assertIn('.ml-brand .t1,.ml-brand .t2{overflow:hidden', html)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):

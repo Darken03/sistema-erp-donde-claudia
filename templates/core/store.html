@@ -60,6 +60,10 @@ function toggleStoreTheme(){
   .ml-search::before { content:"⌕"; position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--ink-3); font-size:17px; }
   .ml-search input { width:100%; height:40px; padding:0 12px 0 38px; font-size:13px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; outline:none; }
   .ml-search input:focus { border-color:var(--witch); box-shadow:0 0 0 3px rgba(124,58,237,.15); }
+  .ml-search input{min-width:0;}
+  .ml-brand{min-width:0;}
+  .ml-brand > span{min-width:0; overflow:hidden;}
+  .ml-brand .t1,.ml-brand .t2{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;}
   .ml-side { display:flex; align-items:center; gap:8px; margin-left:auto; }
   .live { display:inline-flex; align-items:center; gap:6px; background:var(--accent-tint); border:1px solid var(--line); border-radius:99px; padding:5px 12px; font-size:11px; font-weight:600; font-family:var(--font-mono); color:var(--ink-2); white-space:nowrap; }
   .live .dot { width:8px; height:8px; border-radius:99px; background:var(--success); }
@@ -224,7 +228,7 @@ function toggleStoreTheme(){
   .foot-bottom { background:#151515; text-align:center; padding:14px; font-size:12px; color:#8d8da0; }
   @media (max-width:900px){ .hero-inner,.duo,.explore{grid-template-columns:1fr;} .trend-grid,.feat-grid{grid-template-columns:repeat(2,1fr);} .testi-grid{grid-template-columns:1fr;} .foot-mid{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:768px){ .ml-search{order:3;flex-basis:100%;} .ml-row{flex-wrap:wrap;} .live #liveTxt{display:none;} }
-  @media (max-width:480px){ .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));} .trend-grid,.feat-grid{grid-template-columns:1fr;} .foot-mid{grid-template-columns:1fr;} .hero-inner{padding:24px 20px;} .sec-head h2{font-size:20px;} .duo-card{padding:18px;} .explore{padding:20px;} .hwn-garland{display:none;} .ml-nav .count{display:none;} .ml-row{gap:8px;} }
+  @media (max-width:480px){ .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));} .trend-grid,.feat-grid{grid-template-columns:1fr;} .foot-mid{grid-template-columns:1fr;} .hero-inner{padding:24px 20px;} .sec-head h2{font-size:20px;} .duo-card{padding:18px;} .explore{padding:20px;} .hwn-garland{display:none;} .ml-nav .count{display:none;} .ml-row{gap:8px;} .ml-brand img.logo{height:34px;} }
 </style>
 </head>
 <body>
