@@ -197,6 +197,23 @@ class StoreCategoriaPaginaTest(TestCase):
             self.assertIn(f'/store/categoria/{padre.pk}/', html)
             self.assertIn(f'/store/categoria/{hija.pk}/', html)
 
+    def test_vistas_store_responsive_movil(self):
+        cat = Categoria.objects.create(nombre='Resp')
+        Producto.objects.create(nombre='ProdResp', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=cat)
+        for url in (reverse('core:store'),
+                    reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[cat.pk])):
+            html = self.client.get(url).content.decode()
+            # Breakpoints móvil/tablet + drawer + viewport en las 3 vistas.
+            self.assertIn('name="viewport"', html)
+            self.assertIn('max-width:1024px', html)
+            self.assertIn('max-width:480px', html)
+            self.assertIn('nav-m-drawer', html)
+            # En móvil chico se libera espacio: sin guirnalda ni contador.
+            self.assertIn('.hwn-garland{display:none', html)
+            self.assertIn('.ml-nav .count{display:none', html)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):
