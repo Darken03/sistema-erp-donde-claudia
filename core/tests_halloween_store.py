@@ -214,6 +214,19 @@ class StoreCategoriaPaginaTest(TestCase):
             self.assertIn('.hwn-garland{display:none', html)
             self.assertIn('.ml-nav .count{display:none', html)
 
+    def test_pagina_categoria_responsive_tablet_movil(self):
+        padre = Categoria.objects.create(nombre='PadreR')
+        hija = Categoria.objects.create(nombre='HijaR', padre=padre)
+        Producto.objects.create(nombre='ProdR', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=hija)
+        html = self.client.get(
+            reverse('core:store_categoria', args=[padre.pk])).content.decode()
+        # En tablet el lateral se apila arriba (chips horizontales).
+        self.assertIn('.cat-layout{grid-template-columns:1fr', html)
+        # En móvil las cards se compactan.
+        self.assertIn('.product-card .img-zone{height:84px', html)
+        self.assertIn('.product-card .stockrow{flex-wrap:wrap', html)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):
