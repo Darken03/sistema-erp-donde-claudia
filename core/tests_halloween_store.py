@@ -93,20 +93,20 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('ProdHija', r.content.decode())
 
-    def test_pagina_padre_lista_hijas_y_no_vuelca_productos(self):
+    def test_pagina_padre_lista_hijas_y_sus_productos(self):
         padre = Categoria.objects.create(nombre='PadreL')
         hija = Categoria.objects.create(nombre='HijaL', padre=padre)
         Producto.objects.create(nombre='ProdL', unidad_medida='unidades',
             precio_compra=1, precio_venta=7, stock=Decimal('2'), categoria=hija)
         html = self.client.get(reverse('core:store_categoria', args=[padre.pk])).content.decode()
-        # Cards de hijas + selector lateral, sin tarjetas de producto.
+        # Cards de hijas + selector lateral + productos de las hijas.
         self.assertIn('HijaL', html)
         self.assertIn(f'/store/categoria/{hija.pk}/', html)
         self.assertIn('cat-side', html)
-        self.assertNotIn('ProdL', html)
-        self.assertNotIn('<article', html)
+        self.assertIn('ProdL', html)
+        self.assertIn('<article', html)
 
-    def test_pagina_padre_muestra_sus_productos_directos(self):
+    def test_pagina_padre_muestra_directos_y_de_hijas(self):
         padre = Categoria.objects.create(nombre='PadreD')
         hija = Categoria.objects.create(nombre='HijaD', padre=padre)
         Producto.objects.create(nombre='DirectoD', unidad_medida='unidades',
@@ -115,7 +115,7 @@ class StoreCategoriaPaginaTest(TestCase):
             precio_compra=1, precio_venta=8, stock=Decimal('2'), categoria=hija)
         html = self.client.get(reverse('core:store_categoria', args=[padre.pk])).content.decode()
         self.assertIn('DirectoD', html)
-        self.assertNotIn('DeHijaD', html)
+        self.assertIn('DeHijaD', html)
 
     def test_pagina_hoja_con_lateral_de_hermanas(self):
         padre = Categoria.objects.create(nombre='PadreH')

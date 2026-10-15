@@ -5541,8 +5541,8 @@ def store_categoria(request, pk):
         key=lambda h: h.nombre.lower())
     es_padre = bool(hijas)
     if es_padre:
-        # Solo los directos del padre; lo demás vive en cada hija.
-        items = [it for it in todos if it['categoria_id'] == cat.id]
+        # Cards de hijas + productos del subárbol agrupados por hija.
+        items = [it for it in todos if it['categoria_id'] in ids]
         # Conteo del subárbol por hija (para sus cards).
         conteo = {}
         for it in todos:
