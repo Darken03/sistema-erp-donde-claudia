@@ -72,6 +72,10 @@ function toggleStoreTheme(){
   .ml-nav a:hover { color:var(--accent); }
   .ml-nav a.active { color:var(--accent); border-bottom-color:var(--accent); }
   .ml-nav .count { margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; padding:9px 0 9px 12px; }
+  .nav-cat { height:32px; border:0; background:transparent; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--ink-2); max-width:230px; cursor:pointer; padding:9px 4px; }
+  .nav-cat:hover { color:var(--accent); }
+  .link-more { display:inline-block; margin-top:8px; font-size:12px; font-weight:700; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.04em; color:var(--accent); text-decoration:none; }
+  .link-more:hover { color:var(--accent-strong); }
   /* ===== Layout ===== */
   main { max-width:1200px; margin:0 auto; padding:0 16px 40px; width:100%; flex:1; }
   section.anchor { scroll-margin-top:120px; }
@@ -186,7 +190,7 @@ function toggleStoreTheme(){
 <body>
 <header class="ml-header">
   <div class="ml-row">
-    <a class="ml-brand" href="#top">
+    <a class="ml-brand" href="{% url 'core:store' %}">
       {% if TIENDA.logo_url %}<img class="logo" src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}">
       {% else %}<img class="logo" src="{% static 'img/logo-donde-clau.webp' %}" alt="{{ TIENDA.nombre|default:'Donde Clau' }}" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
       <span><span class="t1">{{ TIENDA.nombre|default:"Donde Clau" }}</span><br><span class="t2">Tienda · en vivo 🎃</span></span>
@@ -202,10 +206,16 @@ function toggleStoreTheme(){
   </div>
   <nav class="ml-nav">
     <div class="ml-nav-inner">
-      <a href="#categorias">Categorías</a>
-      <a href="#tendencias">Tendencias</a>
-      <a href="#catalogo">Catálogo</a>
-      <a href="#catalogo" id="navDisp">Solo disponibles</a>
+      <a href="{% url 'core:store' %}">Tienda</a>
+      <select class="nav-cat" id="navCatSel" title="Elegir categoría" onchange="if(this.value){location.href=this.value;}">
+        <option value="">Categorías…</option>
+        {% for a in nav %}
+        <option value="{% url 'core:store_categoria' a.id %}">{{ a.nombre }}</option>
+        {% for h in a.hijas %}
+        <option value="{% url 'core:store_categoria' h.id %}">↳ {{ h.nombre }}</option>
+        {% endfor %}{% endfor %}
+      </select>
+      <a href="{% url 'core:store' %}?solo=1">Solo disponibles</a>
       <span class="count">{{ total }} productos · {{ disponibles|default:total }} disponibles</span>
     </div>
   </nav>
@@ -223,8 +233,8 @@ function toggleStoreTheme(){
         <h1>Descubre lo mejor de nuestra tienda en vivo</h1>
         <p>Explora nuestra colección de productos con disponibilidad exacta y precios en {{ TIENDA.moneda|default:"CUP" }}. Calidad y confianza, con el toque festivo del POS: naranja calabaza y morado bruja. Solo vitrina, sin compra en línea.</p>
         <div class="hero-ctas">
-          <a class="btn-hero btn-hero-dark" href="#categorias">Explorar categoría</a>
-          <a class="btn-hero btn-hero-light" href="#catalogo">Descubrir más</a>
+          <button type="button" class="btn-hero btn-hero-dark" onclick="document.getElementById('categorias').scrollIntoView({behavior:'smooth'})">Explorar categorías</button>
+          {% with d=destacadas.0 %}{% if d.id %}<a class="btn-hero btn-hero-light" href="{% url 'core:store_categoria' d.id %}">Descubrir más</a>{% else %}<a class="btn-hero btn-hero-light" href="{% url 'core:store' %}?solo=1">Descubrir más</a>{% endif %}{% endwith %}
         </div>
       </div>
       <div class="hero-art">🎃</div>
@@ -236,12 +246,12 @@ function toggleStoreTheme(){
     <div class="duo-card">
       <h2>Compra sin complicaciones</h2>
       <p>Conecta con lo que necesitas sin importar la distancia. Nuestra vitrina muestra stock exacto en tiempo real, para que vengas a lo seguro: lo que ves disponible es lo que hay. Cada producto se actualiza cada 20 segundos.</p>
-      <a class="btn-hero btn-hero-dark" href="#tendencias">Más información</a>
+      <button type="button" class="btn-hero btn-hero-dark" onclick="document.getElementById('tendencias').scrollIntoView({behavior:'smooth'})">Más información</button>
     </div>
     <div class="duo-card">
       <h2>En vivo con confianza</h2>
       <p>Disponibilidad exacta y precios claros para que tu visita rinda. Filtra por Solo disponibles, ordena por precio o stock y encuentra rápido tu producto. {% if TIENDA.objeto.telefono %}Llámanos al {{ TIENDA.objeto.telefono }}.{% endif %}</p>
-      <a class="btn-hero btn-hero-dark" href="#catalogo" style="background:linear-gradient(135deg,#e8641b,#7c3aed);">Ver catálogo</a>
+      <a class="btn-hero btn-hero-dark" href="{% url 'core:store' %}?solo=1" style="background:linear-gradient(135deg,#e8641b,#7c3aed);">Ver disponibles</a>
     </div>
   </section>
 
@@ -256,6 +266,7 @@ function toggleStoreTheme(){
         <div class="name">{{ it.nombre }}</div>
         <div class="sku">{{ it.codigo }} · {{ it.etiqueta }}</div>
         <div class="price">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
+        {% if it.pagina_id %}<a class="link-more" href="{% url 'core:store_categoria' it.pagina_id %}">Ver categoría →</a>{% endif %}
       </div>
       {% empty %}<div class="empty" style="display:block;">Sin tendencias aún.</div>{% endfor %}
     </div>
@@ -268,7 +279,7 @@ function toggleStoreTheme(){
     <div class="feat-grid">
       {% for c in destacadas %}
       <div class="feat-card">
-        <h5><a href="#catalogo">{{ c.nombre }}</a></h5>
+        <h5>{% if c.id %}<a href="{% url 'core:store_categoria' c.id %}">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</h5>
         <p>{% if c.hijas %}{{ c.hijas|length }} subcategorías: {% for h in c.hijas|slice:":3" %}{{ h.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Productos esenciales y frescos para tu día a día.{% endif %}</p>
         <span class="meta">{{ c.total }} productos</span>
       </div>
@@ -281,7 +292,7 @@ function toggleStoreTheme(){
     <div>
       <h2>Explora Nuestra Tienda</h2>
       <p>Sumérgete en nuestros productos para inspirarte: destacados, calidad confiable y todo lo que necesitas en un solo lugar. Artículos que marcan tendencia cada visita. 🎃</p>
-      <div class="hero-ctas"><a class="btn-hero btn-hero-light" href="#catalogo">Descubrir más</a></div>
+      <div class="hero-ctas">{% with d=destacadas.0 %}{% if d.id %}<a class="btn-hero btn-hero-light" href="{% url 'core:store_categoria' d.id %}">Descubrir más</a>{% else %}<a class="btn-hero btn-hero-light" href="{% url 'core:store' %}?solo=1">Descubrir más</a>{% endif %}{% endwith %}</div>
     </div>
     <div class="explore-stats">
       <div class="stat"><b>{{ total }}</b><span>productos</span></div>
@@ -293,22 +304,23 @@ function toggleStoreTheme(){
   <section class="anchor" id="categorias">
     <div class="sec-head"><h2>Categorías</h2><span class="n">{{ arbol|length }}</span></div>
     <div class="cat-visual-grid">
-      <button class="cat-visual cat-card active" data-cat="">
+      <a class="cat-visual cat-card" href="{% url 'core:store' %}">
         <span class="avatar">✦</span>
         <span><span class="cname">Todas</span><br><span class="ccount">{{ total }} productos</span></span>
-      </button>
+      </a>
       {% for a in arbol %}
-      <button class="cat-visual cat-card" data-cat="{{ a.key }}">
+      {% if a.id %}<a class="cat-visual cat-card" href="{% url 'core:store_categoria' a.id %}">
+      {% else %}<a class="cat-visual cat-card" href="{% url 'core:store' %}">{% endif %}
         <span class="avatar">{{ a.nombre|slice:":2"|upper }}</span>
         <span><span class="cname">{{ a.nombre }}</span><br><span class="ccount">{{ a.total }} productos{% if a.hijas %} · {% for h in a.hijas %}{{ h.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</span></span>
-      </button>
+      </a>
       {% endfor %}
     </div>
   </section>
 
   <div class="toolbar">
     <div class="tools">
-      <label class="check"><input type="checkbox" id="solo"> Solo disponibles</label>
+      <label class="check"><input type="checkbox" id="solo"{% if solo %} checked{% endif %}> Solo disponibles</label>
       <select class="sort" id="orden" title="Ordenar">
         <option value="">Orden: Nombre</option>
         <option value="pasc">Precio ↑</option>
@@ -366,11 +378,11 @@ function toggleStoreTheme(){
 <footer class="store-foot">
   <div class="foot-top">
     <span>🎃 <strong style="color:#fcb424;">{{ TIENDA.nombre|default:"Donde Clau" }}</strong> · Tu tienda de confianza</span>
-    <span><a href="#categorias">Categorías</a> · <a href="#tendencias">Tendencias</a> · <a href="#catalogo">Catálogo</a></span>
+    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store' %}?solo=1">Disponibles</a></span>
   </div>
   <div class="foot-mid">
     <div><h3>Sobre Nosotros</h3><ul><li>Tienda confiable con entregas rápidas y productos seleccionados.</li><li>Precios en {{ TIENDA.moneda|default:"CUP" }} · Solo vitrina</li></ul></div>
-    <div><h3>Enlaces Rápidos</h3><ul><li><a href="#catalogo">Catálogo</a></li><li><a href="#categorias">Categorías</a></li><li><a href="#tendencias">Tendencias</a></li></ul></div>
+    <div><h3>Categorías</h3><ul>{% for c in destacadas %}{% if c.id %}<li><a href="{% url 'core:store_categoria' c.id %}">{{ c.nombre }}</a></li>{% endif %}{% empty %}<li><a href="{% url 'core:store' %}">Ver todo</a></li>{% endfor %}</ul></div>
     <div><h3>Información Útil</h3><ul><li>Soporte rápido y claro en cada visita.</li><li>Actualizado cada 20 s · Stock exacto</li></ul></div>
     <div><h3>Contacto</h3><ul>{% if TIENDA.objeto.telefono %}<li>☎ {{ TIENDA.objeto.telefono }}</li>{% endif %}{% if TIENDA.objeto.direccion %}<li>📍 {{ TIENDA.objeto.direccion }}</li>{% endif %}<li>🎃 Halloween en tienda</li></ul></div>
   </div>
@@ -383,7 +395,7 @@ function toggleStoreTheme(){
   function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
   var q = document.getElementById('q'), solo = document.getElementById('solo'),
       orden = document.getElementById('orden'), sinRes = document.getElementById('sinRes'),
-      visCount = document.getElementById('visCount'), cat = '', timer = null;
+      visCount = document.getElementById('visCount'), timer = null;
   function ordenarGrids(){
     var modo = orden.value;
     document.querySelectorAll('.grid').forEach(function(grid){
@@ -395,14 +407,13 @@ function toggleStoreTheme(){
       cards.forEach(function(c){ grid.appendChild(c); });
     });
   }
-  function setCat(v){ cat = v; document.querySelectorAll('.cat-visual').forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-cat') === v); }); filtrar(); }
   function filtrar(){
     var t = norm(q.value.trim()), vis = 0, tot = 0;
     document.querySelectorAll('.cat-sec').forEach(function(sec){
-      var okCat = !cat || sec.getAttribute('data-parent') === cat, n = 0;
+      var n = 0;
       sec.querySelectorAll('.product-card').forEach(function(c){
         tot++; var okDisp = !solo.checked || c.getAttribute('data-disp') === '1';
-        var hit = okCat && okDisp && (!t || norm(c.getAttribute('data-nombre')).indexOf(t) !== -1);
+        var hit = okDisp && (!t || norm(c.getAttribute('data-nombre')).indexOf(t) !== -1);
         c.style.display = hit ? '' : 'none'; if (hit) n++;
       });
       sec.style.display = n ? '' : 'none'; vis += n;
@@ -414,8 +425,6 @@ function toggleStoreTheme(){
   q.addEventListener('input', filtrarSoon);
   solo.addEventListener('change', filtrar);
   orden.addEventListener('change', function(){ ordenarGrids(); filtrar(); });
-  document.querySelectorAll('.cat-visual').forEach(function(b){ b.addEventListener('click', function(){ setCat(b.getAttribute('data-cat')); document.getElementById('catalogo').scrollIntoView({behavior:'smooth'}); }); });
-  document.getElementById('navDisp').addEventListener('click', function(){ solo.checked = true; filtrar(); });
   ordenarGrids(); filtrar();
   var STORE_POLL_MS = 20000;
   var live = document.getElementById('live'), liveTxt = document.getElementById('liveTxt');

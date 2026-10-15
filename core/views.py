@@ -5221,6 +5221,33 @@ def store(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Solo GET.'}, status=405)
     items = _store_items()
+    grupos = _store_grupos(items)
+    # Árbol para el selector visual: padres visibles con sus hijas.
+    nombres = _store_nombres_categoria()
+    arbol = _store_arbol(grupos, nombres)
+    # Vitrina estilo Algomio: tendencias (4 primeros disponibles) y
+    # destacadas (4 padres con más productos) para el hero/secciones.
+    disponibles = [it for it in items if it.get('disponible')]
+    tendencias = (disponibles or items)[:4]
+    for it in tendencias:
+        # Página de la categoría que agrupa al producto (padre o la hoja).
+        it['pagina_id'] = it.get('padre_top') or it.get('categoria_id')
+    destacadas = sorted(arbol, key=lambda a: a['total'], reverse=True)[:4]
+    return render(request, 'core/store.html', {
+        'grupos': grupos,
+        'arbol': arbol,
+        'nav': _nav_categorias(),
+        'total': len(items),
+        'disponibles': len(disponibles),
+        'tendencias': tendencias,
+        'destacadas': destacadas,
+        'solo': request.GET.get('solo') == '1',
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def _store_grupos(items):
+    """Agrupa items de vitrina por categoría hoja (con id y clave del padre)."""
     grupos = []
     por_hoja = {}
     for it in items:
@@ -5230,6 +5257,7 @@ def store(request):
                 'categoria': it['categoria'] or 'Otros',
                 'items': [],
                 'padre_top': it['padre_top'],
+                'hoja_id': it['categoria_id'],
             }
             grupos.append(por_hoja[key])
         por_hoja[key]['items'].append(it)
@@ -5237,35 +5265,103 @@ def store(request):
     for g in grupos:
         top = g['padre_top']
         g['padre_key'] = ('p%d' % top) if top is not None else 'otros'
-    # Árbol para el selector visual: padres visibles con sus hijas.
-    nombres = _store_nombres_categoria()
+    return grupos
+
+
+def _nav_categorias():
+    """Padres visibles con sus hijas visibles para el selector del header.
+
+    Incluye categorías aunque estén vacías (su página muestra el aviso).
+    Una hija de padre oculto no se lista.
+    """
+    cats = list(Categoria.objects.select_related('padre').order_by('nombre'))
+    visibles = {}
+    for c in cats:
+        ok, _top = True, None
+        actual = c
+        while actual is not None:
+            if not actual.visible_store:
+                ok = False
+                break
+            actual = actual.padre
+        if ok:
+            visibles[c.id] = c
+    nav = []
+    for c in cats:
+        if c.id not in visibles or c.padre_id is not None:
+            continue
+        nav.append({'id': c.id, 'nombre': c.nombre,
+                    'hijas': [{'id': h.id, 'nombre': h.nombre}
+                              for h in cats if h.padre_id == c.id and h.id in visibles]})
+    return nav
+
+
+def _store_arbol(grupos, nombres):
+    """Árbol padre→hijas con ids para navegar a páginas por categoría."""
     arbol = []
     por_top = {}
     for g in grupos:
         top = g['padre_top']
         if top is None:
-            clave, nombre = 'otros', 'Otros'
+            clave, nombre, tid = 'otros', 'Otros', None
         else:
-            clave, nombre = ('p%d' % top), nombres.get(top, '')
+            clave, nombre, tid = ('p%d' % top), nombres.get(top, ''), top
         if clave not in por_top:
-            por_top[clave] = {'key': clave, 'nombre': nombre, 'total': 0, 'hijas': []}
+            por_top[clave] = {'key': clave, 'id': tid, 'nombre': nombre, 'total': 0, 'hijas': []}
             arbol.append(por_top[clave])
         por_top[clave]['total'] += len(g['items'])
         if top is not None and g['categoria'] != nombre:
-            por_top[clave]['hijas'].append({'nombre': g['categoria'], 'total': len(g['items'])})
+            por_top[clave]['hijas'].append({
+                'id': g.get('hoja_id'), 'nombre': g['categoria'], 'total': len(g['items'])})
     arbol.sort(key=lambda a: (a['key'] == 'otros', a['nombre'].lower()))
-    # Vitrina estilo Algomio: tendencias (4 primeros disponibles) y
-    # destacadas (4 padres con más productos) para el hero/secciones.
-    disponibles = [it for it in items if it.get('disponible')]
-    tendencias = (disponibles or items)[:4]
-    destacadas = sorted(arbol, key=lambda a: a['total'], reverse=True)[:4]
-    return render(request, 'core/store.html', {
+    return arbol
+
+
+def store_categoria(request, pk):
+    """Página pública de una categoría: solo sus productos (+ subcategorías).
+
+    Sin login ni compra. La rama oculta (`visible_store=False` en la
+    categoría o en algún padre) devuelve 404.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    cat = get_object_or_404(Categoria, pk=pk)
+    # Rama visible + migas de pan subiendo por los padres.
+    migas = []
+    actual = cat
+    while actual is not None:
+        if not actual.visible_store:
+            from django.http import Http404
+            raise Http404('Categoría no disponible en la tienda.')
+        migas.append(actual)
+        actual = actual.padre
+    migas.reverse()
+    # Subárbol: la categoría + todos sus descendientes.
+    ids = {cat.id}
+    pendientes = list(cat.hijas.all())
+    while pendientes:
+        h = pendientes.pop()
+        if h.id not in ids:
+            ids.add(h.id)
+            pendientes.extend(list(h.hijas.all()))
+    todos = _store_items()
+    items = [it for it in todos if it['categoria_id'] in ids]
+    grupos = _store_grupos(items)
+    # Selector del header: mismo árbol global de /store/.
+    nombres = _store_nombres_categoria()
+    arbol_global = _store_arbol(_store_grupos(todos), nombres)
+    hijas = sorted(
+        [h for h in cat.hijas.all() if h.visible_store],
+        key=lambda h: h.nombre.lower())
+    return render(request, 'core/store_categoria.html', {
+        'categoria': cat,
+        'migas': migas,
+        'hijas': hijas,
         'grupos': grupos,
-        'arbol': arbol,
+        'arbol': arbol_global,
+        'nav': _nav_categorias(),
         'total': len(items),
-        'disponibles': len(disponibles),
-        'tendencias': tendencias,
-        'destacadas': destacadas,
+        'solo': request.GET.get('solo') == '1',
         'actualizado': timezone.now().strftime('%H:%M:%S'),
     })
 

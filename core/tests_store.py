@@ -128,10 +128,12 @@ class StoreTest(TestCase):
         self.assertContains(r, '/store/api/estado/')
 
     def test_store_header_marketplace(self):
+        Categoria.objects.create(nombre='Viveres')
         r = self.client.get(reverse('core:store'))
         self.assertContains(r, 'ml-header')
-        self.assertContains(r, 'href="#categorias"')
-        self.assertContains(r, 'href="#catalogo"')
+        # Navegación real: Tienda + selector de categorías a páginas propias.
+        self.assertContains(r, 'id="navCatSel"')
+        self.assertContains(r, '/store/categoria/')
         self.assertContains(r, 'id="q"')
 
     def test_store_categorias_visuales(self):
