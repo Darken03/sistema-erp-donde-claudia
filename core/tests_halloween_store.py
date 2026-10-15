@@ -244,6 +244,15 @@ class StoreCategoriaPaginaTest(TestCase):
             reverse('core:store_categoria', args=[cat.pk])).content.decode()
         self.assertIn('.cat-main{min-width:0', html)
 
+    def test_grid_movil_maximo_dos_columnas(self):
+        # En móvil el grid es explícitamente de 2 columnas (no auto-fill
+        # que pueda meter más si el viewport reporta otro ancho).
+        cat = Categoria.objects.create(nombre='DosCol')
+        for url in (reverse('core:store_categoria', args=[cat.pk]),
+                    reverse('core:store_buscar')):
+            html = self.client.get(url).content.decode()
+            self.assertIn('.grid{grid-template-columns:repeat(2,minmax(0,1fr))', html)
+
     def test_header_flexible_sin_aplaste(self):
         # El buscador y la marca deben ceder (min-width:0 + ellipsis),
         # como el header del panel admin: nada se aplasta en móvil.
