@@ -181,6 +181,22 @@ class StoreCategoriaPaginaTest(TestCase):
         # Dos flyouts anidados: hijas del abuelo y de la padre.
         self.assertGreaterEqual(html.count('nav-dd-sub'), 2)
 
+    def test_drawer_movil_con_toggle_distinto(self):
+        padre = Categoria.objects.create(nombre='PadreM', icono='🎃')
+        hija = Categoria.objects.create(nombre='HijaM', padre=padre)
+        Producto.objects.create(nombre='ProdM', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=hija)
+        for url in (reverse('core:store'),
+                    reverse('core:store_categoria', args=[padre.pk])):
+            html = self.client.get(url).content.decode()
+            # Menú lateral móvil con todas las categorías y toggle
+            # plegable de color distinto para las hijas.
+            self.assertIn('id="navCatDrawer"', html)
+            self.assertIn('nav-m-toggle', html)
+            self.assertIn('🎃', html)
+            self.assertIn(f'/store/categoria/{padre.pk}/', html)
+            self.assertIn(f'/store/categoria/{hija.pk}/', html)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):

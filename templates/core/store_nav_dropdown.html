@@ -13,6 +13,25 @@
     {% endfor %}
   </div>
 </div>
+<button type="button" class="nav-m-btn" id="navCatBtnM" aria-haspopup="true" aria-expanded="false" title="Abrir categorías">
+  <span class="nav-dd-ico sm">📁</span>
+  <span>Categorías</span>
+  <i class="bi bi-chevron-down nav-dd-chev"></i>
+</button>
+<div class="nav-m-backdrop" id="navCatBackdrop"></div>
+<aside class="nav-m-drawer" id="navCatDrawer" role="dialog" aria-label="Categorías">
+  <div class="nav-m-head">
+    <div><div class="nav-m-title">Categorías</div><div class="nav-m-sub2">{{ nav|length }} principales</div></div>
+    <button type="button" class="nav-m-close" id="navCatClose" aria-label="Cerrar"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="nav-m-list">
+    {% for a in nav %}
+    {% include "core/store_nav_m_nodo.html" with nodo=a %}
+    {% empty %}
+    <span class="nav-dd-empty">Sin categorías</span>
+    {% endfor %}
+  </div>
+</aside>
 <script>
 (function(){
   var dd = document.getElementById('navCatSel');
@@ -89,5 +108,28 @@
   });
   document.addEventListener('click', function(e){ if (!dd.contains(e.target)) cerrarTodo(); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarTodo(); });
+  /* ===== Menú lateral móvil/tablet ===== */
+  var mBtn = document.getElementById('navCatBtnM');
+  var drawer = document.getElementById('navCatDrawer');
+  var backdrop = document.getElementById('navCatBackdrop');
+  var mClose = document.getElementById('navCatClose');
+  function setDrawer(open){
+    if (!drawer) return;
+    drawer.classList.toggle('show', !!open);
+    if (backdrop) backdrop.classList.toggle('show', !!open);
+    if (mBtn) mBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  if (mBtn) mBtn.addEventListener('click', function(e){ e.stopPropagation(); setDrawer(true); });
+  if (mClose) mClose.addEventListener('click', function(){ setDrawer(false); });
+  if (backdrop) backdrop.addEventListener('click', function(){ setDrawer(false); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setDrawer(false); });
+  if (drawer) drawer.querySelectorAll('.nav-m-toggle').forEach(function(t){
+    t.addEventListener('click', function(e){
+      e.stopPropagation();
+      var item = t.closest('.nav-m-item');
+      var open = item.classList.toggle('open');
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
 })();
 </script>
