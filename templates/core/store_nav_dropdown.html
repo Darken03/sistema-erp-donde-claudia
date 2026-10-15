@@ -1,4 +1,4 @@
-{# Selector bonito de categorías: botón con panel desplegable (padres + hijas con iconos). #}
+{# Selector de categorías en cascada estilo POS: padres + flyout lateral de hijas. #}
 <div class="nav-dd" id="navCatSel">
   <button type="button" class="nav-dd-btn" aria-haspopup="true" aria-expanded="false">
     <span class="nav-dd-ico">{% if categoria %}{% include "core/store_cat_icon.html" with icono=categoria.icono nombre=categoria.nombre %}{% else %}📁{% endif %}</span>
@@ -7,10 +7,7 @@
   </button>
   <div class="nav-dd-panel" role="menu">
     {% for a in nav %}
-    <a href="{% url 'core:store_categoria' a.id %}" role="menuitem"><span class="nav-dd-ico">{% include "core/store_cat_icon.html" with icono=a.icono nombre=a.nombre %}</span><span>{{ a.nombre }}</span></a>
-    {% for h in a.hijas %}
-    <a class="sub" href="{% url 'core:store_categoria' h.id %}" role="menuitem"><span class="nav-dd-ico">{% include "core/store_cat_icon.html" with icono=h.icono nombre=h.nombre %}</span><span>{{ h.nombre }}</span></a>
-    {% endfor %}
+    {% include "core/store_nav_nodo.html" with nodo=a %}
     {% empty %}
     <span class="nav-dd-empty">Sin categorías</span>
     {% endfor %}
@@ -22,12 +19,75 @@
   if (!dd || dd.dataset.ready) return;
   dd.dataset.ready = '1';
   var btn = dd.querySelector('.nav-dd-btn');
+  var HAY_HOVER = window.matchMedia && window.matchMedia('(hover:hover)').matches;
+  var hoverTimer = null;
+  function cerrarSubs(exceptoItem){
+    dd.querySelectorAll('.nav-dd-item.open').forEach(function(n){
+      if (n !== exceptoItem && !n.contains(exceptoItem)) n.classList.remove('open');
+    });
+    dd.querySelectorAll('.nav-dd-sub.show').forEach(function(s){
+      var n = s.closest('.nav-dd-item');
+      if (!n || !n.classList.contains('open')) s.classList.remove('show');
+    });
+  }
+  function cerrarTodo(){
+    dd.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+    cerrarSubs();
+  }
+  function abrirSub(item){
+    var sub = item.querySelector(':scope > .nav-dd-sub');
+    if (!sub) return;
+    cerrarSubs(item);
+    var r = item.querySelector(':scope > a').getBoundingClientRect();
+    var W = 250, maxH = Math.floor(window.innerHeight * 0.6);
+    var left = r.right + 8;
+    if (left + W > window.innerWidth - 8) left = Math.max(8, r.left - W - 8);
+    var top = r.top;
+    if (top + maxH > window.innerHeight - 8) top = Math.max(8, window.innerHeight - maxH - 8);
+    sub.style.left = left + 'px'; sub.style.top = top + 'px'; sub.style.minWidth = W + 'px';
+    sub.classList.add('show'); item.classList.add('open');
+  }
   btn.addEventListener('click', function(e){
     e.stopPropagation();
     var open = dd.classList.toggle('open');
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) cerrarSubs();
   });
-  document.addEventListener('click', function(e){ if (!dd.contains(e.target)) dd.classList.remove('open'); });
-  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') dd.classList.remove('open'); });
+  dd.querySelectorAll('.nav-dd-item').forEach(function(item){
+    var link = item.querySelector(':scope > a');
+    var tieneSub = !!item.querySelector(':scope > .nav-dd-sub');
+    if (tieneSub && HAY_HOVER){
+      item.addEventListener('mouseenter', function(){ clearTimeout(hoverTimer); abrirSub(item); });
+      item.addEventListener('mouseleave', function(){
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(function(){
+          var sub = item.querySelector(':scope > .nav-dd-sub');
+          if (!item.matches(':hover') && !(sub && sub.matches(':hover'))) {
+            sub.classList.remove('show'); item.classList.remove('open');
+          }
+        }, 250);
+      });
+      var sub = item.querySelector(':scope > .nav-dd-sub');
+      sub.addEventListener('mouseleave', function(){
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(function(){
+          if (!item.matches(':hover') && !sub.matches(':hover')) {
+            sub.classList.remove('show'); item.classList.remove('open');
+          }
+        }, 250);
+      });
+    }
+    link.addEventListener('click', function(e){
+      if (tieneSub && e.target.closest('[data-caret]')){
+        e.preventDefault(); e.stopPropagation();
+        var s = item.querySelector(':scope > .nav-dd-sub');
+        if (s.classList.contains('show')) { s.classList.remove('show'); item.classList.remove('open'); }
+        else abrirSub(item);
+      }
+    });
+  });
+  document.addEventListener('click', function(e){ if (!dd.contains(e.target)) cerrarTodo(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarTodo(); });
 })();
 </script>

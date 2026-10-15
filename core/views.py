@@ -5450,33 +5450,39 @@ def _store_grupos(items):
 
 
 def _nav_categorias():
-    """Padres visibles con sus hijas visibles para el selector del header.
+    """Árbol recursivo de padres visibles para el menú en cascada.
 
-    Incluye categorías aunque estén vacías (su página muestra el aviso).
+    Cada nodo: id, nombre, icono e hijas (mismo formato). Incluye
+    categorías aunque estén vacías (su página muestra el aviso).
     Una hija de padre oculto no se lista.
     """
     cats = list(Categoria.objects.select_related('padre').order_by('nombre'))
-    visibles = {}
+    visibles = set()
     for c in cats:
-        ok, _top = True, None
         actual = c
+        ok = True
         while actual is not None:
             if not actual.visible_store:
                 ok = False
                 break
             actual = actual.padre
         if ok:
-            visibles[c.id] = c
-    nav = []
+            visibles.add(c.id)
+    hijos_map = {}
     for c in cats:
-        if c.id not in visibles or c.padre_id is not None:
-            continue
-        nav.append({'id': c.id, 'nombre': c.nombre,
-                    'icono': (c.icono or '').strip(),
-                    'hijas': [{'id': h.id, 'nombre': h.nombre,
-                               'icono': (h.icono or '').strip()}
-                              for h in cats if h.padre_id == c.id and h.id in visibles]})
-    return nav
+        if c.id in visibles and c.padre_id is not None:
+            hijos_map.setdefault(c.padre_id, []).append(c)
+
+    def _nodo(c):
+        return {
+            'id': c.id, 'nombre': c.nombre,
+            'icono': (c.icono or '').strip(),
+            'hijas': [_nodo(h) for h in hijos_map.get(c.id, [])
+                      if h.id in visibles],
+        }
+
+    return [_nodo(c) for c in cats
+            if c.id in visibles and c.padre_id is None]
 
 
 def _store_arbol(grupos, nombres):

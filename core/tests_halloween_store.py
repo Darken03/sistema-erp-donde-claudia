@@ -156,6 +156,31 @@ class StoreCategoriaPaginaTest(TestCase):
             html = self.client.get(url).content.decode()
             self.assertNotRegex(html, r'\.ml-nav-inner \{[^}]*overflow-x')
 
+    def test_dropdown_agrupa_hijas_en_flyout_como_pos(self):
+        padre = Categoria.objects.create(nombre='PadreF', icono='🎃')
+        hija = Categoria.objects.create(nombre='HijaF', padre=padre)
+        Producto.objects.create(nombre='ProdF', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=hija)
+        html = self.client.get(reverse('core:store')).content.decode()
+        # Flyout lateral estilo POS con la hija dentro, no mezclada en plano.
+        self.assertIn('nav-dd-sub', html)
+        self.assertIn(f'/store/categoria/{hija.pk}/', html)
+        self.assertIn('🎃', html)
+        # Bootstrap Icons cargado para los chevrones.
+        self.assertIn('bootstrap-icons', html)
+
+    def test_dropdown_anida_tres_niveles(self):
+        abuelo = Categoria.objects.create(nombre='AbueloN')
+        padre = Categoria.objects.create(nombre='PadreN', padre=abuelo)
+        hija = Categoria.objects.create(nombre='HijaN', padre=padre)
+        Producto.objects.create(nombre='ProdN', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=hija)
+        html = self.client.get(reverse('core:store')).content.decode()
+        for cat in (abuelo, padre, hija):
+            self.assertIn(f'/store/categoria/{cat.pk}/', html)
+        # Dos flyouts anidados: hijas del abuelo y de la padre.
+        self.assertGreaterEqual(html.count('nav-dd-sub'), 2)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):

@@ -1,0 +1,5 @@
+{# Nodo del menú en cascada de la store (recursivo, como el POS). #}
+<div class="nav-dd-item{% if nodo.hijas %} has-kids{% endif %}">
+  <a href="{% url 'core:store_categoria' nodo.id %}" role="menuitem"><span class="nav-dd-ico">{% include "core/store_cat_icon.html" with icono=nodo.icono nombre=nodo.nombre %}</span><span>{{ nodo.nombre }}</span>{% if nodo.hijas %}<span class="nav-dd-caret" data-caret title="Ver subcategorías"><i class="bi bi-chevron-right"></i></span>{% endif %}</a>
+  {% if nodo.hijas %}<div class="nav-dd-sub" role="menu">{% for h in nodo.hijas %}{% include "core/store_nav_nodo.html" with nodo=h %}{% endfor %}</div>{% endif %}
+</div>
