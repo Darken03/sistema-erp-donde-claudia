@@ -1,0 +1,33 @@
+{# Selector bonito de categorías: botón con panel desplegable (padres + hijas con iconos). #}
+<div class="nav-dd" id="navCatSel">
+  <button type="button" class="nav-dd-btn" aria-haspopup="true" aria-expanded="false">
+    <span class="nav-dd-ico">{% if categoria %}{% include "core/store_cat_icon.html" with icono=categoria.icono nombre=categoria.nombre %}{% else %}📁{% endif %}</span>
+    <span class="nav-dd-label">{% if categoria %}{{ categoria.nombre }}{% else %}Categorías{% endif %}</span>
+    <i class="bi bi-chevron-down nav-dd-chev"></i>
+  </button>
+  <div class="nav-dd-panel" role="menu">
+    {% for a in nav %}
+    <a href="{% url 'core:store_categoria' a.id %}" role="menuitem"><span class="nav-dd-ico">{% include "core/store_cat_icon.html" with icono=a.icono nombre=a.nombre %}</span><span>{{ a.nombre }}</span></a>
+    {% for h in a.hijas %}
+    <a class="sub" href="{% url 'core:store_categoria' h.id %}" role="menuitem"><span class="nav-dd-ico">{% include "core/store_cat_icon.html" with icono=h.icono nombre=h.nombre %}</span><span>{{ h.nombre }}</span></a>
+    {% endfor %}
+    {% empty %}
+    <span class="nav-dd-empty">Sin categorías</span>
+    {% endfor %}
+  </div>
+</div>
+<script>
+(function(){
+  var dd = document.getElementById('navCatSel');
+  if (!dd || dd.dataset.ready) return;
+  dd.dataset.ready = '1';
+  var btn = dd.querySelector('.nav-dd-btn');
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var open = dd.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', function(e){ if (!dd.contains(e.target)) dd.classList.remove('open'); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') dd.classList.remove('open'); });
+})();
+</script>

@@ -71,6 +71,17 @@ function toggleStoreTheme(){
   .ml-nav a:hover { color:var(--accent); }
   .ml-nav a.active { color:var(--accent); border-bottom-color:var(--accent); }
   .ml-nav .count { margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; padding:9px 0 9px 12px; }
+  .nav-dd { position:relative; }
+  .nav-dd-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--accent); background:transparent; border:0; border-bottom:2px solid var(--accent); cursor:pointer; white-space:nowrap; }
+  .nav-dd-chev { font-size:10px; color:var(--ink-3); transition:transform 150ms; }
+  .nav-dd.open .nav-dd-chev { transform:rotate(180deg); }
+  .nav-dd-ico { width:30px; height:30px; min-width:30px; border-radius:9px; background:linear-gradient(135deg,#e8641b,#7c3aed); color:#fff; font-size:14px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; font-family:var(--font-mono); }
+  .nav-dd-panel { display:none; position:absolute; top:calc(100% + 6px); left:0; min-width:270px; max-width:84vw; max-height:62vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 44px -12px rgba(20,20,40,.35); padding:6px; z-index:1200; }
+  .nav-dd.open .nav-dd-panel { display:block; }
+  .nav-dd-panel a { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:13px; font-weight:600; color:var(--ink); text-decoration:none; }
+  .nav-dd-panel a:hover { background:var(--accent-tint); color:var(--accent); }
+  .nav-dd-panel a.sub { padding-left:28px; font-weight:500; color:var(--ink-2); }
+  .nav-dd-empty { display:block; padding:12px; font-size:12px; color:var(--ink-3); }
   .nav-cat { height:32px; border:0; background:transparent; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--ink-2); max-width:230px; cursor:pointer; padding:9px 4px; }
   .nav-cat:hover { color:var(--accent); }
   main { max-width:1200px; margin:0 auto; padding:0 16px 40px; width:100%; flex:1; }
@@ -135,9 +146,9 @@ function toggleStoreTheme(){
       {% else %}<img class="logo" src="{% static 'img/logo-donde-clau.webp' %}" alt="{{ TIENDA.nombre|default:'Donde Clau' }}" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
       <span><span class="t1">{{ TIENDA.nombre|default:"Donde Clau" }}</span><br><span class="t2">Tienda · en vivo 🎃</span></span>
     </a>
-    <div class="ml-search">
-      <input type="search" id="q" placeholder="Buscar en {{ categoria.nombre }}... 👻" autocomplete="off">
-    </div>
+    <form class="ml-search" action="{% url 'core:store_buscar' %}" method="get">
+      <input type="search" id="q" name="q" placeholder="Buscar en toda la tienda... 👻" autocomplete="off">
+    </form>
     <div class="ml-side">
       <span class="hwn-garland" title="Halloween en tienda">🎃👻🦇🍬</span>
       <span class="live" id="live"><span class="dot"></span><span id="liveTxt">Actualizado {{ actualizado }}</span></span>
@@ -147,14 +158,7 @@ function toggleStoreTheme(){
   <nav class="ml-nav">
     <div class="ml-nav-inner">
       <a href="{% url 'core:store' %}">Tienda</a>
-      <select class="nav-cat" id="navCatSel" title="Elegir categoría" onchange="if(this.value){location.href=this.value;}">
-        <option value="">Categorías…</option>
-        {% for a in nav %}
-        <option value="{% url 'core:store_categoria' a.id %}"{% if a.id == categoria.id %} selected{% endif %}>{{ a.nombre }}</option>
-        {% for h in a.hijas %}
-        <option value="{% url 'core:store_categoria' h.id %}"{% if h.id == categoria.id %} selected{% endif %}>↳ {{ h.nombre }}</option>
-        {% endfor %}{% endfor %}
-      </select>
+      {% include "core/store_nav_dropdown.html" %}
       <a href="{% url 'core:store_categoria' categoria.id %}?solo=1">Solo disponibles</a>
       <span class="count">{{ total }} productos</span>
     </div>
@@ -221,7 +225,7 @@ function toggleStoreTheme(){
 <footer class="store-foot">
   <div class="foot-top">
     <span>🎃 <strong style="color:#fcb424;">{{ TIENDA.nombre|default:"Donde Clau" }}</strong> · Tu tienda de confianza</span>
-    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store' %}?solo=1">Disponibles</a></span>
+    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store_buscar' %}?solo=1">Disponibles</a></span>
   </div>
   <div class="foot-mid">
     <div><h3>Sobre Nosotros</h3><ul><li>Tienda confiable con entregas rápidas y productos seleccionados.</li><li>Precios en {{ TIENDA.moneda|default:"CUP" }} · Solo vitrina</li></ul></div>

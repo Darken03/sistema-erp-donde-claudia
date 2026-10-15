@@ -1,0 +1,2 @@
+{# Icono de categoría: emoji, clase Bootstrap o inicial del nombre. #}
+{% if icono|slice:":3" == "bi-" %}<i class="bi {{ icono }}"></i>{% elif icono %}{{ icono }}{% else %}{{ nombre|slice:":1"|upper }}{% endif %}

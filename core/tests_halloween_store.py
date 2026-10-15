@@ -27,9 +27,21 @@ class StoreHalloweenAlgomioTest(TestCase):
         html = r.content.decode()
         self.assertIn('Tendencias del Momento', html)
         self.assertIn('Categorías Destacadas', html)
-        self.assertIn('Nuestros felices clientes', html)
+        self.assertNotIn('Nuestros felices clientes', html)
         # Hero + exploración (nombres adaptados a nuestra tienda)
         self.assertIn('Explorar', html)
+
+    def test_landing_sin_catalogo_por_categoria(self):
+        cat = Categoria.objects.create(nombre='CatLand')
+        Producto.objects.create(nombre='ProdLand', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=cat)
+        html = self.client.get(reverse('core:store')).content.decode()
+        # El listado completo por categoría vive en las páginas por
+        # categoría y en el buscador; el landing solo muestra portada.
+        self.assertNotIn('cat-sec', html)
+        self.assertNotIn('id="catalogo"', html)
+        self.assertNotIn('id="categorias"', html)
+        self.assertIn('Tendencias del Momento', html)
 
 
 class CategoriaArbolTest(TestCase):
@@ -97,6 +109,30 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertIn('id="navCatSel"', html)
         self.assertIn(f'/store/categoria/{cat.pk}/', html)
 
-    def test_store_solo_param_premarca_filtro(self):
-        html = self.client.get(reverse('core:store') + '?solo=1').content.decode()
-        self.assertIn('id="solo" checked', html)
+
+class StoreBuscarTest(TestCase):
+    def test_buscar_filtra_por_texto(self):
+        cat = Categoria.objects.create(nombre='CatB')
+        Producto.objects.create(nombre='ProdBuscado', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=cat)
+        Producto.objects.create(nombre='OtroCosa', unidad_medida='unidades',
+            precio_compra=1, precio_venta=6, stock=Decimal('4'), categoria=cat)
+        r = self.client.get(reverse('core:store_buscar') + '?q=buscado')
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'ProdBuscado')
+        self.assertNotContains(r, 'OtroCosa')
+
+    def test_buscar_solo_disponibles(self):
+        cat = Categoria.objects.create(nombre='CatS')
+        Producto.objects.create(nombre='ConStock', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'), categoria=cat)
+        Producto.objects.create(nombre='AgotadoX', unidad_medida='unidades',
+            precio_compra=1, precio_venta=6, stock=Decimal('0'), categoria=cat)
+        html = self.client.get(reverse('core:store_buscar') + '?solo=1').content.decode()
+        self.assertIn('ConStock', html)
+        self.assertNotIn('AgotadoX', html)
+
+    def test_buscar_sin_resultados_muestra_aviso(self):
+        html = self.client.get(reverse('core:store_buscar') + '?q=zzzznada').content.decode()
+        self.assertEqual(self.client.get(reverse('core:store_buscar') + '?q=zzzznada').status_code, 200)
+        self.assertIn('Sin resultados', html)

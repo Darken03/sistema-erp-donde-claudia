@@ -1,0 +1,270 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscar — {{ TIENDA.nombre|default:"Donde Clau" }}</title>
+<link rel="icon" href="{% static 'img/logo-donde-clau.png' %}">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+(function(){ try {
+  var t = localStorage.getItem('bizm_theme') || '{{ TIENDA.tema|default:"light" }}';
+  document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+} catch(e){ document.documentElement.setAttribute('data-theme','light'); } })();
+function toggleStoreTheme(){
+  var h = document.documentElement;
+  var t = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  h.setAttribute('data-theme', t);
+  try { localStorage.setItem('bizm_theme', t); } catch(e){}
+}
+</script>
+<style>
+  /* ===== Algomio-like + Halloween POS (#e8641b calabaza, #7c3aed bruja) ===== */
+  :root {
+    --accent:#e8641b; --accent-strong:#c9520f;
+    --accent-soft:#fdeede; --accent-tint:#fdf3e7; --accent-shadow:rgba(232,100,27,.32);
+    --witch:#7c3aed; --witch-soft:#efe7fd;
+    --bg:#faf6f0; --bg-deep:#f1ebe0; --surface:#ffffff; --soft:#f6efe4;
+    --line:#e9e0d2; --line-strong:#d8cbb4;
+    --ink:#1f1a14; --ink-2:#5b5248; --ink-3:#989090;
+    --success:#2fae5e; --success-dark:#1e7a44; --success-soft:#eaf7ef;
+    --danger:#d64545; --danger-dark:#a83232; --danger-soft:#fdecec;
+    --warning:#92400e; --warning-soft:#fef3c7;
+    --font-display:'Montserrat',-apple-system,'Segoe UI',sans-serif;
+    --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-mono:'JetBrains Mono','SFMono-Regular',Menlo,Consolas,monospace;
+    --shadow-sm:0 2px 8px -4px rgba(20,20,40,.12);
+    --shadow-md:0 8px 24px rgba(20,20,40,.08);
+  }
+  html[data-theme="dark"] {
+    --bg:#171310; --bg-deep:#100d0b; --surface:#221c17; --soft:#2c241d;
+    --line:#3a3129; --line-strong:#4d4235;
+    --ink:#f7f1e8; --ink-2:#d4c9bb; --ink-3:#9a8f80;
+    --accent-tint:rgba(232,100,27,.2); --accent-soft:rgba(232,100,27,.3);
+    --shadow-sm:0 2px 8px -4px rgba(0,0,0,.5);
+    --shadow-md:0 8px 24px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--font-sans); background:var(--bg); color:var(--ink); min-height:100vh; display:flex; flex-direction:column; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h5 { font-family:var(--font-display); }
+  .ml-header { position:sticky; top:0; z-index:20; background:var(--surface); border-bottom:1px solid var(--line); box-shadow:var(--shadow-sm); }
+  .ml-row { max-width:1200px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:12px; }
+  .ml-brand { display:flex; align-items:center; gap:10px; min-width:0; text-decoration:none; color:var(--ink); }
+  .ml-brand img.logo { height:40px; width:auto; border-radius:10px; background:#fff; padding:2px 4px; border:1px solid var(--line); }
+  .ml-brand .t1 { font-size:16px; font-weight:800; white-space:nowrap; letter-spacing:-0.01em; font-family:var(--font-display); text-transform:uppercase; }
+  .ml-brand .t2 { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); white-space:nowrap; }
+  .ml-search { position:relative; flex:1; min-width:0; }
+  .ml-search::before { content:"⌕"; position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--ink-3); font-size:17px; }
+  .ml-search input { width:100%; height:40px; padding:0 12px 0 38px; font-size:13px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; outline:none; }
+  .ml-search input:focus { border-color:var(--witch); box-shadow:0 0 0 3px rgba(124,58,237,.15); }
+  .ml-side { display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .live { display:inline-flex; align-items:center; gap:6px; background:var(--accent-tint); border:1px solid var(--line); border-radius:99px; padding:5px 12px; font-size:11px; font-weight:600; font-family:var(--font-mono); color:var(--ink-2); white-space:nowrap; }
+  .live .dot { width:8px; height:8px; border-radius:99px; background:var(--success); }
+  .live.off .dot { background:var(--danger); }
+  .icon-btn { width:36px; height:36px; min-width:36px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); display:inline-flex; align-items:center; justify-content:center; font-size:17px; cursor:pointer; }
+  .icon-btn:hover { background:var(--soft); color:var(--ink); border-color:var(--line-strong); }
+  .hwn-garland { display:inline-flex; gap:2px; font-size:17px; padding:4px 8px; border:1px solid var(--line); border-radius:99px; background:var(--surface); user-select:none; }
+  .ml-nav { border-top:1px solid var(--line); }
+  .ml-nav-inner { max-width:1200px; margin:0 auto; padding:0 16px; display:flex; gap:4px; align-items:center; overflow-x:auto; }
+  .ml-nav a { display:inline-flex; align-items:center; gap:6px; padding:9px 12px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-family:var(--font-display); color:var(--ink-2); text-decoration:none; white-space:nowrap; border-bottom:2px solid transparent; }
+  .ml-nav a:hover { color:var(--accent); }
+  .ml-nav a.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .ml-nav .count { margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; padding:9px 0 9px 12px; }
+  .nav-dd { position:relative; }
+  .nav-dd-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--ink-2); background:transparent; border:0; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; }
+  .nav-dd-btn:hover, .nav-dd.open .nav-dd-btn { color:var(--accent); }
+  .nav-dd-chev { font-size:10px; color:var(--ink-3); transition:transform 150ms; }
+  .nav-dd.open .nav-dd-chev { transform:rotate(180deg); }
+  .nav-dd-ico { width:30px; height:30px; min-width:30px; border-radius:9px; background:linear-gradient(135deg,#e8641b,#7c3aed); color:#fff; font-size:14px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; font-family:var(--font-mono); }
+  .nav-dd-panel { display:none; position:absolute; top:calc(100% + 6px); left:0; min-width:270px; max-width:84vw; max-height:62vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 44px -12px rgba(20,20,40,.35); padding:6px; z-index:1200; }
+  .nav-dd.open .nav-dd-panel { display:block; }
+  .nav-dd-panel a { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:13px; font-weight:600; color:var(--ink); text-decoration:none; }
+  .nav-dd-panel a:hover { background:var(--accent-tint); color:var(--accent); }
+  .nav-dd-panel a.sub { padding-left:28px; font-weight:500; color:var(--ink-2); }
+  .nav-dd-empty { display:block; padding:12px; font-size:12px; color:var(--ink-3); }
+  main { max-width:1200px; margin:0 auto; padding:0 16px 40px; width:100%; flex:1; }
+  .crumb { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:18px 0 4px; font-size:12px; font-weight:600; color:var(--ink-3); font-family:var(--font-display); text-transform:uppercase; letter-spacing:.04em; }
+  .crumb a { color:var(--accent); text-decoration:none; }
+  .sec-head { display:flex; align-items:baseline; gap:10px; margin:10px 0 8px; }
+  .sec-head h1 { font-size:26px; font-weight:800; letter-spacing:-0.01em; }
+  .sec-head .n { background:var(--accent); color:#fff; font-size:12px; border-radius:99px; padding:2px 10px; font-family:var(--font-mono); }
+  .sec-head::after { content:""; flex:1; height:1px; background:var(--line); align-self:center; }
+  .sec-sub { color:var(--ink-2); font-size:14px; margin-bottom:14px; }
+  .toolbar { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:16px; }
+  .tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .tool-link { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--ink-2); background:var(--surface); border:1px solid var(--line); border-radius:99px; padding:6px 12px; text-decoration:none; white-space:nowrap; }
+  .tool-link:hover { border-color:var(--accent); color:var(--accent); }
+  .tool-link.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .sort { height:32px; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:0 8px; cursor:pointer; }
+  .cat-title { display:flex; align-items:center; gap:10px; margin:26px 0 14px; font-size:18px; font-weight:700; }
+  .cat-title::after { content:""; flex:1; height:1px; background:var(--line); }
+  .cat-title .n { background:var(--accent); color:#fff; font-size:12px; border-radius:99px; padding:2px 10px; font-family:var(--font-mono); }
+  .cat-title a { color:var(--ink); text-decoration:none; }
+  .cat-title a:hover { color:var(--accent); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
+  .product-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px; transition:border-color 120ms, box-shadow 120ms, transform 120ms; display:flex; flex-direction:column; gap:2px; }
+  .product-card:hover { border-color:var(--accent); box-shadow:0 2px 10px -2px rgba(232,100,27,.4); transform:translateY(-1px); }
+  .product-card .img-zone { margin:-10px -10px 8px; height:110px; border-radius:12px 12px 0 0; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; }
+  .product-card .img-zone img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .product-card .img-zone .noimg { font-family:var(--font-mono); font-weight:700; font-size:22px; color:rgba(31,26,20,.45); }
+  .product-card .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .product-card .sku { font-size:10px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .product-card .pres { font-size:11px; color:var(--ink-3); }
+  .product-card .price { font-size:17px; font-weight:700; font-family:var(--font-mono); color:var(--accent); margin-top:2px; }
+  .product-card .stockrow { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px; }
+  .product-card .stockqty { font-size:11px; font-family:var(--font-mono); color:var(--ink-2); }
+  .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+  .pill .dot { width:6px; height:6px; border-radius:99px; background:currentColor; }
+  .pill-open { background:var(--success-soft); color:var(--success-dark); }
+  .pill-low { background:var(--warning-soft); color:var(--warning); }
+  .pill-closed { background:var(--danger-soft); color:var(--danger-dark); }
+  .product-card.agotado { opacity:.8; }
+  .empty { text-align:center; color:var(--ink-3); padding:60px 20px; }
+  .empty .big { font-size:46px; display:block; margin-bottom:10px; }
+  footer.store-foot { background:#1b1b1b; color:rgba(255,255,255,.75); margin-top:30px; }
+  .store-foot a { color:#edeff2; text-decoration:none; }
+  .store-foot a:hover { color:#fcb424; }
+  .foot-top { max-width:1200px; margin:0 auto; padding:22px 16px; display:flex; gap:14px; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.08); flex-wrap:wrap; }
+  .foot-mid { max-width:1200px; margin:0 auto; padding:28px 16px; display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+  .foot-mid h3 { color:#fff; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:.05em; }
+  .foot-mid li { list-style:none; font-size:13px; margin:6px 0; }
+  .foot-bottom { background:#151515; text-align:center; padding:14px; font-size:12px; color:#8d8da0; }
+  @media (max-width:900px){ .foot-mid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:768px){ .ml-search{order:3;flex-basis:100%;} .ml-row{flex-wrap:wrap;} .live #liveTxt{display:none;} }
+  @media (max-width:480px){ .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));} .foot-mid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header class="ml-header">
+  <div class="ml-row">
+    <a class="ml-brand" href="{% url 'core:store' %}">
+      {% if TIENDA.logo_url %}<img class="logo" src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}">
+      {% else %}<img class="logo" src="{% static 'img/logo-donde-clau.webp' %}" alt="{{ TIENDA.nombre|default:'Donde Clau' }}" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
+      <span><span class="t1">{{ TIENDA.nombre|default:"Donde Clau" }}</span><br><span class="t2">Tienda · en vivo 🎃</span></span>
+    </a>
+    <form class="ml-search" action="{% url 'core:store_buscar' %}" method="get">
+      <input type="search" id="q" name="q" value="{{ q }}" placeholder="Buscar producto o código... 👻" autocomplete="off">
+    </form>
+    <div class="ml-side">
+      <span class="hwn-garland" title="Halloween en tienda">🎃👻🦇🍬</span>
+      <span class="live" id="live"><span class="dot"></span><span id="liveTxt">Actualizado {{ actualizado }}</span></span>
+      <button class="icon-btn" onclick="toggleStoreTheme()" title="Claro / oscuro">◐</button>
+    </div>
+  </div>
+  <nav class="ml-nav">
+    <div class="ml-nav-inner">
+      <a href="{% url 'core:store' %}">Tienda</a>
+      {% include "core/store_nav_dropdown.html" %}
+      <a href="{% url 'core:store_buscar' %}?{% if q %}q={{ q|urlencode }}&{% endif %}solo=1">Solo disponibles</a>
+      <span class="count">{{ total }} resultados</span>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <nav class="crumb" aria-label="Migas">
+    <a href="{% url 'core:store' %}">Tienda</a><span>/</span><span>Buscar</span>
+  </nav>
+  <div class="sec-head"><h1>{% if q %}Resultados para “{{ q }}”{% elif solo %}Solo disponibles{% else %}Todos los productos{% endif %}</h1><span class="n">{{ total }}</span></div>
+  <div class="sec-sub">Precios en {{ TIENDA.moneda|default:"CUP" }} con disponibilidad en vivo. Elige una categoría del menú para verla completa.</div>
+
+  <div class="toolbar">
+    <div class="tools">
+      {% if solo %}
+      <a class="tool-link on" href="{% url 'core:store_buscar' %}?{% if q %}q={{ q|urlencode }}{% endif %}">● Solo disponibles</a>
+      {% else %}
+      <a class="tool-link" href="{% url 'core:store_buscar' %}?{% if q %}q={{ q|urlencode }}&{% endif %}solo=1">○ Solo disponibles</a>
+      {% endif %}
+      <select class="sort" id="orden" title="Ordenar">
+        <option value="">Orden: Nombre</option>
+        <option value="pasc">Precio ↑</option>
+        <option value="pdesc">Precio ↓</option>
+        <option value="sdesc">Stock ↓</option>
+      </select>
+    </div>
+  </div>
+
+  {% for g in grupos %}
+  <section class="cat-sec" data-parent="{{ g.padre_key }}">
+    <h2 class="cat-title">{% if g.hoja_id %}<a href="{% url 'core:store_categoria' g.hoja_id %}">{{ g.categoria }}</a>{% else %}{{ g.categoria }}{% endif %} <span class="n">{{ g.items|length }}</span></h2>
+    <div class="grid">
+      {% for it in g.items %}
+      <article class="product-card{% if not it.disponible %} agotado{% endif %}" data-id="{{ it.id }}" data-disp="{% if it.disponible %}1{% else %}0{% endif %}" data-nombre="{{ it.nombre|lower }} {{ it.codigo|lower }}" data-precio="{{ it.precio }}" data-stock="{{ it.stock }}" data-idx="{{ forloop.counter0 }}">
+        <div class="img-zone">
+          {% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+          <span class="noimg" style="{% if it.imagen %}display:none;{% endif %}">{{ it.nombre|slice:":2"|upper }}</span>
+          {% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}
+        </div>
+        <div class="name">{{ it.nombre }}</div>
+        <div class="sku">{{ it.codigo }}</div>
+        <div class="pres">{{ it.etiqueta }}</div>
+        <div class="price js-precio">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
+        <div class="stockrow">
+          <span class="stockqty">Stock: <span class="js-stock">{{ it.stock_fmt }}</span></span>
+          {% if not it.disponible %}<span class="pill pill-closed js-pill"><span class="dot"></span>Agotado</span>
+          {% elif it.pocas %}<span class="pill pill-low js-pill"><span class="dot"></span>¡Solo {{ it.stock_fmt }}!</span>
+          {% else %}<span class="pill pill-open js-pill"><span class="dot"></span>Disponible</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% empty %}
+  <div class="empty"><span class="big">🎃</span>Sin resultados para esa búsqueda.</div>
+  {% endfor %}
+</main>
+
+<footer class="store-foot">
+  <div class="foot-top">
+    <span>🎃 <strong style="color:#fcb424;">{{ TIENDA.nombre|default:"Donde Clau" }}</strong> · Tu tienda de confianza</span>
+    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store_buscar' %}?solo=1">Disponibles</a></span>
+  </div>
+  <div class="foot-mid">
+    <div><h3>Sobre Nosotros</h3><ul><li>Tienda confiable con entregas rápidas y productos seleccionados.</li><li>Precios en {{ TIENDA.moneda|default:"CUP" }} · Solo vitrina</li></ul></div>
+    <div><h3>Categorías</h3><ul>{% for a in nav|slice:":4" %}<li><a href="{% url 'core:store_categoria' a.id %}">{{ a.nombre }}</a></li>{% endfor %}</ul></div>
+    <div><h3>Información Útil</h3><ul><li>Soporte rápido y claro en cada visita.</li><li>Actualizado cada 20 s · Stock exacto</li></ul></div>
+    <div><h3>Contacto</h3><ul>{% if TIENDA.objeto.telefono %}<li>☎ {{ TIENDA.objeto.telefono }}</li>{% endif %}{% if TIENDA.objeto.direccion %}<li>📍 {{ TIENDA.objeto.direccion }}</li>{% endif %}<li>🎃 Halloween en tienda</li></ul></div>
+  </div>
+  <div class="foot-bottom">Copyright © 2026 - {{ TIENDA.nombre|default:"Donde Clau" }}. Todos los derechos reservados.</div>
+</footer>
+
+<script>
+(function(){
+  var SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
+  var orden = document.getElementById('orden');
+  function ordenarGrids(){
+    var modo = orden.value;
+    document.querySelectorAll('.grid').forEach(function(grid){
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.card, .product-card'));
+      if (!modo) { cards.sort(function(a,b){ return (+a.getAttribute('data-idx')) - (+b.getAttribute('data-idx')); }); }
+      else if (modo === 'pasc' || modo === 'pdesc') {
+        cards.sort(function(a,b){ var d = parseFloat(a.getAttribute('data-precio')) - parseFloat(b.getAttribute('data-precio')); return modo === 'pasc' ? d : -d; });
+      } else if (modo === 'sdesc') { cards.sort(function(a,b){ return parseFloat(b.getAttribute('data-stock')) - parseFloat(a.getAttribute('data-stock')); }); }
+      cards.forEach(function(c){ grid.appendChild(c); });
+    });
+  }
+  orden.addEventListener('change', ordenarGrids);
+  var live = document.getElementById('live'), liveTxt = document.getElementById('liveTxt');
+  function setLive(ok, txt){ live.classList.toggle('off', !ok); liveTxt.textContent = txt; }
+  function pillHTML(d,p,s){ if(!d) return '<span class="dot"></span>Agotado'; if(p) return '<span class="dot"></span>¡Solo '+s+'!'; return '<span class="dot"></span>Disponible'; }
+  function refrescar(){
+    fetch("{% url 'core:store_api' %}", {headers:{'Accept':'application/json'}})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        (data.productos||[]).forEach(function(p){
+          var card = document.querySelector('.product-card[data-id="'+p.id+'"]'); if(!card) return;
+          var disp=!!p.disponible; card.setAttribute('data-disp',disp?'1':'0'); card.setAttribute('data-precio',p.precio); card.setAttribute('data-stock',p.stock);
+          card.classList.toggle('agotado',!disp);
+          var pre=card.querySelector('.js-precio'); if(pre) pre.textContent=SIMBOLO+p.precio;
+          var st=card.querySelector('.js-stock'); if(st) st.textContent=p.stock_fmt;
+          var pill=card.querySelector('.js-pill'); if(pill){ pill.innerHTML=pillHTML(disp,!!p.pocas,p.stock_fmt); pill.className='js-pill pill '+(!disp?'pill-closed':(p.pocas?'pill-low':'pill-open')); }
+        });
+        setLive(true,'Actualizado '+(data.actualizado||''));
+      }).catch(function(){ setLive(false,'Sin conexión · última actualización conservada'); });
+  }
+  setInterval(refrescar, 20000);
+})();
+</script>
+</body>
+</html>

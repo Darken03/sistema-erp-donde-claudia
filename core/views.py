@@ -5369,18 +5369,21 @@ def _store_nombres_categoria():
 
 
 def store(request):
-    """Vitrina pública /store (Marketplace). Sin login ni compra.
+    """Portada pública /store: hero, tendencias y categorías destacadas.
 
-    Server-render con stock exacto actual; el refresco vivo lo hace
-    `store_api_estado` por polling. Convive con `/catalogo` (intacto).
+    Sin login ni compra. Los productos por categoría viven en sus
+    propias páginas (`store_categoria`) y en el buscador
+    (`store_buscar`): el landing no lista el catálogo completo.
     """
     if request.method != 'GET':
         return JsonResponse({'error': 'Solo GET.'}, status=405)
+    if request.GET.get('solo') == '1':
+        from django.urls import reverse as _reverse
+        return redirect(f"{_reverse('core:store_buscar')}?solo=1")
     items = _store_items()
-    grupos = _store_grupos(items)
-    # Árbol para el selector visual: padres visibles con sus hijas.
+    # Árbol para destacadas: padres visibles con sus hijas.
     nombres = _store_nombres_categoria()
-    arbol = _store_arbol(grupos, nombres)
+    arbol = _store_arbol(_store_grupos(items), nombres)
     # Vitrina estilo Algomio: tendencias (4 primeros disponibles) y
     # destacadas (4 padres con más productos) para el hero/secciones.
     disponibles = [it for it in items if it.get('disponible')]
@@ -5390,14 +5393,36 @@ def store(request):
         it['pagina_id'] = it.get('padre_top') or it.get('categoria_id')
     destacadas = sorted(arbol, key=lambda a: a['total'], reverse=True)[:4]
     return render(request, 'core/store.html', {
-        'grupos': grupos,
         'arbol': arbol,
         'nav': _nav_categorias(),
         'total': len(items),
         'disponibles': len(disponibles),
         'tendencias': tendencias,
         'destacadas': destacadas,
-        'solo': request.GET.get('solo') == '1',
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def store_buscar(request):
+    """Buscador público /store/buscar/: resultados por texto y/o solo disponibles."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    q = (request.GET.get('q') or '').strip()
+    solo = request.GET.get('solo') == '1'
+    items = _store_items()
+    if solo:
+        items = [it for it in items if it.get('disponible')]
+    if q:
+        qn = _norm_sin_tildes(q.lower())
+        items = [it for it in items
+                 if qn in _norm_sin_tildes((it['nombre'] or '').lower())
+                 or qn in _norm_sin_tildes((it['codigo'] or '').lower())]
+    return render(request, 'core/store_buscar.html', {
+        'q': q,
+        'solo': solo,
+        'grupos': _store_grupos(items),
+        'nav': _nav_categorias(),
+        'total': len(items),
         'actualizado': timezone.now().strftime('%H:%M:%S'),
     })
 
@@ -5447,7 +5472,9 @@ def _nav_categorias():
         if c.id not in visibles or c.padre_id is not None:
             continue
         nav.append({'id': c.id, 'nombre': c.nombre,
-                    'hijas': [{'id': h.id, 'nombre': h.nombre}
+                    'icono': (c.icono or '').strip(),
+                    'hijas': [{'id': h.id, 'nombre': h.nombre,
+                               'icono': (h.icono or '').strip()}
                               for h in cats if h.padre_id == c.id and h.id in visibles]})
     return nav
 

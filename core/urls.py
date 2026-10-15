@@ -125,6 +125,7 @@ urlpatterns = [
     path('catalogo/', views.catalogo, name='catalogo'),
     # Vitrina Marketplace /store (existencias exactas en tiempo real, sin login)
     path('store/', views.store, name='store'),
+    path('store/buscar/', views.store_buscar, name='store_buscar'),
     path('store/categoria/<int:pk>/', views.store_categoria, name='store_categoria'),
     path('store/api/estado/', views.store_api_estado, name='store_api'),
     path('mostrador/estado/', views.mostrador_estado, name='mostrador_estado'),

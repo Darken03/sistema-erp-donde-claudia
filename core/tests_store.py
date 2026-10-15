@@ -9,14 +9,14 @@ from .models import (
 
 class StoreTest(TestCase):
     def test_store_publico_sin_login_muestra_stock_exacto(self):
-        Categoria.objects.create(nombre='Viveres')
+        cat = Categoria.objects.create(nombre='Viveres')
         Producto.objects.create(nombre='Arroz', unidad_medida='unidades',
-            precio_compra=10, precio_venta=20, stock=Decimal('12'))
+            precio_compra=10, precio_venta=20, stock=Decimal('12'), categoria=cat)
         Producto.objects.create(nombre='OcultoNoVisible', unidad_medida='unidades',
             precio_compra=1, precio_venta=2, stock=Decimal('9'), visible_pos=False)
         Producto.objects.create(nombre='OcultoInactivo', unidad_medida='unidades',
             precio_compra=1, precio_venta=2, stock=Decimal('9'), activo=False)
-        r = self.client.get(reverse('core:store'))
+        r = self.client.get(reverse('core:store_categoria', args=[cat.pk]))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'Arroz')
         self.assertContains(r, '$20')
@@ -53,7 +53,7 @@ class StoreTest(TestCase):
     def test_store_template_usa_tokens_admin(self):
         Producto.objects.create(nombre='SinFoto', unidad_medida='unidades',
             precio_compra=1, precio_venta=3, stock=Decimal('4'))
-        r = self.client.get(reverse('core:store'))
+        r = self.client.get(reverse('core:store_buscar'))
         self.assertContains(r, '--accent')
         self.assertContains(r, 'data-id=')
         self.assertContains(r, 'Solo disponibles')
@@ -137,13 +137,15 @@ class StoreTest(TestCase):
         self.assertContains(r, 'id="q"')
 
     def test_store_categorias_visuales(self):
-        cat = Categoria.objects.create(nombre='Viveres')
+        cat = Categoria.objects.create(nombre='Viveres', icono='🍎')
         Producto.objects.create(nombre='Arroz', unidad_medida='unidades',
             precio_compra=10, precio_venta=20, stock=Decimal('12'), categoria=cat)
         r = self.client.get(reverse('core:store'))
-        self.assertContains(r, 'id="categorias"')
-        self.assertContains(r, 'cat-visual')
+        # Selector bonito con icono y enlace a la página de la categoría.
+        self.assertContains(r, 'id="navCatSel"')
+        self.assertContains(r, '🍎')
         self.assertContains(r, 'Viveres')
+        self.assertContains(r, f'/store/categoria/{cat.pk}/')
 
     def test_categoria_jerarquia_padre_hijas(self):
         padre = Categoria.objects.create(nombre='Alimentos')
@@ -183,6 +185,10 @@ class StoreTest(TestCase):
             precio_compra=1, precio_venta=2, stock=Decimal('9'), categoria=oculta)
         r = self.client.get(reverse('core:store'))
         self.assertNotContains(r, 'Fantasma')
+        # En el buscador no se renderiza su tarjeta (el término sí se
+        # refleja en el campo de búsqueda y el título).
+        r = self.client.get(reverse('core:store_buscar') + '?q=Fantasma')
+        self.assertNotContains(r, '<article')
         nombres_api = [p['id'] for p in self.client.get(reverse('core:store_api')).json()['productos']]
         prod = Producto.objects.get(nombre='Fantasma')
         self.assertNotIn(prod.id, nombres_api)
@@ -194,13 +200,15 @@ class StoreTest(TestCase):
             precio_compra=1, precio_venta=2, stock=Decimal('9'), categoria=hija)
         r = self.client.get(reverse('core:store'))
         self.assertNotContains(r, 'Tapado')
+        self.assertEqual(
+            self.client.get(reverse('core:store_categoria', args=[hija.pk])).status_code, 404)
 
     def test_store_arbol_padre_con_hijas(self):
         padre = Categoria.objects.create(nombre='Alimentos')
         hija = Categoria.objects.create(nombre='Granos', padre=padre)
         Producto.objects.create(nombre='Arroz', unidad_medida='unidades',
             precio_compra=10, precio_venta=20, stock=Decimal('12'), categoria=hija)
-        r = self.client.get(reverse('core:store'))
+        r = self.client.get(reverse('core:store_categoria', args=[padre.pk]))
         self.assertContains(r, 'Alimentos')
         self.assertContains(r, 'data-parent=')
 

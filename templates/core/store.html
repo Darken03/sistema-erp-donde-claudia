@@ -72,8 +72,18 @@ function toggleStoreTheme(){
   .ml-nav a:hover { color:var(--accent); }
   .ml-nav a.active { color:var(--accent); border-bottom-color:var(--accent); }
   .ml-nav .count { margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; padding:9px 0 9px 12px; }
-  .nav-cat { height:32px; border:0; background:transparent; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--ink-2); max-width:230px; cursor:pointer; padding:9px 4px; }
-  .nav-cat:hover { color:var(--accent); }
+  .nav-dd { position:relative; }
+  .nav-dd-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:12px; color:var(--ink-2); background:transparent; border:0; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; }
+  .nav-dd-btn:hover, .nav-dd.open .nav-dd-btn { color:var(--accent); }
+  .nav-dd-chev { font-size:10px; color:var(--ink-3); transition:transform 150ms; }
+  .nav-dd.open .nav-dd-chev { transform:rotate(180deg); }
+  .nav-dd-ico { width:30px; height:30px; min-width:30px; border-radius:9px; background:linear-gradient(135deg,#e8641b,#7c3aed); color:#fff; font-size:14px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; font-family:var(--font-mono); }
+  .nav-dd-panel { display:none; position:absolute; top:calc(100% + 6px); left:0; min-width:270px; max-width:84vw; max-height:62vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 44px -12px rgba(20,20,40,.35); padding:6px; z-index:1200; }
+  .nav-dd.open .nav-dd-panel { display:block; }
+  .nav-dd-panel a { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; font-size:13px; font-weight:600; color:var(--ink); text-decoration:none; }
+  .nav-dd-panel a:hover { background:var(--accent-tint); color:var(--accent); }
+  .nav-dd-panel a.sub { padding-left:28px; font-weight:500; color:var(--ink-2); }
+  .nav-dd-empty { display:block; padding:12px; font-size:12px; color:var(--ink-3); }
   .link-more { display:inline-block; margin-top:8px; font-size:12px; font-weight:700; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.04em; color:var(--accent); text-decoration:none; }
   .link-more:hover { color:var(--accent-strong); }
   /* ===== Layout ===== */
@@ -195,9 +205,9 @@ function toggleStoreTheme(){
       {% else %}<img class="logo" src="{% static 'img/logo-donde-clau.webp' %}" alt="{{ TIENDA.nombre|default:'Donde Clau' }}" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
       <span><span class="t1">{{ TIENDA.nombre|default:"Donde Clau" }}</span><br><span class="t2">Tienda · en vivo 🎃</span></span>
     </a>
-    <div class="ml-search">
-      <input type="search" id="q" placeholder="Buscar producto o código... 👻" autocomplete="off">
-    </div>
+    <form class="ml-search" action="{% url 'core:store_buscar' %}" method="get">
+      <input type="search" id="q" name="q" placeholder="Buscar producto o código... 👻" autocomplete="off">
+    </form>
     <div class="ml-side">
       <span class="hwn-garland" title="Halloween en tienda">🎃👻🦇🍬</span>
       <span class="live" id="live"><span class="dot"></span><span id="liveTxt">Actualizado {{ actualizado }}</span></span>
@@ -207,15 +217,8 @@ function toggleStoreTheme(){
   <nav class="ml-nav">
     <div class="ml-nav-inner">
       <a href="{% url 'core:store' %}">Tienda</a>
-      <select class="nav-cat" id="navCatSel" title="Elegir categoría" onchange="if(this.value){location.href=this.value;}">
-        <option value="">Categorías…</option>
-        {% for a in nav %}
-        <option value="{% url 'core:store_categoria' a.id %}">{{ a.nombre }}</option>
-        {% for h in a.hijas %}
-        <option value="{% url 'core:store_categoria' h.id %}">↳ {{ h.nombre }}</option>
-        {% endfor %}{% endfor %}
-      </select>
-      <a href="{% url 'core:store' %}?solo=1">Solo disponibles</a>
+      {% include "core/store_nav_dropdown.html" %}
+      <a href="{% url 'core:store_buscar' %}?solo=1">Solo disponibles</a>
       <span class="count">{{ total }} productos · {{ disponibles|default:total }} disponibles</span>
     </div>
   </nav>
@@ -233,7 +236,7 @@ function toggleStoreTheme(){
         <h1>Descubre lo mejor de nuestra tienda en vivo</h1>
         <p>Explora nuestra colección de productos con disponibilidad exacta y precios en {{ TIENDA.moneda|default:"CUP" }}. Calidad y confianza, con el toque festivo del POS: naranja calabaza y morado bruja. Solo vitrina, sin compra en línea.</p>
         <div class="hero-ctas">
-          <button type="button" class="btn-hero btn-hero-dark" onclick="document.getElementById('categorias').scrollIntoView({behavior:'smooth'})">Explorar categorías</button>
+          <button type="button" class="btn-hero btn-hero-dark" onclick="document.getElementById('destacadas').scrollIntoView({behavior:'smooth'})">Explorar categorías</button>
           {% with d=destacadas.0 %}{% if d.id %}<a class="btn-hero btn-hero-light" href="{% url 'core:store_categoria' d.id %}">Descubrir más</a>{% else %}<a class="btn-hero btn-hero-light" href="{% url 'core:store' %}?solo=1">Descubrir más</a>{% endif %}{% endwith %}
         </div>
       </div>
@@ -251,7 +254,7 @@ function toggleStoreTheme(){
     <div class="duo-card">
       <h2>En vivo con confianza</h2>
       <p>Disponibilidad exacta y precios claros para que tu visita rinda. Filtra por Solo disponibles, ordena por precio o stock y encuentra rápido tu producto. {% if TIENDA.objeto.telefono %}Llámanos al {{ TIENDA.objeto.telefono }}.{% endif %}</p>
-      <a class="btn-hero btn-hero-dark" href="{% url 'core:store' %}?solo=1" style="background:linear-gradient(135deg,#e8641b,#7c3aed);">Ver disponibles</a>
+      <a class="btn-hero btn-hero-dark" href="{% url 'core:store_buscar' %}?solo=1" style="background:linear-gradient(135deg,#e8641b,#7c3aed);">Ver disponibles</a>
     </div>
   </section>
 
@@ -297,80 +300,7 @@ function toggleStoreTheme(){
     <div class="explore-stats">
       <div class="stat"><b>{{ total }}</b><span>productos</span></div>
       <div class="stat"><b>{{ disponibles|default:total }}</b><span>disponibles</span></div>
-      <div class="stat"><b>{{ arbol|length }}</b><span>categorías</span></div>
-    </div>
-  </section>
-
-  <section class="anchor" id="categorias">
-    <div class="sec-head"><h2>Categorías</h2><span class="n">{{ arbol|length }}</span></div>
-    <div class="cat-visual-grid">
-      <a class="cat-visual cat-card" href="{% url 'core:store' %}">
-        <span class="avatar">✦</span>
-        <span><span class="cname">Todas</span><br><span class="ccount">{{ total }} productos</span></span>
-      </a>
-      {% for a in arbol %}
-      {% if a.id %}<a class="cat-visual cat-card" href="{% url 'core:store_categoria' a.id %}">
-      {% else %}<a class="cat-visual cat-card" href="{% url 'core:store' %}">{% endif %}
-        <span class="avatar">{{ a.nombre|slice:":2"|upper }}</span>
-        <span><span class="cname">{{ a.nombre }}</span><br><span class="ccount">{{ a.total }} productos{% if a.hijas %} · {% for h in a.hijas %}{{ h.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</span></span>
-      </a>
-      {% endfor %}
-    </div>
-  </section>
-
-  <div class="toolbar">
-    <div class="tools">
-      <label class="check"><input type="checkbox" id="solo"{% if solo %} checked{% endif %}> Solo disponibles</label>
-      <select class="sort" id="orden" title="Ordenar">
-        <option value="">Orden: Nombre</option>
-        <option value="pasc">Precio ↑</option>
-        <option value="pdesc">Precio ↓</option>
-        <option value="sdesc">Stock ↓</option>
-      </select>
-      <span class="vis" id="visCount"></span>
-    </div>
-  </div>
-
-  <section class="anchor" id="catalogo">
-  {% for g in grupos %}
-  <section class="cat-sec" data-parent="{{ g.padre_key }}">
-    <h2 class="cat-title">{{ g.categoria }} <span class="n">{{ g.items|length }}</span></h2>
-    <div class="grid">
-      {% for it in g.items %}
-      <article class="product-card{% if not it.disponible %} agotado{% endif %}" data-id="{{ it.id }}" data-disp="{% if it.disponible %}1{% else %}0{% endif %}" data-nombre="{{ it.nombre|lower }} {{ it.codigo|lower }}" data-precio="{{ it.precio }}" data-stock="{{ it.stock }}" data-idx="{{ forloop.counter0 }}">
-        <div class="img-zone">
-          {% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
-          <span class="noimg" style="{% if it.imagen %}display:none;{% endif %}">{{ it.nombre|slice:":2"|upper }}</span>
-          {% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}
-        </div>
-        <div class="name">{{ it.nombre }}</div>
-        <div class="sku">{{ it.codigo }}</div>
-        <div class="pres">{{ it.etiqueta }}</div>
-        <div class="price js-precio">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
-        <div class="stockrow">
-          <span class="stockqty">Stock: <span class="js-stock">{{ it.stock_fmt }}</span></span>
-          {% if not it.disponible %}<span class="pill pill-closed js-pill"><span class="dot"></span>Agotado</span>
-          {% elif it.pocas %}<span class="pill pill-low js-pill"><span class="dot"></span>¡Solo {{ it.stock_fmt }}!</span>
-          {% else %}<span class="pill pill-open js-pill"><span class="dot"></span>Disponible</span>{% endif %}
-        </div>
-      </article>
-      {% endfor %}
-    </div>
-  </section>
-  {% empty %}
-  <div class="empty" style="display:block;"><span class="big">○</span>Aún no hay productos publicados.</div>
-  {% endfor %}
-  <div class="empty" id="sinRes"><span class="big">○</span>Sin resultados para esa búsqueda.</div>
-  </section>
-
-  <!-- Testimonios estilo Algomio -->
-  <section class="anchor" id="testimonios">
-    <div class="sec-head"><h2>Nuestros felices clientes!</h2></div>
-    <div class="sec-sub">La confianza de quienes ya compran con nosotros habla por sí sola.</div>
-    <div class="testi-grid">
-      <div class="testi">Servicio rápido y productos de excelente calidad. La experiencia fue fluida y confiable. Encontré justo lo que necesitaba.<b>Cliente verificado</b><small>Compra en tienda</small></div>
-      <div class="testi">La variedad y la atención al detalle marcan la diferencia. Todo bien embalado y en perfecto estado. Seguiré comprando.<b>Cliente frecuente</b><small>Recomendado 🎃</small></div>
-      <div class="testi">Muy satisfecho con calidad y precio. Pedidos puntuales y soporte que responde. Facilita el día a día.<b>Cliente mayorista</b><small>Volveré pronto</small></div>
+      <div class="stat"><b>{{ nav|length }}</b><span>categorías</span></div>
     </div>
   </section>
 </main>
@@ -378,7 +308,7 @@ function toggleStoreTheme(){
 <footer class="store-foot">
   <div class="foot-top">
     <span>🎃 <strong style="color:#fcb424;">{{ TIENDA.nombre|default:"Donde Clau" }}</strong> · Tu tienda de confianza</span>
-    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store' %}?solo=1">Disponibles</a></span>
+    <span><a href="{% url 'core:store' %}">Tienda</a> · <a href="{% url 'core:store_buscar' %}?solo=1">Disponibles</a></span>
   </div>
   <div class="foot-mid">
     <div><h3>Sobre Nosotros</h3><ul><li>Tienda confiable con entregas rápidas y productos seleccionados.</li><li>Precios en {{ TIENDA.moneda|default:"CUP" }} · Solo vitrina</li></ul></div>
@@ -390,62 +320,17 @@ function toggleStoreTheme(){
 </footer>
 
 <script>
+/* Landing sin catálogo: solo mantiene vivo el badge "Actualizado". */
 (function(){
-  var SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
-  function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-  var q = document.getElementById('q'), solo = document.getElementById('solo'),
-      orden = document.getElementById('orden'), sinRes = document.getElementById('sinRes'),
-      visCount = document.getElementById('visCount'), timer = null;
-  function ordenarGrids(){
-    var modo = orden.value;
-    document.querySelectorAll('.grid').forEach(function(grid){
-      var cards = Array.prototype.slice.call(grid.querySelectorAll('.card, .product-card'));
-      if (!modo) { cards.sort(function(a,b){ return (+a.getAttribute('data-idx')) - (+b.getAttribute('data-idx')); }); }
-      else if (modo === 'pasc' || modo === 'pdesc') {
-        cards.sort(function(a,b){ var d = parseFloat(a.getAttribute('data-precio')) - parseFloat(b.getAttribute('data-precio')); return modo === 'pasc' ? d : -d; });
-      } else if (modo === 'sdesc') { cards.sort(function(a,b){ return parseFloat(b.getAttribute('data-stock')) - parseFloat(a.getAttribute('data-stock')); }); }
-      cards.forEach(function(c){ grid.appendChild(c); });
-    });
-  }
-  function filtrar(){
-    var t = norm(q.value.trim()), vis = 0, tot = 0;
-    document.querySelectorAll('.cat-sec').forEach(function(sec){
-      var n = 0;
-      sec.querySelectorAll('.product-card').forEach(function(c){
-        tot++; var okDisp = !solo.checked || c.getAttribute('data-disp') === '1';
-        var hit = okDisp && (!t || norm(c.getAttribute('data-nombre')).indexOf(t) !== -1);
-        c.style.display = hit ? '' : 'none'; if (hit) n++;
-      });
-      sec.style.display = n ? '' : 'none'; vis += n;
-    });
-    sinRes.style.display = vis ? 'none' : 'block';
-    visCount.textContent = vis + ' de ' + tot;
-  }
-  function filtrarSoon(){ clearTimeout(timer); timer = setTimeout(filtrar, 150); }
-  q.addEventListener('input', filtrarSoon);
-  solo.addEventListener('change', filtrar);
-  orden.addEventListener('change', function(){ ordenarGrids(); filtrar(); });
-  ordenarGrids(); filtrar();
-  var STORE_POLL_MS = 20000;
   var live = document.getElementById('live'), liveTxt = document.getElementById('liveTxt');
   function setLive(ok, txt){ live.classList.toggle('off', !ok); liveTxt.textContent = txt; }
-  function pillHTML(d,p,s){ if(!d) return '<span class="dot"></span>Agotado'; if(p) return '<span class="dot"></span>¡Solo '+s+'!'; return '<span class="dot"></span>Disponible'; }
   function refrescar(){
     fetch("{% url 'core:store_api' %}", {headers:{'Accept':'application/json'}})
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(data){
-        (data.productos||[]).forEach(function(p){
-          var card = document.querySelector('.product-card[data-id="'+p.id+'"]'); if(!card) return;
-          var disp=!!p.disponible; card.setAttribute('data-disp',disp?'1':'0'); card.setAttribute('data-precio',p.precio); card.setAttribute('data-stock',p.stock);
-          card.classList.toggle('agotado',!disp);
-          var pre=card.querySelector('.js-precio'); if(pre) pre.textContent=SIMBOLO+p.precio;
-          var st=card.querySelector('.js-stock'); if(st) st.textContent=p.stock_fmt;
-          var pill=card.querySelector('.js-pill'); if(pill){ pill.innerHTML=pillHTML(disp,!!p.pocas,p.stock_fmt); pill.className='js-pill pill '+(!disp?'pill-closed':(p.pocas?'pill-low':'pill-open')); }
-        });
-        setLive(true,'Actualizado '+(data.actualizado||'')); filtrar();
-      }).catch(function(){ setLive(false,'Sin conexión · última actualización conservada'); });
+      .then(function(data){ setLive(true,'Actualizado '+(data.actualizado||'')); })
+      .catch(function(){ setLive(false,'Sin conexión · última actualización conservada'); });
   }
-  setInterval(refrescar, STORE_POLL_MS);
+  setInterval(refrescar, 20000);
 })();
 </script>
 </body>
