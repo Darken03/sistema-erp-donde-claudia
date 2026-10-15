@@ -5562,7 +5562,6 @@ def store_categoria(request, pk):
             'descripcion': h.descripcion or '',
             'total': _cuenta_sub(h),
         } for h in hijas]
-        lateral_titulo = f'Subcategorías de {cat.nombre}'
         lateral = [{
             'id': h.id, 'nombre': h.nombre,
             'icono': (h.icono or '').strip(), 'actual': False,
@@ -5574,14 +5573,12 @@ def store_categoria(request, pk):
             hermanas = sorted(
                 [h for h in cat.padre.hijas.all() if h.visible_store],
                 key=lambda h: h.nombre.lower())
-            lateral_titulo = f'Más de {cat.padre.nombre}'
             lateral = [{
                 'id': h.id, 'nombre': h.nombre,
                 'icono': (h.icono or '').strip(),
                 'actual': h.id == cat.id,
             } for h in hermanas]
         else:
-            lateral_titulo = 'Categorías'
             lateral = [{
                 'id': a['id'], 'nombre': a['nombre'], 'icono': a['icono'],
                 'actual': a['id'] == cat.id,
@@ -5596,7 +5593,6 @@ def store_categoria(request, pk):
         'hijas': hijas,
         'hijas_info': hijas_info,
         'es_padre': es_padre,
-        'lateral_titulo': lateral_titulo,
         'lateral': lateral,
         'grupos': grupos,
         'arbol': arbol_global,

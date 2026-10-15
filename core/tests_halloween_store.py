@@ -129,6 +129,15 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertIn('AlfaH', html)
         self.assertIn(f'/store/categoria/{alfa.pk}/', html)
 
+    def test_lateral_sin_titulo_mas_de(self):
+        padre = Categoria.objects.create(nombre='PadreT')
+        beta = Categoria.objects.create(nombre='BetaT', padre=padre)
+        html = self.client.get(reverse('core:store_categoria', args=[beta.pk])).content.decode()
+        self.assertNotIn('Más de', html)
+        self.assertNotIn('lateral_titulo', html)
+        self.assertIn('cat-side', html)
+        self.assertIn(f'/store/categoria/{padre.pk}/', html)
+
     def test_pagina_categoria_oculta_da_404(self):
         oculta = Categoria.objects.create(nombre='OcultaX', visible_store=False)
         Producto.objects.create(nombre='FantasmaX', unidad_medida='unidades',
@@ -245,13 +254,18 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertIn('.cat-main{min-width:0', html)
 
     def test_grid_movil_maximo_dos_columnas(self):
-        # En móvil el grid es explícitamente de 2 columnas (no auto-fill
-        # que pueda meter más si el viewport reporta otro ancho).
+        # En móvil los grids son explícitamente de 2 columnas compactas
+        # (productos e hijas): nada a 1 columna gigante.
         cat = Categoria.objects.create(nombre='DosCol')
+        hija = Categoria.objects.create(nombre='HijaCol', padre=cat)
         for url in (reverse('core:store_categoria', args=[cat.pk]),
+                    reverse('core:store_categoria', args=[hija.pk]),
                     reverse('core:store_buscar')):
             html = self.client.get(url).content.decode()
             self.assertIn('.grid{grid-template-columns:repeat(2,minmax(0,1fr))', html)
+        html = self.client.get(
+            reverse('core:store_categoria', args=[cat.pk])).content.decode()
+        self.assertIn('.kid-grid{grid-template-columns:repeat(2,minmax(0,1fr))', html)
 
     def test_imagenes_relleno_uniforme_como_pos(self):
         # Las fotos rellenan la zona (cover), uniformes como en el POS.
@@ -272,6 +286,23 @@ class StoreCategoriaPaginaTest(TestCase):
             html = self.client.get(url).content.decode()
             self.assertIn('.ml-search input{min-width:0', html)
             self.assertIn('.ml-brand .t1,.ml-brand .t2{overflow:hidden', html)
+
+    def test_nav_movil_en_una_sola_linea(self):
+        # En móvil Solo disponibles va a continuación del selector,
+        # sin saltar de línea: nav compacto con scroll lateral.
+        cat = Categoria.objects.create(nombre='Nav1')
+        for url in (reverse('core:store'),
+                    reverse('core:store_buscar'),
+                    reverse('core:store_categoria', args=[cat.pk])):
+            html = self.client.get(url).content.decode()
+            self.assertIn('.ml-nav-inner{flex-wrap:nowrap', html)
+            self.assertIn('.ml-nav a,.nav-m-btn{padding:9px 8px', html)
+
+    def test_logo_webp_existe(self):
+        # El header referencia logo-donde-clau.webp: debe existir para
+        # no devolver 404 en consola.
+        from django.contrib.staticfiles import finders
+        self.assertIsNotNone(finders.find('img/logo-donde-clau.webp'))
 
 
 class StoreBuscarTest(TestCase):

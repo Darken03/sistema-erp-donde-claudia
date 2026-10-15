@@ -134,7 +134,6 @@ function toggleStoreTheme(){
   .cat-main{min-width:0;}
   .product-card{min-width:0;}
   .cat-side { position:sticky; top:130px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; }
-  .cat-side h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:10px; font-family:var(--font-display); }
   .cat-side ul { list-style:none; display:flex; flex-direction:column; gap:4px; }
   .cat-side a.side-link { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; font-size:13px; font-weight:600; color:var(--ink-2); text-decoration:none; }
   .cat-side a.side-link:hover { background:var(--accent-tint); color:var(--accent); }
@@ -189,7 +188,7 @@ function toggleStoreTheme(){
   @media (max-width:900px){ .foot-mid{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:768px){ .ml-search{order:3;flex-basis:100%;} .ml-row{flex-wrap:wrap;} .live #liveTxt{display:none;} }
   @media (max-width:600px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  @media (max-width:480px){ .foot-mid{grid-template-columns:1fr;} .sec-head h1{font-size:24px;} .sec-head{flex-wrap:wrap;} .hwn-garland{display:none;} .ml-nav .count{display:none;} .ml-row{gap:8px;} .ml-brand img.logo{height:34px;} .kid-grid{grid-template-columns:1fr;} .crumb{font-size:11px;} .product-card{padding:8px;} .product-card .img-zone{height:84px;} .product-card .price{font-size:15px;} .product-card .stockrow{flex-wrap:wrap; gap:4px;} .product-card .stockqty{font-size:10px;} .toolbar{padding:10px;} .cat-side{padding:12px;} }
+  @media (max-width:480px){ .ml-nav-inner{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;} .ml-nav-inner::-webkit-scrollbar{display:none;} .ml-nav a,.nav-m-btn{padding:9px 8px; font-size:11px;} .foot-mid{grid-template-columns:1fr;} .sec-head h1{font-size:24px;} .sec-head{flex-wrap:wrap;} .hwn-garland{display:none;} .ml-nav .count{display:none;} .ml-row{gap:8px;} .ml-brand img.logo{height:34px;} .kid-grid{grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;} .kid-card{padding:14px 12px;} .kid-ico{width:36px;height:36px;font-size:17px;} .kid-name{font-size:13px;} .crumb{font-size:11px;} .product-card{padding:8px;} .product-card .img-zone{height:84px;} .product-card .price{font-size:15px;} .product-card .stockrow{flex-wrap:wrap; gap:4px;} .product-card .stockqty{font-size:10px;} .toolbar{padding:10px;} .cat-side{padding:12px;} }
 </style>
 </head>
 <body>
@@ -227,31 +226,8 @@ function toggleStoreTheme(){
   <div class="sec-head"><h1>{{ categoria.nombre }}</h1><span class="n">{{ total }}</span></div>
   <div class="sec-sub">{% if categoria.descripcion %}{{ categoria.descripcion }}{% else %}Productos de {{ categoria.nombre }} con disponibilidad en vivo.{% endif %}</div>
 
-  <div class="cat-layout">
-    <aside class="cat-side">
-      <h3>{{ lateral_titulo }}</h3>
-      <ul>
-        {% for l in lateral %}
-        <li><a class="side-link{% if l.actual %} active{% endif %}" href="{% url 'core:store_categoria' l.id %}"><span class="nav-dd-ico sm">{% include "core/store_cat_icon.html" with icono=l.icono nombre=l.nombre %}</span><span>{{ l.nombre }}</span></a></li>
-        {% endfor %}
-      </ul>
-      {% if es_padre %}{% if categoria.padre %}<a class="side-back" href="{% url 'core:store_categoria' categoria.padre.id %}">← {{ categoria.padre.nombre }}</a>{% else %}<a class="side-back" href="{% url 'core:store' %}">← Tienda</a>{% endif %}{% endif %}
-    </aside>
-    <div class="cat-main">
-      {% if es_padre %}
-      <section>
-        <h2 class="cat-title">Subcategorías <span class="n">{{ hijas_info|length }}</span></h2>
-        <div class="kid-grid">
-          {% for h in hijas_info %}
-          <a class="kid-card" href="{% url 'core:store_categoria' h.id %}">
-            <span class="kid-ico">{% include "core/store_cat_icon.html" with icono=h.icono nombre=h.nombre %}</span>
-            <span class="kid-name">{{ h.nombre }}</span>
-            <span class="kid-count">{{ h.total }} producto{{ h.total|pluralize }}</span>
-          </a>
-          {% endfor %}
-        </div>
-      </section>
-      {% endif %}
+  
+      
 
   <div class="toolbar">
     <div class="tools">
