@@ -227,6 +227,23 @@ class StoreCategoriaPaginaTest(TestCase):
         self.assertIn('.product-card .img-zone{height:84px', html)
         self.assertIn('.product-card .stockrow{flex-wrap:wrap', html)
 
+    def test_grid_sin_desborde_horizontal(self):
+        # Los items del grid y la columna principal necesitan min-width:0;
+        # si no, nombres/SKU largos estiran la columna y la página
+        # desborda en móvil.
+        cat = Categoria.objects.create(nombre='Ancho')
+        Producto.objects.create(
+            nombre='Producto con nombre larguisimo para probar desborde',
+            unidad_medida='unidades', precio_compra=1, precio_venta=5,
+            stock=Decimal('3'), categoria=cat)
+        for url in (reverse('core:store_categoria', args=[cat.pk]),
+                    reverse('core:store_buscar')):
+            html = self.client.get(url).content.decode()
+            self.assertIn('.product-card{min-width:0', html)
+        html = self.client.get(
+            reverse('core:store_categoria', args=[cat.pk])).content.decode()
+        self.assertIn('.cat-main{min-width:0', html)
+
 
 class StoreBuscarTest(TestCase):
     def test_buscar_filtra_por_texto(self):
