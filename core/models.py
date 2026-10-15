@@ -162,6 +162,16 @@ class Turno(models.Model):
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
+    # Jerarquía para la tienda: una categoría padre agrupa varias hijas.
+    padre = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hijas',
+    )
+    # El admin decide qué categorías se muestran en /store.
+    visible_store = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -171,6 +181,22 @@ class Categoria(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if self.padre_id is None:
+            return
+        if self.padre_id == self.pk:
+            raise ValidationError({'padre': 'Una categoría no puede ser su propia padre.'})
+        # Sin ciclos: ningún ancestro puede ser uno mismo.
+        visto = {self.pk}
+        actual = self.padre
+        while actual is not None:
+            if actual.pk in visto:
+                raise ValidationError({'padre': 'Esa padre crea un ciclo en la jerarquía.'})
+            visto.add(actual.pk)
+            actual = actual.padre
 
 
 class Producto(models.Model):

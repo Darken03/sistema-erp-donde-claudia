@@ -191,11 +191,34 @@ class ConfigRegionalForm(forms.ModelForm):
 class CategoriaForm(forms.ModelForm):
     class Meta:
         model = Categoria
-        fields = ['nombre', 'descripcion']
+        fields = ['nombre', 'descripcion', 'padre', 'visible_store']
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la categoria'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'padre': forms.Select(attrs={'class': 'form-select'}),
+            'visible_store': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+        labels = {
+            'padre': 'Categoría padre (opcional)',
+            'visible_store': 'Mostrar en la tienda (/store)',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # La padre no puede ser uno mismo ni uno de sus descendientes.
+        qs = Categoria.objects.order_by('nombre')
+        inst = getattr(self, 'instance', None)
+        if inst is not None and inst.pk:
+            excluidos = {inst.pk}
+            pendientes = list(inst.hijas.all())
+            while pendientes:
+                h = pendientes.pop()
+                if h.pk not in excluidos:
+                    excluidos.add(h.pk)
+                    pendientes.extend(list(h.hijas.all()))
+            qs = qs.exclude(pk__in=excluidos)
+        self.fields['padre'].queryset = qs
+        self.fields['padre'].required = False
 
 
 class EmpleadoForm(forms.ModelForm):

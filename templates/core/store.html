@@ -1,0 +1,443 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ TIENDA.nombre|default:"Donde Clau" }} — Tienda</title>
+<link rel="icon" href="{% static 'img/logo-donde-clau.png' %}">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+(function(){ try {
+  var t = localStorage.getItem('bizm_theme') || '{{ TIENDA.tema|default:"light" }}';
+  document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+} catch(e){ document.documentElement.setAttribute('data-theme','light'); } })();
+function toggleStoreTheme(){
+  var h = document.documentElement;
+  var t = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  h.setAttribute('data-theme', t);
+  try { localStorage.setItem('bizm_theme', t); } catch(e){}
+}
+</script>
+<style>
+  /* ===== Algomio-like + Halloween POS (#e8641b calabaza, #7c3aed bruja) ===== */
+  :root {
+    --accent:#e8641b; --accent-strong:#c9520f;
+    --accent-soft:#fdeede; --accent-tint:#fdf3e7; --accent-shadow:rgba(232,100,27,.32);
+    --witch:#7c3aed; --witch-soft:#efe7fd;
+    --bg:#faf6f0; --bg-deep:#f1ebe0; --surface:#ffffff; --soft:#f6efe4;
+    --line:#e9e0d2; --line-strong:#d8cbb4;
+    --ink:#1f1a14; --ink-2:#5b5248; --ink-3:#989090;
+    --success:#2fae5e; --success-dark:#1e7a44; --success-soft:#eaf7ef;
+    --danger:#d64545; --danger-dark:#a83232; --danger-soft:#fdecec;
+    --warning:#92400e; --warning-soft:#fef3c7;
+    --font-display:'Montserrat',-apple-system,'Segoe UI',sans-serif;
+    --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-mono:'JetBrains Mono','SFMono-Regular',Menlo,Consolas,monospace;
+    --shadow-sm:0 2px 8px -4px rgba(20,20,40,.12);
+    --shadow-md:0 8px 24px rgba(20,20,40,.08);
+  }
+  html[data-theme="dark"] {
+    --bg:#171310; --bg-deep:#100d0b; --surface:#221c17; --soft:#2c241d;
+    --line:#3a3129; --line-strong:#4d4235;
+    --ink:#f7f1e8; --ink-2:#d4c9bb; --ink-3:#9a8f80;
+    --accent-tint:rgba(232,100,27,.2); --accent-soft:rgba(232,100,27,.3);
+    --shadow-sm:0 2px 8px -4px rgba(0,0,0,.5);
+    --shadow-md:0 8px 24px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { font-family:var(--font-sans); background:var(--bg); color:var(--ink); min-height:100vh; display:flex; flex-direction:column; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h5 { font-family:var(--font-display); }
+  /* ===== Header Marketplace (estructura Algomio, piel Halloween) ===== */
+  .ml-header { position:sticky; top:0; z-index:20; background:var(--surface); border-bottom:1px solid var(--line); box-shadow:var(--shadow-sm); }
+  .ml-row { max-width:1200px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:12px; }
+  .ml-brand { display:flex; align-items:center; gap:10px; min-width:0; text-decoration:none; color:var(--ink); }
+  .ml-brand img.logo { height:40px; width:auto; border-radius:10px; background:#fff; padding:2px 4px; border:1px solid var(--line); }
+  .ml-brand .t1 { font-size:16px; font-weight:800; white-space:nowrap; letter-spacing:-0.01em; font-family:var(--font-display); text-transform:uppercase; }
+  .ml-brand .t2 { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); white-space:nowrap; }
+  .ml-search { position:relative; flex:1; min-width:0; }
+  .ml-search::before { content:"⌕"; position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--ink-3); font-size:17px; }
+  .ml-search input { width:100%; height:40px; padding:0 12px 0 38px; font-size:13px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; outline:none; }
+  .ml-search input:focus { border-color:var(--witch); box-shadow:0 0 0 3px rgba(124,58,237,.15); }
+  .ml-side { display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .live { display:inline-flex; align-items:center; gap:6px; background:var(--accent-tint); border:1px solid var(--line); border-radius:99px; padding:5px 12px; font-size:11px; font-weight:600; font-family:var(--font-mono); color:var(--ink-2); white-space:nowrap; }
+  .live .dot { width:8px; height:8px; border-radius:99px; background:var(--success); }
+  .live.off .dot { background:var(--danger); }
+  .icon-btn { width:36px; height:36px; min-width:36px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); display:inline-flex; align-items:center; justify-content:center; font-size:17px; cursor:pointer; }
+  .icon-btn:hover { background:var(--soft); color:var(--ink); border-color:var(--line-strong); }
+  .hwn-garland { display:inline-flex; gap:2px; font-size:17px; padding:4px 8px; border:1px solid var(--line); border-radius:99px; background:var(--surface); user-select:none; }
+  .ml-nav { border-top:1px solid var(--line); }
+  .ml-nav-inner { max-width:1200px; margin:0 auto; padding:0 16px; display:flex; gap:4px; align-items:center; overflow-x:auto; }
+  .ml-nav a { display:inline-flex; align-items:center; gap:6px; padding:9px 12px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-family:var(--font-display); color:var(--ink-2); text-decoration:none; white-space:nowrap; border-bottom:2px solid transparent; }
+  .ml-nav a:hover { color:var(--accent); }
+  .ml-nav a.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .ml-nav .count { margin-left:auto; font-size:11px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; padding:9px 0 9px 12px; }
+  /* ===== Layout ===== */
+  main { max-width:1200px; margin:0 auto; padding:0 16px 40px; width:100%; flex:1; }
+  section.anchor { scroll-margin-top:120px; }
+  .sec-head { display:flex; align-items:baseline; gap:10px; margin:30px 0 8px; }
+  .sec-head h2 { font-size:26px; font-weight:800; letter-spacing:-0.01em; }
+  .sec-head .n { background:var(--accent); color:#fff; font-size:12px; border-radius:99px; padding:2px 10px; font-family:var(--font-mono); }
+  .sec-head::after { content:""; flex:1; height:1px; background:var(--line); align-self:center; }
+  .sec-sub { color:var(--ink-2); font-size:14px; margin-bottom:14px; }
+  /* ===== Hero estilo Algomio (portada cosméticos → nuestra tienda) ===== */
+  .hero { margin:18px 0 8px; border-radius:20px; overflow:hidden; background:linear-gradient(135deg,#e8641b 0%,#c9520f 45%,#7c3aed 100%); color:#fff; position:relative; }
+  .hero-inner { display:grid; grid-template-columns:1.1fr .9fr; gap:18px; padding:38px 34px; position:relative; z-index:1; }
+  .hero-eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); padding:5px 12px; border-radius:99px; font-family:var(--font-display); }
+  .hero h1 { font-size:clamp(26px,4vw,42px); font-weight:800; line-height:1.15; margin:12px 0 10px; }
+  .hero p { font-size:15px; line-height:1.6; opacity:.95; max-width:52ch; }
+  .hero-ctas { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+  .btn-hero { display:inline-flex; align-items:center; gap:8px; padding:12px 22px; border-radius:10px; font-weight:700; font-size:14px; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.03em; text-decoration:none; cursor:pointer; border:0; }
+  .btn-hero-dark { background:#0a0500; color:#fff; }
+  .btn-hero-dark:hover { background:#221a12; }
+  .btn-hero-light { background:#fff; color:#0a0500; }
+  .btn-hero-light:hover { background:var(--accent-tint); }
+  .hero-art { display:grid; place-items:center; font-size:90px; filter:drop-shadow(0 10px 24px rgba(0,0,0,.3)); }
+  .hero-float { position:absolute; font-size:26px; opacity:.85; animation:hwn-float 4s ease-in-out infinite; }
+  @keyframes hwn-float { 0%,100%{transform:translateY(-4px) rotate(-6deg);} 50%{transform:translateY(6px) rotate(6deg);} }
+  /* ===== Doble columna estilo Algomio (remesas → info tienda) ===== */
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  .duo-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:24px; }
+  .duo-card h2 { font-size:20px; font-weight:800; margin-bottom:10px; }
+  .duo-card p { font-size:14px; color:var(--ink-2); line-height:1.65; }
+  .duo-card .btn-hero { margin-top:14px; font-size:12px; padding:10px 18px; }
+  /* ===== Tendencias (4 productos) ===== */
+  .trend-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .trend-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:4px; }
+  .trend-card:hover { border-color:var(--accent); box-shadow:var(--shadow-sm); }
+  .trend-card .img-zone { height:110px; border-radius:10px; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; margin:-12px -12px 8px; border-radius:14px 14px 0 0; }
+  .trend-card .img-zone img { max-width:100%; max-height:100%; object-fit:contain; }
+  .trend-card .noimg { font-family:var(--font-mono); font-weight:700; font-size:22px; color:rgba(31,26,20,.45); }
+  .trend-card .name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .trend-card .price { font-size:17px; font-weight:700; font-family:var(--font-mono); color:var(--accent); }
+  /* ===== Categorías destacadas (4 cards estilo Algomio) ===== */
+  .feat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .feat-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:22px 18px; min-height:190px; display:flex; flex-direction:column; gap:8px; position:relative; overflow:hidden; }
+  .feat-card::before { content:""; height:90px; margin:-22px -18px 8px; background:linear-gradient(135deg,#e8641b,#7c3aed); opacity:.9; }
+  .feat-card h5 { font-size:15px; font-weight:800; }
+  .feat-card h5 a { color:var(--ink); text-decoration:none; }
+  .feat-card h5 a:hover { color:var(--accent); }
+  .feat-card p { font-size:13px; color:var(--ink-2); line-height:1.55; flex:1; }
+  .feat-card .meta { font-size:11px; font-family:var(--font-mono); color:var(--ink-3); }
+  /* ===== Explora tienda ===== */
+  .explore { margin-top:16px; border-radius:16px; background:linear-gradient(135deg,#221a12,#0a0500); color:#fff; padding:28px; display:grid; grid-template-columns:1.2fr .8fr; gap:18px; align-items:center; }
+  .explore h2 { font-size:24px; font-weight:800; }
+  .explore p { font-size:14px; opacity:.9; margin-top:8px; line-height:1.6; }
+  .explore-stats { display:flex; gap:10px; flex-wrap:wrap; }
+  .stat { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:12px 16px; min-width:110px; }
+  .stat b { display:block; font-size:20px; font-family:var(--font-mono); color:#fcb424; }
+  .stat span { font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.8; }
+  /* ===== Categorías visuales / filtros / catálogo (lógica intacta) ===== */
+  .cat-visual-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .cat-card { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:12px; cursor:pointer; text-align:left; font-family:var(--font-sans); color:var(--ink); transition:border-color 120ms, box-shadow 120ms; }
+  .cat-card:hover { border-color:var(--accent); box-shadow:var(--shadow-sm); }
+  .cat-card.active { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint); }
+  .cat-card .avatar { width:38px; height:38px; min-width:38px; border-radius:50%; background:linear-gradient(135deg,#e8641b,#7c3aed); color:#fff; font-size:13px; font-weight:700; display:grid; place-items:center; font-family:var(--font-mono); }
+  .cat-card .cname { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cat-card .ccount { font-size:11px; color:var(--ink-3); font-family:var(--font-mono); }
+  .toolbar { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:22px; }
+  .tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .check { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--ink-2); background:var(--surface); border:1px solid var(--line); border-radius:99px; padding:6px 12px; cursor:pointer; white-space:nowrap; }
+  .check input { accent-color:var(--accent); }
+  .sort { height:32px; font-size:12px; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:0 8px; cursor:pointer; }
+  .vis { font-size:11px; color:var(--ink-3); font-family:var(--font-mono); }
+  .cat-title { display:flex; align-items:center; gap:10px; margin:26px 0 14px; font-size:18px; font-weight:700; }
+  .cat-title::after { content:""; flex:1; height:1px; background:var(--line); }
+  .cat-title .n { background:var(--accent); color:#fff; font-size:12px; border-radius:99px; padding:2px 10px; font-family:var(--font-mono); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
+  .product-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px; transition:border-color 120ms, box-shadow 120ms, transform 120ms; display:flex; flex-direction:column; gap:2px; }
+  .product-card:hover { border-color:var(--accent); box-shadow:0 2px 10px -2px rgba(232,100,27,.4); transform:translateY(-1px); }
+  .product-card .img-zone { margin:-10px -10px 8px; height:110px; border-radius:12px 12px 0 0; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; }
+  .product-card .img-zone img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .product-card .img-zone .noimg { font-family:var(--font-mono); font-weight:700; font-size:22px; color:rgba(31,26,20,.45); }
+  .product-card .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .product-card .sku { font-size:10px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .product-card .pres { font-size:11px; color:var(--ink-3); }
+  .product-card .price { font-size:17px; font-weight:700; font-family:var(--font-mono); color:var(--accent); margin-top:2px; }
+  .product-card .stockrow { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px; }
+  .product-card .stockqty { font-size:11px; font-family:var(--font-mono); color:var(--ink-2); }
+  .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+  .pill .dot { width:6px; height:6px; border-radius:99px; background:currentColor; }
+  .pill-open { background:var(--success-soft); color:var(--success-dark); }
+  .pill-low { background:var(--warning-soft); color:var(--warning); }
+  .pill-closed { background:var(--danger-soft); color:var(--danger-dark); }
+  .product-card.agotado { opacity:.8; }
+  .empty { text-align:center; color:var(--ink-3); padding:60px 20px; display:none; }
+  .empty .big { font-size:46px; display:block; margin-bottom:10px; }
+  /* ===== Testimonios estilo Algomio ===== */
+  .testi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .testi { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px; font-size:13px; color:var(--ink-2); line-height:1.6; }
+  .testi b { display:block; margin-top:12px; color:var(--ink); font-family:var(--font-display); }
+  .testi small { color:var(--ink-3); }
+  /* ===== Footer oscuro estilo Algomio ===== */
+  footer.store-foot { background:#1b1b1b; color:rgba(255,255,255,.75); margin-top:30px; }
+  .store-foot a { color:#edeff2; text-decoration:none; }
+  .store-foot a:hover { color:#fcb424; }
+  .foot-top { max-width:1200px; margin:0 auto; padding:22px 16px; display:flex; gap:14px; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.08); flex-wrap:wrap; }
+  .foot-mid { max-width:1200px; margin:0 auto; padding:28px 16px; display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+  .foot-mid h3 { color:#fff; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:.05em; }
+  .foot-mid li { list-style:none; font-size:13px; margin:6px 0; }
+  .foot-bottom { background:#151515; text-align:center; padding:14px; font-size:12px; color:#8d8da0; }
+  @media (max-width:900px){ .hero-inner,.duo,.explore{grid-template-columns:1fr;} .trend-grid,.feat-grid{grid-template-columns:repeat(2,1fr);} .testi-grid{grid-template-columns:1fr;} .foot-mid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:768px){ .ml-search{order:3;flex-basis:100%;} .ml-row{flex-wrap:wrap;} .live #liveTxt{display:none;} }
+  @media (max-width:480px){ .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));} .trend-grid,.feat-grid{grid-template-columns:1fr;} .foot-mid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header class="ml-header">
+  <div class="ml-row">
+    <a class="ml-brand" href="#top">
+      {% if TIENDA.logo_url %}<img class="logo" src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}">
+      {% else %}<img class="logo" src="{% static 'img/logo-donde-clau.webp' %}" alt="{{ TIENDA.nombre|default:'Donde Clau' }}" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
+      <span><span class="t1">{{ TIENDA.nombre|default:"Donde Clau" }}</span><br><span class="t2">Tienda · en vivo 🎃</span></span>
+    </a>
+    <div class="ml-search">
+      <input type="search" id="q" placeholder="Buscar producto o código... 👻" autocomplete="off">
+    </div>
+    <div class="ml-side">
+      <span class="hwn-garland" title="Halloween en tienda">🎃👻🦇🍬</span>
+      <span class="live" id="live"><span class="dot"></span><span id="liveTxt">Actualizado {{ actualizado }}</span></span>
+      <button class="icon-btn" onclick="toggleStoreTheme()" title="Claro / oscuro">◐</button>
+    </div>
+  </div>
+  <nav class="ml-nav">
+    <div class="ml-nav-inner">
+      <a href="#categorias">Categorías</a>
+      <a href="#tendencias">Tendencias</a>
+      <a href="#catalogo">Catálogo</a>
+      <a href="#catalogo" id="navDisp">Solo disponibles</a>
+      <span class="count">{{ total }} productos · {{ disponibles|default:total }} disponibles</span>
+    </div>
+  </nav>
+</header>
+
+<main id="top">
+  <!-- HERO estilo Algomio: Descubre la tienda -->
+  <section class="hero">
+    <span class="hero-float" style="top:12px;right:18px;">🦇</span>
+    <span class="hero-float" style="bottom:14px;right:70px;animation-delay:.8s;">👻</span>
+    <span class="hero-float" style="top:16px;left:48%;animation-delay:1.4s;">🍬</span>
+    <div class="hero-inner">
+      <div>
+        <span class="hero-eyebrow">🎃 Especial Halloween · {{ TIENDA.nombre|default:"Donde Clau" }}</span>
+        <h1>Descubre lo mejor de nuestra tienda en vivo</h1>
+        <p>Explora nuestra colección de productos con disponibilidad exacta y precios en {{ TIENDA.moneda|default:"CUP" }}. Calidad y confianza, con el toque festivo del POS: naranja calabaza y morado bruja. Solo vitrina, sin compra en línea.</p>
+        <div class="hero-ctas">
+          <a class="btn-hero btn-hero-dark" href="#categorias">Explorar categoría</a>
+          <a class="btn-hero btn-hero-light" href="#catalogo">Descubrir más</a>
+        </div>
+      </div>
+      <div class="hero-art">🎃</div>
+    </div>
+  </section>
+
+  <!-- Doble columna estilo Algomio -->
+  <section class="duo">
+    <div class="duo-card">
+      <h2>Compra sin complicaciones</h2>
+      <p>Conecta con lo que necesitas sin importar la distancia. Nuestra vitrina muestra stock exacto en tiempo real, para que vengas a lo seguro: lo que ves disponible es lo que hay. Cada producto se actualiza cada 20 segundos.</p>
+      <a class="btn-hero btn-hero-dark" href="#tendencias">Más información</a>
+    </div>
+    <div class="duo-card">
+      <h2>En vivo con confianza</h2>
+      <p>Disponibilidad exacta y precios claros para que tu visita rinda. Filtra por Solo disponibles, ordena por precio o stock y encuentra rápido tu producto. {% if TIENDA.objeto.telefono %}Llámanos al {{ TIENDA.objeto.telefono }}.{% endif %}</p>
+      <a class="btn-hero btn-hero-dark" href="#catalogo" style="background:linear-gradient(135deg,#e8641b,#7c3aed);">Ver catálogo</a>
+    </div>
+  </section>
+
+  <!-- Tendencias del Momento -->
+  <section class="anchor" id="tendencias">
+    <div class="sec-head"><h2>Tendencias del Momento</h2><span class="n">{{ tendencias|length }}</span></div>
+    <div class="sec-sub">Los productos que más buscan nuestros clientes, seleccionados por disponibilidad y orden</div>
+    <div class="trend-grid">
+      {% for it in tendencias %}
+      <div class="trend-card">
+        <div class="img-zone">{% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy">{% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}</div>
+        <div class="name">{{ it.nombre }}</div>
+        <div class="sku">{{ it.codigo }} · {{ it.etiqueta }}</div>
+        <div class="price">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
+      </div>
+      {% empty %}<div class="empty" style="display:block;">Sin tendencias aún.</div>{% endfor %}
+    </div>
+  </section>
+
+  <!-- Categorías Destacadas -->
+  <section class="anchor" id="destacadas">
+    <div class="sec-head"><h2>Categorías Destacadas</h2><span class="n">{{ destacadas|length }}</span></div>
+    <div class="sec-sub">Explora nuestras categorías más vistas</div>
+    <div class="feat-grid">
+      {% for c in destacadas %}
+      <div class="feat-card">
+        <h5><a href="#catalogo">{{ c.nombre }}</a></h5>
+        <p>{% if c.hijas %}{{ c.hijas|length }} subcategorías: {% for h in c.hijas|slice:":3" %}{{ h.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Productos esenciales y frescos para tu día a día.{% endif %}</p>
+        <span class="meta">{{ c.total }} productos</span>
+      </div>
+      {% empty %}<div class="empty" style="display:block;">Sin categorías.</div>{% endfor %}
+    </div>
+  </section>
+
+  <!-- Explora Nuestra Tienda -->
+  <section class="explore" id="explora">
+    <div>
+      <h2>Explora Nuestra Tienda</h2>
+      <p>Sumérgete en nuestros productos para inspirarte: destacados, calidad confiable y todo lo que necesitas en un solo lugar. Artículos que marcan tendencia cada visita. 🎃</p>
+      <div class="hero-ctas"><a class="btn-hero btn-hero-light" href="#catalogo">Descubrir más</a></div>
+    </div>
+    <div class="explore-stats">
+      <div class="stat"><b>{{ total }}</b><span>productos</span></div>
+      <div class="stat"><b>{{ disponibles|default:total }}</b><span>disponibles</span></div>
+      <div class="stat"><b>{{ arbol|length }}</b><span>categorías</span></div>
+    </div>
+  </section>
+
+  <section class="anchor" id="categorias">
+    <div class="sec-head"><h2>Categorías</h2><span class="n">{{ arbol|length }}</span></div>
+    <div class="cat-visual-grid">
+      <button class="cat-visual cat-card active" data-cat="">
+        <span class="avatar">✦</span>
+        <span><span class="cname">Todas</span><br><span class="ccount">{{ total }} productos</span></span>
+      </button>
+      {% for a in arbol %}
+      <button class="cat-visual cat-card" data-cat="{{ a.key }}">
+        <span class="avatar">{{ a.nombre|slice:":2"|upper }}</span>
+        <span><span class="cname">{{ a.nombre }}</span><br><span class="ccount">{{ a.total }} productos{% if a.hijas %} · {% for h in a.hijas %}{{ h.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</span></span>
+      </button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="tools">
+      <label class="check"><input type="checkbox" id="solo"> Solo disponibles</label>
+      <select class="sort" id="orden" title="Ordenar">
+        <option value="">Orden: Nombre</option>
+        <option value="pasc">Precio ↑</option>
+        <option value="pdesc">Precio ↓</option>
+        <option value="sdesc">Stock ↓</option>
+      </select>
+      <span class="vis" id="visCount"></span>
+    </div>
+  </div>
+
+  <section class="anchor" id="catalogo">
+  {% for g in grupos %}
+  <section class="cat-sec" data-parent="{{ g.padre_key }}">
+    <h2 class="cat-title">{{ g.categoria }} <span class="n">{{ g.items|length }}</span></h2>
+    <div class="grid">
+      {% for it in g.items %}
+      <article class="product-card{% if not it.disponible %} agotado{% endif %}" data-id="{{ it.id }}" data-disp="{% if it.disponible %}1{% else %}0{% endif %}" data-nombre="{{ it.nombre|lower }} {{ it.codigo|lower }}" data-precio="{{ it.precio }}" data-stock="{{ it.stock }}" data-idx="{{ forloop.counter0 }}">
+        <div class="img-zone">
+          {% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+          <span class="noimg" style="{% if it.imagen %}display:none;{% endif %}">{{ it.nombre|slice:":2"|upper }}</span>
+          {% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}
+        </div>
+        <div class="name">{{ it.nombre }}</div>
+        <div class="sku">{{ it.codigo }}</div>
+        <div class="pres">{{ it.etiqueta }}</div>
+        <div class="price js-precio">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
+        <div class="stockrow">
+          <span class="stockqty">Stock: <span class="js-stock">{{ it.stock_fmt }}</span></span>
+          {% if not it.disponible %}<span class="pill pill-closed js-pill"><span class="dot"></span>Agotado</span>
+          {% elif it.pocas %}<span class="pill pill-low js-pill"><span class="dot"></span>¡Solo {{ it.stock_fmt }}!</span>
+          {% else %}<span class="pill pill-open js-pill"><span class="dot"></span>Disponible</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% empty %}
+  <div class="empty" style="display:block;"><span class="big">○</span>Aún no hay productos publicados.</div>
+  {% endfor %}
+  <div class="empty" id="sinRes"><span class="big">○</span>Sin resultados para esa búsqueda.</div>
+  </section>
+
+  <!-- Testimonios estilo Algomio -->
+  <section class="anchor" id="testimonios">
+    <div class="sec-head"><h2>Nuestros felices clientes!</h2></div>
+    <div class="sec-sub">La confianza de quienes ya compran con nosotros habla por sí sola.</div>
+    <div class="testi-grid">
+      <div class="testi">Servicio rápido y productos de excelente calidad. La experiencia fue fluida y confiable. Encontré justo lo que necesitaba.<b>Cliente verificado</b><small>Compra en tienda</small></div>
+      <div class="testi">La variedad y la atención al detalle marcan la diferencia. Todo bien embalado y en perfecto estado. Seguiré comprando.<b>Cliente frecuente</b><small>Recomendado 🎃</small></div>
+      <div class="testi">Muy satisfecho con calidad y precio. Pedidos puntuales y soporte que responde. Facilita el día a día.<b>Cliente mayorista</b><small>Volveré pronto</small></div>
+    </div>
+  </section>
+</main>
+
+<footer class="store-foot">
+  <div class="foot-top">
+    <span>🎃 <strong style="color:#fcb424;">{{ TIENDA.nombre|default:"Donde Clau" }}</strong> · Tu tienda de confianza</span>
+    <span><a href="#categorias">Categorías</a> · <a href="#tendencias">Tendencias</a> · <a href="#catalogo">Catálogo</a></span>
+  </div>
+  <div class="foot-mid">
+    <div><h3>Sobre Nosotros</h3><ul><li>Tienda confiable con entregas rápidas y productos seleccionados.</li><li>Precios en {{ TIENDA.moneda|default:"CUP" }} · Solo vitrina</li></ul></div>
+    <div><h3>Enlaces Rápidos</h3><ul><li><a href="#catalogo">Catálogo</a></li><li><a href="#categorias">Categorías</a></li><li><a href="#tendencias">Tendencias</a></li></ul></div>
+    <div><h3>Información Útil</h3><ul><li>Soporte rápido y claro en cada visita.</li><li>Actualizado cada 20 s · Stock exacto</li></ul></div>
+    <div><h3>Contacto</h3><ul>{% if TIENDA.objeto.telefono %}<li>☎ {{ TIENDA.objeto.telefono }}</li>{% endif %}{% if TIENDA.objeto.direccion %}<li>📍 {{ TIENDA.objeto.direccion }}</li>{% endif %}<li>🎃 Halloween en tienda</li></ul></div>
+  </div>
+  <div class="foot-bottom">Copyright © 2026 - {{ TIENDA.nombre|default:"Donde Clau" }}. Todos los derechos reservados.</div>
+</footer>
+
+<script>
+(function(){
+  var SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
+  function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+  var q = document.getElementById('q'), solo = document.getElementById('solo'),
+      orden = document.getElementById('orden'), sinRes = document.getElementById('sinRes'),
+      visCount = document.getElementById('visCount'), cat = '', timer = null;
+  function ordenarGrids(){
+    var modo = orden.value;
+    document.querySelectorAll('.grid').forEach(function(grid){
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.card, .product-card'));
+      if (!modo) { cards.sort(function(a,b){ return (+a.getAttribute('data-idx')) - (+b.getAttribute('data-idx')); }); }
+      else if (modo === 'pasc' || modo === 'pdesc') {
+        cards.sort(function(a,b){ var d = parseFloat(a.getAttribute('data-precio')) - parseFloat(b.getAttribute('data-precio')); return modo === 'pasc' ? d : -d; });
+      } else if (modo === 'sdesc') { cards.sort(function(a,b){ return parseFloat(b.getAttribute('data-stock')) - parseFloat(a.getAttribute('data-stock')); }); }
+      cards.forEach(function(c){ grid.appendChild(c); });
+    });
+  }
+  function setCat(v){ cat = v; document.querySelectorAll('.cat-visual').forEach(function(c){ c.classList.toggle('active', c.getAttribute('data-cat') === v); }); filtrar(); }
+  function filtrar(){
+    var t = norm(q.value.trim()), vis = 0, tot = 0;
+    document.querySelectorAll('.cat-sec').forEach(function(sec){
+      var okCat = !cat || sec.getAttribute('data-parent') === cat, n = 0;
+      sec.querySelectorAll('.product-card').forEach(function(c){
+        tot++; var okDisp = !solo.checked || c.getAttribute('data-disp') === '1';
+        var hit = okCat && okDisp && (!t || norm(c.getAttribute('data-nombre')).indexOf(t) !== -1);
+        c.style.display = hit ? '' : 'none'; if (hit) n++;
+      });
+      sec.style.display = n ? '' : 'none'; vis += n;
+    });
+    sinRes.style.display = vis ? 'none' : 'block';
+    visCount.textContent = vis + ' de ' + tot;
+  }
+  function filtrarSoon(){ clearTimeout(timer); timer = setTimeout(filtrar, 150); }
+  q.addEventListener('input', filtrarSoon);
+  solo.addEventListener('change', filtrar);
+  orden.addEventListener('change', function(){ ordenarGrids(); filtrar(); });
+  document.querySelectorAll('.cat-visual').forEach(function(b){ b.addEventListener('click', function(){ setCat(b.getAttribute('data-cat')); document.getElementById('catalogo').scrollIntoView({behavior:'smooth'}); }); });
+  document.getElementById('navDisp').addEventListener('click', function(){ solo.checked = true; filtrar(); });
+  ordenarGrids(); filtrar();
+  var STORE_POLL_MS = 20000;
+  var live = document.getElementById('live'), liveTxt = document.getElementById('liveTxt');
+  function setLive(ok, txt){ live.classList.toggle('off', !ok); liveTxt.textContent = txt; }
+  function pillHTML(d,p,s){ if(!d) return '<span class="dot"></span>Agotado'; if(p) return '<span class="dot"></span>¡Solo '+s+'!'; return '<span class="dot"></span>Disponible'; }
+  function refrescar(){
+    fetch("{% url 'core:store_api' %}", {headers:{'Accept':'application/json'}})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        (data.productos||[]).forEach(function(p){
+          var card = document.querySelector('.product-card[data-id="'+p.id+'"]'); if(!card) return;
+          var disp=!!p.disponible; card.setAttribute('data-disp',disp?'1':'0'); card.setAttribute('data-precio',p.precio); card.setAttribute('data-stock',p.stock);
+          card.classList.toggle('agotado',!disp);
+          var pre=card.querySelector('.js-precio'); if(pre) pre.textContent=SIMBOLO+p.precio;
+          var st=card.querySelector('.js-stock'); if(st) st.textContent=p.stock_fmt;
+          var pill=card.querySelector('.js-pill'); if(pill){ pill.innerHTML=pillHTML(disp,!!p.pocas,p.stock_fmt); pill.className='js-pill pill '+(!disp?'pill-closed':(p.pocas?'pill-low':'pill-open')); }
+        });
+        setLive(true,'Actualizado '+(data.actualizado||'')); filtrar();
+      }).catch(function(){ setLive(false,'Sin conexión · última actualización conservada'); });
+  }
+  setInterval(refrescar, STORE_POLL_MS);
+})();
+</script>
+</body>
+</html>

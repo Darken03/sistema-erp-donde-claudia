@@ -708,19 +708,46 @@ def producto_eliminar_definitivo(request, pk):
 
 @requiere_admin
 def categoria_lista(request):
-    categorias = Categoria.objects.select_related('padre').annotate(num_productos=Count('productos'))
-    return render(request, 'core/categoria_lista.html', {'categorias': categorias})
+    qs = Categoria.objects.select_related('padre').annotate(num_productos=Count('productos'))
+    cats = list(qs)
+    por_padre = {}
+    for c in cats:
+        por_padre.setdefault(c.padre_id, []).append(c)
+    for lista in por_padre.values():
+        lista.sort(key=lambda c: c.nombre.lower())
+    # Subtotales: productos del subárbol (padre + hijas recursivas).
+    hijos_map = {}
+    for c in cats:
+        hijos_map.setdefault(c.padre_id, []).append(c)
+    def _subtotal(cat):
+        total = getattr(cat, 'num_productos', 0) or 0
+        for h in hijos_map.get(cat.id, []):
+            total += _subtotal(h)
+        return total
+    for c in cats:
+        c.subtotal = _subtotal(c)
+    padres = por_padre.get(None, [])
+    arbol = [{'padre': p, 'hijas': por_padre.get(p.id, [])} for p in padres]
+    huerfanas = [c for c in cats if c.padre_id and not any(c.padre_id == x.id for x in cats)]
+    return render(request, 'core/categoria_lista.html', {'categorias': cats, 'padres': padres, 'arbol': arbol, 'huerfanas': huerfanas})
 
 
 @requiere_admin
 def categoria_crear(request):
+    padre_init = request.GET.get('padre')
     if request.method == 'POST':
         form = CategoriaForm(request.POST)
         if form.is_valid():
             form.save()
             return redirect('core:categoria_lista')
     else:
-        form = CategoriaForm()
+        initial = {}
+        try:
+            if padre_init and Categoria.objects.filter(pk=int(padre_init)).exists():
+                initial['padre'] = int(padre_init)
+        except (ValueError, TypeError):
+            pass
+        form = CategoriaForm(initial=initial)
     return render(request, 'core/categoria_form.html', {'form': form, 'titulo': 'Crear Categoria'})
 
 
@@ -5227,10 +5254,18 @@ def store(request):
         if top is not None and g['categoria'] != nombre:
             por_top[clave]['hijas'].append({'nombre': g['categoria'], 'total': len(g['items'])})
     arbol.sort(key=lambda a: (a['key'] == 'otros', a['nombre'].lower()))
+    # Vitrina estilo Algomio: tendencias (4 primeros disponibles) y
+    # destacadas (4 padres con más productos) para el hero/secciones.
+    disponibles = [it for it in items if it.get('disponible')]
+    tendencias = (disponibles or items)[:4]
+    destacadas = sorted(arbol, key=lambda a: a['total'], reverse=True)[:4]
     return render(request, 'core/store.html', {
         'grupos': grupos,
         'arbol': arbol,
         'total': len(items),
+        'disponibles': len(disponibles),
+        'tendencias': tendencias,
+        'destacadas': destacadas,
         'actualizado': timezone.now().strftime('%H:%M:%S'),
     })
 

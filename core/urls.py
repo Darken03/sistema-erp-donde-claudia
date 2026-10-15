@@ -123,6 +123,9 @@ urlpatterns = [
     path('mostrador/', views.mostrador_display, name='mostrador_display'),
     # Catálogo público de la tienda (vitrina web, sin login ni compra)
     path('catalogo/', views.catalogo, name='catalogo'),
+    # Vitrina Marketplace /store (existencias exactas en tiempo real, sin login)
+    path('store/', views.store, name='store'),
+    path('store/api/estado/', views.store_api_estado, name='store_api'),
     path('mostrador/estado/', views.mostrador_estado, name='mostrador_estado'),
     path('pos/mostrador/empujar/', views.pos_mostrador_empujar, name='pos_mostrador_empujar'),
     path('pos/mostrador/limpiar/', views.pos_mostrador_limpiar, name='pos_mostrador_limpiar'),

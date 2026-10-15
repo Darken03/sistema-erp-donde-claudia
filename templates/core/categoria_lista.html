@@ -3,11 +3,16 @@
 {% block title %}Categorias - BizMaster{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-tags me-2"></i>Categorias</h2>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-tags me-2"></i>Categorias <small class="text-muted fs-6">y subcategorías</small></h2>
     <a href="{% url 'core:categoria_crear' %}" class="btn btn-primary">
         <i class="bi bi-plus-lg me-1"></i> Nueva Categoria
     </a>
+</div>
+
+<div class="alert alert-info d-flex gap-2 align-items-start py-2">
+    <i class="bi bi-diagram-3 mt-1"></i>
+    <div class="small">Las <strong>principales</strong> se muestran como cabecera en la tienda. Las <strong>subcategorías</strong> cuelgan de una padre con <code>?padre=&lt;id&gt;</code>. Si ocultas una padre en tienda, sus hijas también se ocultan en /store.</div>
 </div>
 
 <div class="card border-0 shadow-sm">
@@ -17,6 +22,8 @@
                 <thead class="table-light">
                     <tr>
                         <th>Nombre</th>
+                        <th>Padre</th>
+                        <th>En tienda</th>
                         <th>Descripcion</th>
                         <th>Productos</th>
                         <th>Fecha Creacion</th>
@@ -24,26 +31,51 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for categoria in categorias %}
-                    <tr>
-                        <td class="fw-bold">{{ categoria.nombre }}</td>
-                        <td>{{ categoria.descripcion|default:"-" }}</td>
-                        <td><span class="badge bg-info">{{ categoria.num_productos }}</span></td>
-                        <td>{{ categoria.fecha_creacion|date:"d/m/Y" }}</td>
+                    {% for nodo in arbol %}
+                    <tr class="table-light">
+                        <td class="fw-bold">📁 {{ nodo.padre.nombre }} <span class="badge bg-secondary ms-1">{{ nodo.hijas|length }} sub</span></td>
+                        <td class="text-muted">— principal —</td>
+                        <td>{% if nodo.padre.visible_store %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                        <td>{{ nodo.padre.descripcion|default:"-"|truncatechars:60 }}</td>
+                        <td><span class="badge bg-info" title="Directos: {{ nodo.padre.num_productos }} · Subárbol: {{ nodo.padre.subtotal }}">{{ nodo.padre.subtotal }}</span></td>
+                        <td>{{ nodo.padre.fecha_creacion|date:"d/m/Y" }}</td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <a href="{% url 'core:categoria_editar' categoria.pk %}" class="btn btn-outline-primary" title="Editar">
+                                <a href="{% url 'core:categoria_crear' %}?padre={{ nodo.padre.pk }}" class="btn btn-outline-success" title="Crear subcategoría de {{ nodo.padre.nombre }}">
+                                    <i class="bi bi-plus-lg"></i> Sub
+                                </a>
+                                <a href="{% url 'core:categoria_editar' nodo.padre.pk %}" class="btn btn-outline-primary" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <a href="{% url 'core:categoria_eliminar' categoria.pk %}" class="btn btn-outline-danger" title="Eliminar">
+                                <a href="{% url 'core:categoria_eliminar' nodo.padre.pk %}" class="btn btn-outline-danger" title="Eliminar">
                                     <i class="bi bi-trash"></i>
                                 </a>
                             </div>
                         </td>
                     </tr>
+                    {% for h in nodo.hijas %}
+                    <tr>
+                        <td class="ps-4">↳ {{ h.nombre }}</td>
+                        <td>{{ h.padre.nombre|default:"—" }}</td>
+                        <td>{% if h.visible_store %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                        <td>{{ h.descripcion|default:"-"|truncatechars:60 }}</td>
+                        <td><span class="badge bg-info">{{ h.num_productos }}</span></td>
+                        <td>{{ h.fecha_creacion|date:"d/m/Y" }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'core:categoria_editar' h.pk %}" class="btn btn-outline-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'core:categoria_eliminar' h.pk %}" class="btn btn-outline-danger" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No hay categorias registradas</td>
+                        <td colspan="7" class="text-center text-muted py-4">No hay categorias registradas</td>
                     </tr>
                     {% endfor %}
                 </tbody>

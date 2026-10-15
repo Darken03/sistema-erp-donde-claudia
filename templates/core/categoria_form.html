@@ -51,6 +51,32 @@
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4">
                     <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-diagram-3"></i></span>
+                        <div><h5>Organización y tienda</h5><small>Agrupa bajo una padre y decide si se muestra en /store</small></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.padre.id_for_label }}">Categoría padre (opcional)</label>
+                        {{ form.padre }}
+                        <div class="form-text">Vacío = categoría principal en la tienda.</div>
+                        {% if form.padre.errors %}
+                            <div class="text-danger small mt-1">{{ form.padre.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-check form-switch">
+                        {{ form.visible_store }}
+                        <label class="form-check-label" for="{{ form.visible_store.id_for_label }}">Mostrar en la tienda (/store)</label>
+                    </div>
+                    {% if form.visible_store.errors %}
+                        <div class="text-danger small mt-1">{{ form.visible_store.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
                         <span class="section-icon"><i class="bi bi-eye"></i></span>
                         <div><h5>Vista previa</h5><small>Así se verá en el POS y listados</small></div>
                     </div>
