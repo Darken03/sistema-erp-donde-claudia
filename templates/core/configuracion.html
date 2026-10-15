@@ -91,6 +91,22 @@
 <div class="card border-0 shadow-sm mt-4">
     <div class="card-body p-4">
         <div class="form-card-head">
+            <span class="section-icon"><i class="bi bi-images"></i></span>
+            <div><h5>Imágenes de productos a WebP</h5><small>Convierte JPG/PNG a .webp (más liviano), borra el archivo original y actualiza cada producto</small></div>
+        </div>
+        <form method="post" autocomplete="off" onsubmit="return confirm('¿Convertir todas las imágenes de productos a WebP? Se borrarán los archivos originales.');">
+            {% csrf_token %}
+            <input type="hidden" name="form_kind" value="convertir_webp">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-images me-1"></i>Convertir imágenes a WebP
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-body p-4">
+        <div class="form-card-head">
             <span class="section-icon"><i class="bi bi-toggles"></i></span>
             <div><h5>Modo de operación</h5><small>Define qué módulos usa el negocio. Cambiar de modo nunca borra datos: lo no aplicable se oculta y reaparece intacto al volver.</small></div>
         </div>

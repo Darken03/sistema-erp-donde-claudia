@@ -162,6 +162,8 @@ class Turno(models.Model):
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
+    # Icono: emoji (🎃) o clase Bootstrap Icons (bi-basket). Vacío = inicial.
+    icono = models.CharField(max_length=30, blank=True, default='')
     # Jerarquía para la tienda: una categoría padre agrupa varias hijas.
     padre = models.ForeignKey(
         'self',

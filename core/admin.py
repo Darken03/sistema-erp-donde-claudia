@@ -4,7 +4,7 @@ from .models import Producto, Categoria, PerfilUsuario, Venta, DetalleVenta, Emp
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ['nombre', 'padre', 'visible_store', 'descripcion', 'fecha_creacion']
+    list_display = ['nombre', 'icono', 'padre', 'visible_store', 'descripcion', 'fecha_creacion']
     list_filter = ['visible_store', 'padre']
     search_fields = ['nombre']
     ordering = ['nombre']

@@ -191,16 +191,21 @@ class ConfigRegionalForm(forms.ModelForm):
 class CategoriaForm(forms.ModelForm):
     class Meta:
         model = Categoria
-        fields = ['nombre', 'descripcion', 'padre', 'visible_store']
+        fields = ['nombre', 'descripcion', 'padre', 'visible_store', 'icono']
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la categoria'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'padre': forms.Select(attrs={'class': 'form-select'}),
             'visible_store': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'icono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '🎃 o bi-basket', 'maxlength': '30'}),
         }
         labels = {
             'padre': 'Categoría padre (opcional)',
             'visible_store': 'Mostrar en la tienda (/store)',
+            'icono': 'Icono (emoji o clase Bootstrap)',
+        }
+        help_texts = {
+            'icono': 'Emoji (🎃, 🍎) o clase Bootstrap Icons (bi-basket, bi-cup). Vacío = inicial del nombre.',
         }
 
     def __init__(self, *args, **kwargs):

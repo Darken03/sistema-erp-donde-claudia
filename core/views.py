@@ -1424,10 +1424,11 @@ def pos(request):
             # leen `producto.stock` como stock disponible.
             p.stock = stock_map.get(p.id, Decimal('0'))
         categorias_multi = Categoria.objects.filter(
-            productos__id__in=ids_multi).distinct()
+            productos__id__in=ids_multi).select_related('padre').distinct()
         return render(request, 'core/pos.html', {
             'productos': productos_multi,
             'categorias': categorias_multi,
+            'arbol_pos': _arbol_pos(categorias_multi),
             'es_admin': es_admin,
             'es_multi_pos': True,
             'pos_actual': pos_obj,
@@ -1436,11 +1437,12 @@ def pos(request):
         })
 
     productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
-    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True, productos__stock__gt=0).distinct()
+    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True, productos__stock__gt=0).select_related('padre').distinct()
     
     context = {
         'productos': productos,
         'categorias': categorias,
+        'arbol_pos': _arbol_pos(categorias),
         'es_admin': es_admin,
     }
     return render(request, 'core/pos.html', context)
@@ -1482,6 +1484,79 @@ def _serializar_producto_pos(p, stock_override=None):
 
 @login_required
 @require_POST
+def _subarbol_categoria_ids(categoria_id):
+    """Id de la categoría + todos sus descendientes (para filtrar familia)."""
+    try:
+        cid = int(categoria_id)
+    except (TypeError, ValueError):
+        return set()
+    ids = {cid}
+    pendientes = [cid]
+    while pendientes:
+        actual = pendientes.pop()
+        hijas = list(Categoria.objects.filter(padre_id=actual).values_list('id', flat=True))
+        for h in hijas:
+            if h not in ids:
+                ids.add(h)
+                pendientes.append(h)
+    return ids
+
+
+def _arbol_pos(categorias):
+    """Padres con hijas (recursivo) para el menú en cascada del POS.
+
+    Incluye a los padres aunque no tengan productos directos, para
+    poder llegar a las hijas. Cada nodo: id, nombre, icono, hijas y
+    `familia` (ids del subárbol separados por coma, para filtrar).
+    """
+    por_id = {}
+    for c in categorias:
+        por_id[c.id] = c
+    # Ancestros necesarios aunque no tengan productos directos.
+    faltantes = set()
+    for c in list(por_id.values()):
+        a = c.padre
+        while a is not None and a.id not in por_id:
+            faltantes.add(a.id)
+            a = a.padre
+    if faltantes:
+        for c in Categoria.objects.filter(pk__in=faltantes).select_related('padre'):
+            por_id[c.id] = c
+    # Hijas en una sola query (sin N+1).
+    hijas_map = {}
+    for h in Categoria.objects.filter(padre_id__in=list(por_id)).order_by('nombre'):
+        if h.id in por_id:
+            hijas_map.setdefault(h.padre_id, []).append(h)
+
+    def _nodo(cat):
+        nodos_hijas = [_nodo(h) for h in hijas_map.get(cat.id, [])]
+        fam = [cat.id]
+        for nh in nodos_hijas:
+            fam.extend(nh['_ids'])
+        return {
+            'id': cat.id, 'nombre': cat.nombre,
+            'icono': (cat.icono or '').strip(),
+            'hijas': nodos_hijas,
+            'familia': ','.join(str(i) for i in fam),
+            '_ids': fam,
+        }
+
+    raices = sorted(
+        [c for c in por_id.values() if c.padre_id not in por_id],
+        key=lambda c: c.nombre.lower())
+    arbol = [_nodo(c) for c in raices]
+    for n in arbol:
+        del n['_ids']
+        _limpiar_ids(n)
+    return arbol
+
+
+def _limpiar_ids(nodo):
+    for h in nodo['hijas']:
+        del h['_ids']
+        _limpiar_ids(h)
+
+
 def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
     categoria_id = request.POST.get('categoria', '')
@@ -1502,7 +1577,8 @@ def pos_buscar_productos(request):
         productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
             'categoria').prefetch_related('presentaciones')
     if categoria_id:
-        productos = productos.filter(categoria_id=categoria_id)
+        # La familia incluye a la categoría elegida y sus descendientes.
+        productos = productos.filter(categoria_id__in=_subarbol_categoria_ids(categoria_id))
     if query:
         q_norm = _norm_sin_tildes(query)
         # El código no lleva tildes: filtro directo en BD.
@@ -3896,6 +3972,69 @@ def _stock_map_para(almacen_f):
     return m
 
 
+def _convertir_imagenes_a_webp(calidad=85):
+    """Convierte a WebP las imágenes de productos (JPG/PNG/...) .
+
+    Por cada producto con imagen no-WebP: guarda la versión .webp
+    (misma carpeta, mismo base), actualiza el producto y borra el
+    archivo original. Devuelve (convertidas, omitidas, errores).
+    Nunca rompe el lote: cada producto se procesa en su propio try.
+    """
+    import io as _io
+    import os as _os
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    from PIL import Image as _Img
+    try:
+        from pillow_heif import register_heif_opener as _reg_heif
+        _reg_heif()
+    except Exception:
+        pass
+    convertidas, omitidas, errores = 0, 0, []
+    qs = Producto.objects.exclude(imagen__isnull=True).exclude(imagen='')
+    for p in qs.iterator():
+        try:
+            nombre = p.imagen.name
+        except Exception:
+            omitidas += 1
+            continue
+        if not nombre or nombre.lower().endswith('.webp'):
+            omitidas += 1
+            continue
+        try:
+            if not default_storage.exists(nombre):
+                omitidas += 1
+                continue
+            with default_storage.open(nombre, 'rb') as f:
+                img = _Img.open(f)
+                img.load()
+            # WebP conserva alfa: solo se aplana si no hay transparencia.
+            if img.mode in ('RGBA', 'LA', 'PA'):
+                try:
+                    if img.getchannel('A').getextrema() == (255, 255):
+                        img = img.convert('RGB')
+                except Exception:
+                    img = img.convert('RGB')
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            base, _ext = _os.path.splitext(nombre)
+            nuevo = base + '.webp'
+            buf = _io.BytesIO()
+            img.save(buf, format='WEBP', quality=calidad, method=6)
+            buf.seek(0)
+            if default_storage.exists(nuevo):
+                default_storage.delete(nuevo)
+            default_storage.save(nuevo, ContentFile(buf.read()))
+            p.imagen = nuevo
+            p.save(update_fields=['imagen'])
+            if nuevo != nombre and default_storage.exists(nombre):
+                default_storage.delete(nombre)
+            convertidas += 1
+        except Exception as e:
+            errores.append(f"{nombre}: {e}")
+    return convertidas, omitidas, errores
+
+
 @requiere_admin
 def configuracion(request):
     cfg = ConfiguracionTienda.get_solo()
@@ -3994,6 +4133,23 @@ def configuracion(request):
                 messages.success(
                     request, f"Punto de venta '{pos.nombre}' activado.")
             return redirect(f"{reverse_configuracion()}?tab=almacenes")
+        if form_kind == 'convertir_webp':
+            # Convierte a WebP todas las imágenes de productos que aún
+            # estén en JPG/PNG/etc, borra el archivo original y apunta
+            # cada producto a su nueva imagen .webp.
+            convertidas, omitidas, errores = _convertir_imagenes_a_webp()
+            if convertidas:
+                messages.success(
+                    request,
+                    f"Imágenes convertidas a WebP: {convertidas} "
+                    f"(omitidas: {omitidas}).")
+            else:
+                messages.info(
+                    request,
+                    f"No había imágenes por convertir (omitidas: {omitidas}).")
+            for err in errores[:5]:
+                messages.warning(request, f"No se pudo convertir: {err}")
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
         if form_kind == 'tienda':
             f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
         elif form_kind == 'apariencia':

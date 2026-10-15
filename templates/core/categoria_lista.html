@@ -33,7 +33,7 @@
                 <tbody>
                     {% for nodo in arbol %}
                     <tr class="table-light">
-                        <td class="fw-bold">📁 {{ nodo.padre.nombre }} <span class="badge bg-secondary ms-1">{{ nodo.hijas|length }} sub</span></td>
+                        <td class="fw-bold">{% if nodo.padre.icono|slice:":3" == "bi-" %}<i class="bi {{ nodo.padre.icono }}"></i>{% elif nodo.padre.icono %}{{ nodo.padre.icono }}{% else %}📁{% endif %} {{ nodo.padre.nombre }} <span class="badge bg-secondary ms-1">{{ nodo.hijas|length }} sub</span></td>
                         <td class="text-muted">— principal —</td>
                         <td>{% if nodo.padre.visible_store %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
                         <td>{{ nodo.padre.descripcion|default:"-"|truncatechars:60 }}</td>
@@ -55,7 +55,7 @@
                     </tr>
                     {% for h in nodo.hijas %}
                     <tr>
-                        <td class="ps-4">↳ {{ h.nombre }}</td>
+                        <td class="ps-4">↳ {% if h.icono|slice:":3" == "bi-" %}<i class="bi {{ h.icono }}"></i>{% elif h.icono %}{{ h.icono }}{% endif %}{{ h.nombre }}</td>
                         <td>{{ h.padre.nombre|default:"—" }}</td>
                         <td>{% if h.visible_store %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
                         <td>{{ h.descripcion|default:"-"|truncatechars:60 }}</td>
