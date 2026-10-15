@@ -253,6 +253,15 @@ class StoreCategoriaPaginaTest(TestCase):
             html = self.client.get(url).content.decode()
             self.assertIn('.grid{grid-template-columns:repeat(2,minmax(0,1fr))', html)
 
+    def test_imagenes_relleno_uniforme_como_pos(self):
+        # Las fotos rellenan la zona (cover), uniformes como en el POS.
+        cat = Categoria.objects.create(nombre='Foto')
+        for url in (reverse('core:store'),
+                    reverse('core:store_categoria', args=[cat.pk]),
+                    reverse('core:store_buscar')):
+            html = self.client.get(url).content.decode()
+            self.assertIn('object-fit:cover', html)
+
     def test_header_flexible_sin_aplaste(self):
         # El buscador y la marca deben ceder (min-width:0 + ellipsis),
         # como el header del panel admin: nada se aplasta en móvil.
