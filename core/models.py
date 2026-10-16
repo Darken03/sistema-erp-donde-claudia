@@ -302,6 +302,36 @@ class Producto(models.Model):
         return self.stock <= self.stock_minimo
 
     @property
+    def es_nuevo(self):
+        """True si el producto se creó hace menos de 30 días (sello NUEVO)."""
+        try:
+            from django.utils import timezone
+            creado = self.fecha_creacion
+            if creado is None:
+                return False
+            if timezone.is_naive(creado):
+                creado = timezone.make_aware(
+                    creado, timezone.get_current_timezone())
+            return (timezone.now() - creado).days < 30
+        except Exception:
+            return False
+
+    @property
+    def es_nuevo(self):
+        """True si el producto se creó en los últimos 30 días (sello NUEVO)."""
+        try:
+            from django.utils import timezone
+            creado = self.fecha_creacion
+            if not creado:
+                return False
+            ahora = timezone.now()
+            if timezone.is_naive(creado):
+                creado = timezone.make_aware(creado)
+            return (ahora - creado).days < 30
+        except Exception:
+            return False
+
+    @property
     def stock_fmt(self):
         """Stock con formato IPB: entero para unidades, decimales + (lb)/(kg) para peso."""
         return fmt_cantidad_unidad(self.stock, self.unidad_medida)

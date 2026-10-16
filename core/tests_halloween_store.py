@@ -267,14 +267,58 @@ class StoreCategoriaPaginaTest(TestCase):
             reverse('core:store_categoria', args=[cat.pk])).content.decode()
         self.assertIn('.kid-grid{grid-template-columns:repeat(2,minmax(0,1fr))', html)
 
+    def test_cards_muestran_badge_nuevo_solo_recientes(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        cat = Categoria.objects.create(nombre='CatNuevo')
+        Producto.objects.create(
+            nombre='ProdNuevo', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'),
+            categoria=cat)
+        viejo = Producto.objects.create(
+            nombre='ProdViejo', unidad_medida='unidades',
+            precio_compra=1, precio_venta=6, stock=Decimal('4'),
+            categoria=cat)
+        Producto.objects.filter(pk=viejo.pk).update(
+            fecha_creacion=timezone.now() - timedelta(days=60))
+        html = self.client.get(
+            reverse('core:store_categoria', args=[cat.pk])).content.decode()
+        # Nombre a 2 líneas y solo el reciente lleva NUEVO.
+        self.assertIn('clamp-2', html)
+        self.assertEqual(html.count('<span class="nuevo-badge">NUEVO</span>'), 1)
+
+    def test_pos_buscar_incluye_es_nuevo(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        u = _admin('esnuevo_admin')
+        self.client.force_login(u)
+        cat = Categoria.objects.create(nombre='CatEN')
+        fresco = Producto.objects.create(
+            nombre='FrescoEN', unidad_medida='unidades',
+            precio_compra=1, precio_venta=5, stock=Decimal('3'),
+            categoria=cat)
+        viejo = Producto.objects.create(
+            nombre='ViejoEN', unidad_medida='unidades',
+            precio_compra=1, precio_venta=6, stock=Decimal('4'),
+            categoria=cat)
+        Producto.objects.filter(pk=viejo.pk).update(
+            fecha_creacion=timezone.now() - timedelta(days=60))
+        r = self.client.post(
+            reverse('core:pos_buscar'), {'q': '', 'categoria': str(cat.pk)})
+        self.assertEqual(r.status_code, 200)
+        data = {p['id']: p for p in r.json()['productos']}
+        self.assertTrue(data[fresco.pk]['es_nuevo'])
+        self.assertFalse(data[viejo.pk]['es_nuevo'])
+
     def test_imagenes_relleno_uniforme_como_pos(self):
-        # Las fotos rellenan la zona (cover), uniformes como en el POS.
+        # Las fotos se ven completas (contain) en zona cuadrada 1:1,
+        # uniformes como en el POS tras el encuadre del editor.
         cat = Categoria.objects.create(nombre='Foto')
         for url in (reverse('core:store'),
                     reverse('core:store_categoria', args=[cat.pk]),
                     reverse('core:store_buscar')):
             html = self.client.get(url).content.decode()
-            self.assertIn('object-fit:cover', html)
+            self.assertIn('object-fit:contain', html)
 
     def test_header_flexible_sin_aplaste(self):
         # El buscador y la marca deben ceder (min-width:0 + ellipsis),

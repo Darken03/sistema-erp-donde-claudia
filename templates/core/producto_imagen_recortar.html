@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}Editar imagen - {{ producto.nombre }} - BizMaster{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0"><i class="bi bi-crop me-2"></i>Editar imagen</h2>
+  <div class="d-flex gap-2">
+    <a href="{% url 'core:producto_detalle' producto.pk %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    <a href="{% url 'core:producto_editar' producto.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i>Editar producto</a>
+  </div>
+</div>
+<div class="alert alert-info py-2 small">
+  <i class="bi bi-info-circle me-1"></i>
+  Selecciona el área <strong>cuadrada 1:1</strong> que se mostrará en la tienda y el POS.
+  La tarjeta de la tienda es cuadrada (<code>aspect-ratio: 1/1</code>), por eso este encuadre queda perfecto sin recortes.
+  Imagen actual: <strong>{{ ancho }} × {{ alto }} px</strong>. Mínimo 50 px de lado.
+</div>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <div id="cropViewport" style="position:relative;max-width:640px;margin:0 auto;user-select:none;touch-action:none;background:#111;border-radius:12px;overflow:hidden;display:grid;place-items:center;padding:8px;">
+          {% if producto.imagen_url %}
+          <div id="cropWrap" style="position:relative;display:inline-block;line-height:0;max-width:100%;">
+            <img id="cropImg" src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" style="display:block;max-width:100%;width:auto;height:auto;max-height:70vh;margin:0 auto;" draggable="false">
+            <div id="cropBox" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.6);cursor:move;line-height:normal;">
+              <div id="cropHandle" title="Arrastrar para cambiar tamaño" style="position:absolute;right:-10px;bottom:-10px;width:22px;height:22px;border-radius:6px;background:#fff;border:2px solid #6f53d9;cursor:nwse-resize;"></div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        <div class="form-text mt-2 text-center">Arrastra el cuadro para moverlo · arrastra la esquina blanca para cambiar el tamaño (siempre cuadrado).</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <h5 class="mb-1">{{ producto.nombre }}</h5>
+        <div class="text-muted small mb-3">{{ producto.codigo }} · {{ ancho }} × {{ alto }} px</div>
+        <form method="post" id="cropForm">
+          {% csrf_token %}
+          <input type="hidden" name="x" id="cx" value="0">
+          <input type="hidden" name="y" id="cy" value="0">
+          <input type="hidden" name="w" id="cw" value="0">
+          <input type="hidden" name="h" id="ch" value="0">
+          <div class="mb-2 small">Selección: <span class="font-monospace" id="cropInfo">—</span></div>
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar recorte (WebP)</button>
+            <a href="{% url 'core:producto_detalle' producto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+          <div class="form-text mt-2">Al guardar se recorta al cuadrado, se convierte a WebP y se reemplaza la imagen.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var NAT_W = {{ ancho|default:0 }}, NAT_H = {{ alto|default:0 }};
+  var img = document.getElementById('cropImg');
+  var box = document.getElementById('cropBox');
+  var handle = document.getElementById('cropHandle');
+  var view = document.getElementById('cropViewport');
+  if(!img || !box) return;
+  function dispSize(){ return {w: img.clientWidth, h: img.clientHeight}; }
+  function initBox(){
+    var d = dispSize();
+    if(!d.w || !d.h) return;
+    var side = Math.floor(Math.min(d.w, d.h) * 0.85);
+    side = Math.max(40, side);
+    var left = Math.floor((d.w - side) / 2);
+    var top = Math.floor((d.h - side) / 2);
+    setBox(left, top, side);
+  }
+  function setBox(l, t, s){
+    var d = dispSize();
+    s = Math.max(20, Math.min(s, d.w, d.h));
+    l = Math.max(0, Math.min(l, d.w - s));
+    t = Math.max(0, Math.min(t, d.h - s));
+    box.style.left = l + 'px'; box.style.top = t + 'px';
+    box.style.width = s + 'px'; box.style.height = s + 'px';
+    updateInputs();
+  }
+  function cur(){ return {l: parseFloat(box.style.left)||0, t: parseFloat(box.style.top)||0, s: parseFloat(box.style.width)||0}; }
+  function updateInputs(){
+    var d = dispSize(); var c = cur();
+    if(!d.w || !d.h || !NAT_W || !NAT_H) return;
+    // Escala uniforme: la imagen nunca se deforma (sin upscale),
+    // así el cuadrado en pantalla es cuadrado en píxeles reales.
+    var sx = NAT_W / d.w, sy = NAT_H / d.h;
+    var scale = (sx + sy) / 2;
+    var side = Math.round(c.s * scale);
+    var x = Math.round(c.l * scale), y = Math.round(c.t * scale);
+    // Limita al borde real sin encoger de más.
+    x = Math.max(0, Math.min(x, NAT_W - 1));
+    y = Math.max(0, Math.min(y, NAT_H - 1));
+    side = Math.max(1, Math.min(side, NAT_W - x, NAT_H - y));
+    document.getElementById('cx').value = x;
+    document.getElementById('cy').value = y;
+    document.getElementById('cw').value = side;
+    document.getElementById('ch').value = side;
+    var info = document.getElementById('cropInfo');
+    if(info) info.textContent = x + ', ' + y + ' · ' + side + ' × ' + side + ' px (reales)';
+  }
+  var dragMode = null, sx0=0, sy0=0, bl=0, bt=0, bs=0;
+  function pos(e){ if(e.touches && e.touches[0]) return {x:e.touches[0].clientX, y:e.touches[0].clientY}; return {x:e.clientX, y:e.clientY}; }
+  box.addEventListener('mousedown', function(e){
+    if(e.target === handle) return;
+    e.preventDefault(); dragMode='move';
+    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t;
+  });
+  box.addEventListener('touchstart', function(e){
+    if(e.target === handle) return;
+    dragMode='move'; var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t;
+  }, {passive:true});
+  handle.addEventListener('mousedown', function(e){
+    e.preventDefault(); e.stopPropagation(); dragMode='resize';
+    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bs=c.s;
+  });
+  handle.addEventListener('touchstart', function(e){
+    e.stopPropagation(); dragMode='resize';
+    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bs=c.s;
+  }, {passive:true});
+  window.addEventListener('mousemove', function(e){
+    if(!dragMode) return; var p=pos(e);
+    var dx=p.x-sx0, dy=p.y-sy0;
+    if(dragMode==='move'){ setBox(bl+dx, bt+dy, cur().s); }
+    else { var d=Math.max(dx,dy); setBox(bl, bt, bs+d); }
+  });
+  window.addEventListener('mouseup', function(){ dragMode=null; });
+  window.addEventListener('touchmove', function(e){
+    if(!dragMode) return; var p=pos(e);
+    var dx=p.x-sx0, dy=p.y-sy0;
+    if(dragMode==='move'){ setBox(bl+dx, bt+dy, cur().s); }
+    else { var d=Math.max(dx,dy); setBox(bl, bt, bs+d); }
+  }, {passive:true});
+  window.addEventListener('touchend', function(){ dragMode=null; });
+  if(img.complete){ initBox(); } else { img.addEventListener('load', initBox); }
+  window.addEventListener('resize', updateInputs);
+  setTimeout(initBox, 300);
+  document.getElementById('cropForm').addEventListener('submit', function(e){
+    updateInputs();
+    var w = parseInt(document.getElementById('cw').value||'0',10);
+    if(w < 50){ e.preventDefault(); alert('Marca un área cuadrada de al menos 50 px reales.'); }
+  });
+})();
+</script>
+{% endblock %}

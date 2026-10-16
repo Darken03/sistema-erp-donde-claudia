@@ -536,6 +536,89 @@ def producto_imagen_eliminar(request, pk):
     return redirect('core:producto_editar', pk=pk)
 
 
+@requiere_admin
+def producto_imagen_recortar(request, pk):
+    """Recorta la imagen del producto a un cuadrado (medidas de la tienda).
+
+    GET: editor visual con selector cuadrado 1:1 sobre la imagen real.
+    POST (x, y, w, h en píxeles naturales): recorta, convierte a WebP
+    y reemplaza la imagen (borra el archivo anterior si cambia de nombre).
+    """
+    from PIL import Image as _Img
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    producto = get_object_or_404(Producto, pk=pk)
+    nombre_actual = producto.imagen.name if producto.imagen else ''
+    if not nombre_actual or not default_storage.exists(nombre_actual):
+        messages.warning(request, 'Este producto no tiene imagen para recortar.')
+        return redirect('core:producto_detalle', pk=pk)
+    if request.method == 'POST':
+        try:
+            x, y, w, h = (int(request.POST.get(k, 0) or 0) for k in ('x', 'y', 'w', 'h'))
+        except (TypeError, ValueError):
+            x = y = w = h = 0
+        lado = min(w, h)
+        if x < 0 or y < 0 or lado < 50:
+            messages.error(request, 'Selección inválida: marque un área cuadrada de al menos 50 px.')
+            return redirect('core:producto_imagen_recortar', pk=pk)
+        try:
+            with default_storage.open(nombre_actual, 'rb') as f:
+                img = _Img.open(f)
+                img.load()
+            ancho, alto = img.size
+            # Recorta al cuadrado y limita a los bordes reales.
+            x = max(0, min(x, ancho - 1))
+            y = max(0, min(y, alto - 1))
+            lado = max(50, min(lado, ancho - x, alto - y))
+            recorte = img.crop((x, y, x + lado, y + lado))
+            if recorte.mode in ('RGBA', 'LA', 'PA'):
+                try:
+                    if recorte.getchannel('A').getextrema() == (255, 255):
+                        recorte = recorte.convert('RGB')
+                except Exception:
+                    recorte = recorte.convert('RGB')
+            elif recorte.mode != 'RGB':
+                recorte = recorte.convert('RGB')
+            import io as _io
+            import os as _os
+            import re as _re
+            import time as _time
+            buf = _io.BytesIO()
+            recorte.save(buf, format='WEBP', quality=88, method=6)
+            buf.seek(0)
+            base = _os.path.splitext(nombre_actual)[0]
+            # Quita sufijo previo de recorte para no acumular (_r123_r456...).
+            base = _re.sub(r'_r\d+$', '', base)
+            # Nombre único por recorte: la URL cambia y la Store/POS
+            # muestra la nueva imagen sin quedar la anterior cacheada.
+            nuevo = f"{base}_r{int(_time.time() * 1000)}.webp"
+            if default_storage.exists(nuevo):
+                default_storage.delete(nuevo)
+            default_storage.save(nuevo, ContentFile(buf.read()))
+            producto.imagen = nuevo
+            producto.save(update_fields=['imagen', 'fecha_actualizacion'])
+            if nuevo != nombre_actual and default_storage.exists(nombre_actual):
+                default_storage.delete(nombre_actual)
+        except Exception:
+            messages.error(request, 'No se pudo procesar la imagen. Inténtelo de nuevo.')
+            return redirect('core:producto_imagen_recortar', pk=pk)
+        messages.success(request, f'Imagen de "{producto.nombre}" recortada y convertida a WebP.')
+        return redirect('core:producto_detalle', pk=pk)
+    try:
+        with default_storage.open(nombre_actual, 'rb') as f:
+            img = _Img.open(f)
+            img.load()
+            tamano = img.size
+    except Exception:
+        messages.error(request, 'No se pudo leer la imagen actual.')
+        return redirect('core:producto_detalle', pk=pk)
+    return render(request, 'core/producto_imagen_recortar.html', {
+        'producto': producto,
+        'ancho': tamano[0],
+        'alto': tamano[1],
+    })
+
+
 def _conteo_relacionados_producto(producto):
     """Cuenta los registros ligados al producto (para avisar antes de borrar)."""
     from .models import (
@@ -1478,6 +1561,7 @@ def _serializar_producto_pos(p, stock_override=None):
         'imagen': p.imagen_url,
         'categoria': p.categoria.nombre if p.categoria else '',
         'categoria_id': p.categoria_id,
+        'es_nuevo': p.es_nuevo,
         'presentaciones': pres,
     }
 
@@ -5333,8 +5417,9 @@ def _store_items():
             'etiqueta': etiqueta,
             'stock': stock,
             'stock_fmt': fmt_cantidad_unidad(stock, p.unidad_medida),
-            'disponible': stock > 0,
-            'pocas': Decimal('0') < stock <= (p.stock_minimo or Decimal('0')),
+        'disponible': stock > 0,
+        'pocas': Decimal('0') < stock <= (p.stock_minimo or Decimal('0')),
+        'es_nuevo': p.es_nuevo,
         })
     # Visibilidad de tienda por rama: una categoría oculta oculta a sus hijas.
     cats = {c.id: c for c in Categoria.objects.all()}
@@ -5665,6 +5750,7 @@ def _store_detalle(pk):
         'stock_fmt': base['stock_fmt'],
         'disponible': base['disponible'],
         'pocas': base['pocas'],
+        'es_nuevo': base['es_nuevo'],
     }
 
 

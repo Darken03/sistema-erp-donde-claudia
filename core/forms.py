@@ -22,6 +22,35 @@ def _es_heic(nombre, content_type=None):
     return ct in ('image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence')
 
 
+def _convertir_a_webp(upload, max_lado=1600, calidad=85):
+    """Convierte una imagen subida a WebP (mismo recorte, fondo si hay alfa)."""
+    upload.seek(0)
+    img = Image.open(upload)
+    img.load()
+    if img.mode in ('RGBA', 'LA', 'PA'):
+        try:
+            if img.getchannel('A').getextrema() == (255, 255):
+                img = img.convert('RGB')
+        except Exception:
+            img = img.convert('RGB')
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    # Limita a max_lado px para no guardar fotos gigantes de celular.
+    img.thumbnail((max_lado, max_lado), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format='WEBP', quality=calidad, method=6)
+    buf.seek(0)
+    base = os.path.splitext(getattr(upload, 'name', 'foto') or 'foto')[0]
+    return SimpleUploadedFile(f'{base}.webp', buf.read(), content_type='image/webp')
+
+
+def _es_webp(nombre, content_type=None):
+    ext = os.path.splitext(nombre or '')[1].lower()
+    if ext == '.webp':
+        return True
+    return (content_type or '').lower() == 'image/webp'
+
+
 def _convertir_a_jpeg(uploaded_file):
     """Convierte un archivo subido (HEIC/HEIF) a JPEG en memoria."""
     uploaded_file.seek(0)
@@ -66,14 +95,25 @@ class ProductoForm(forms.ModelForm):
         f = self.cleaned_data.get('imagen')
         if not f:
             return f
-        if _es_heic(getattr(f, 'name', ''), getattr(f, 'content_type', '')):
+        nombre = getattr(f, 'name', '') or ''
+        content_type = getattr(f, 'content_type', '') if hasattr(f, 'content_type') else ''
+        if _es_heic(nombre, content_type):
             try:
-                return _convertir_a_jpeg(f)
+                # HEIC -> JPEG intermedio (luego cae al WebP de abajo).
+                f = _convertir_a_jpeg(f)
+                nombre, content_type = f.name, f.content_type
             except Exception:
                 raise forms.ValidationError(
                     'No se pudo leer la imagen HEIC. Cambie el iPhone a '
                     'Ajustes > Camara > Formatos > Mas compatible o use JPG.'
                 )
+        if not _es_webp(nombre, content_type) and hasattr(f, 'content_type'):
+            # Archivo recién subido en otro formato: normalizar a WebP.
+            try:
+                return _convertir_a_webp(f)
+            except Exception:
+                raise forms.ValidationError(
+                    'No se pudo procesar la imagen. Use JPG, PNG o WebP.')
         return f
 
     class Meta:

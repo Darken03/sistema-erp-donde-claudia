@@ -153,13 +153,19 @@ function toggleStoreTheme(){
   .duo-card .btn-hero { margin-top:14px; font-size:12px; padding:10px 18px; }
   /* ===== Tendencias (4 productos) ===== */
   .trend-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-  .trend-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:4px; }
+  .trend-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:0 0 12px; display:flex; flex-direction:column; gap:0; overflow:hidden; }
   .trend-card:hover { border-color:var(--accent); box-shadow:var(--shadow-sm); }
-  .trend-card .img-zone { height:110px; border-radius:10px; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; margin:-12px -12px 8px; border-radius:14px 14px 0 0; }
-  .trend-card .img-zone img { width:100%; height:100%; object-fit:cover; }
+  .trend-card .img-zone { aspect-ratio:1/1; height:auto; min-height:170px; border-radius:14px 14px 0 0; background:#fff; border-bottom:1px solid var(--line); display:grid; place-items:center; overflow:hidden; margin:0 0 10px; }
+  .trend-card .img-zone img { width:100%; height:100%; object-fit:contain; object-position:center center; background:#fff; }
   .trend-card .noimg { font-family:var(--font-mono); font-weight:700; font-size:22px; color:rgba(31,26,20,.45); }
-  .trend-card .name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .trend-card .price { font-size:17px; font-weight:700; font-family:var(--font-mono); color:var(--accent); }
+  .trend-card .name { font-size:15px; font-weight:700; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow:hidden; min-height:2.6em; padding:0 12px; color:var(--ink); }
+  .trend-card .sku { display:none; }
+  .trend-card .pres { font-size:12.5px; color:var(--ink-2); padding:0 12px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .trend-card .price { font-size:17px; font-weight:800; font-family:var(--font-sans); color:#111; padding:0 12px; margin-top:6px; }
+  html[data-theme="dark"] .trend-card .price { color:var(--ink); }
+  .pill-nuevo, .nuevo-badge { display:inline-flex; margin:6px 12px 0; align-self:flex-start; background:#e8f0fe; color:#1a73e8; padding:3px 8px; border-radius:6px; font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+  html[data-theme="dark"] .pill-nuevo, html[data-theme="dark"] .nuevo-badge { background:rgba(26,115,232,.2); color:#8ab4f8; }
+  .clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   /* ===== Categorías destacadas (4 cards estilo Algomio) ===== */
   .feat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   .feat-card { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:22px 18px; min-height:190px; display:flex; flex-direction:column; gap:8px; position:relative; overflow:hidden; }
@@ -195,16 +201,17 @@ function toggleStoreTheme(){
   .cat-title::after { content:""; flex:1; height:1px; background:var(--line); }
   .cat-title .n { background:var(--accent); color:#fff; font-size:12px; border-radius:99px; padding:2px 10px; font-family:var(--font-mono); }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
-  .product-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px; transition:border-color 120ms, box-shadow 120ms, transform 120ms; display:flex; flex-direction:column; gap:2px; }
+  .product-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:0 0 12px; transition:border-color 120ms, box-shadow 120ms, transform 120ms; display:flex; flex-direction:column; gap:0; overflow:hidden; }
   .product-card:hover { border-color:var(--accent); box-shadow:0 2px 10px -2px rgba(232,100,27,.4); transform:translateY(-1px); }
-  .product-card .img-zone { margin:-10px -10px 8px; height:110px; border-radius:12px 12px 0 0; background:repeating-linear-gradient(135deg,var(--accent-soft),var(--accent-soft) 8px,var(--accent-tint) 8px,var(--accent-tint) 16px); display:grid; place-items:center; overflow:hidden; }
-  .product-card .img-zone img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .product-card .img-zone { margin:0 0 10px; aspect-ratio:1/1; height:auto; min-height:170px; border-radius:12px 12px 0 0; background:#fff; border-bottom:1px solid var(--line); display:grid; place-items:center; overflow:hidden; }
+  .product-card .img-zone img { width:100%; height:100%; object-fit:contain; object-position:center center; background:#fff; display:block; }
   .product-card .img-zone .noimg { font-family:var(--font-mono); font-weight:700; font-size:22px; color:rgba(31,26,20,.45); }
-  .product-card .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .product-card .sku { font-size:10px; color:var(--ink-3); font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .product-card .pres { font-size:11px; color:var(--ink-3); }
-  .product-card .price { font-size:17px; font-weight:700; font-family:var(--font-mono); color:var(--accent); margin-top:2px; }
-  .product-card .stockrow { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px; }
+  .product-card .name { font-size:15px; font-weight:700; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow:hidden; min-height:2.6em; padding:0 10px; color:var(--ink); }
+  .product-card .sku { display:none; }
+  .product-card .pres { font-size:12.5px; color:var(--ink-2); line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:1.8em; padding:0 10px; }
+  .product-card .price { font-size:17px; font-weight:800; font-family:var(--font-sans); color:#111; margin-top:6px; padding:0 10px; }
+  html[data-theme="dark"] .product-card .price { color:var(--ink); }
+  .product-card .stockrow { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:6px; padding:0 10px; }
   .product-card .stockqty { font-size:11px; font-family:var(--font-mono); color:var(--ink-2); }
   .pill { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; white-space:nowrap; }
   .pill .dot { width:6px; height:6px; border-radius:99px; background:currentColor; }
@@ -302,8 +309,9 @@ function toggleStoreTheme(){
       {% for it in tendencias %}
       <div class="trend-card" data-prod="{{ it.id }}" tabindex="0" role="button" aria-label="Ver {{ it.nombre }}">
         <div class="img-zone">{% if it.imagen %}<img src="{{ it.imagen }}" alt="{{ it.nombre }}" loading="lazy">{% else %}<span class="noimg">{{ it.nombre|slice:":2"|upper }}</span>{% endif %}</div>
-        <div class="name">{{ it.nombre }}</div>
-        <div class="sku">{{ it.codigo }} · {{ it.etiqueta }}</div>
+        <div class="name clamp-2">{{ it.nombre }}</div>
+        <div class="pres">{{ it.etiqueta }}</div>
+        {% if it.es_nuevo %}<span class="nuevo-badge">NUEVO</span>{% endif %}
         <div class="price">{{ TIENDA.simbolo|default:"$" }}{{ it.precio }}</div>
         {% if it.pagina_id %}<a class="link-more" href="{% url 'core:store_categoria' it.pagina_id %}">Ver categoría →</a>{% endif %}
       </div>

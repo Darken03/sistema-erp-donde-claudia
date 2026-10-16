@@ -235,6 +235,9 @@
                             <i class="bi bi-upload me-1"></i> <span id="btnCambiarTxt">{% if producto and producto.imagen_url %}Cambiar imagen{% else %}Subir imagen{% endif %}</span>
                         </button>
                         {% if producto and producto.imagen_url %}
+                        <a href="{% url 'core:producto_imagen_recortar' producto.pk %}" class="btn btn-outline-success">
+                            <i class="bi bi-crop me-1"></i> Editar imagen (encuadrar 1:1)
+                        </a>
                         <button type="button" class="btn btn-outline-danger" id="btnEliminarImg">
                             <i class="bi bi-trash me-1"></i> Eliminar imagen
                         </button>
