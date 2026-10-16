@@ -146,6 +146,10 @@ class ProductoRecorteTest(TestCase):
             reverse('core:producto_imagen_recortar', args=[p.pk]))
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'cropViewport')
+        self.assertContains(r, 'ratioBar')
+        self.assertContains(r, 'Libre')
+        self.assertContains(r, 'cropHandleE')
+        self.assertContains(r, 'cropHandleS')
 
     def test_post_recorta_y_convierte_a_webp(self):
         p = self._producto_con_imagen(400, 300)
@@ -180,6 +184,18 @@ class ProductoRecorteTest(TestCase):
         self.assertTrue(imagenes)
         self.assertIn(p.imagen.url, imagenes[0])
 
+    def test_post_recorta_rectangular_ancho_alto_independientes(self):
+        # Proporciones libres: w y h independientes (ej. 4:3 -> 120x90).
+        p = self._producto_con_imagen(400, 300)
+        r = self.client.post(
+            reverse('core:producto_imagen_recortar', args=[p.pk]),
+            {'x': '10', 'y': '10', 'w': '120', 'h': '90'})
+        self.assertEqual(r.status_code, 302)
+        p.refresh_from_db()
+        self.assertTrue(p.imagen.name.lower().endswith('.webp'), p.imagen.name)
+        img = Image.open(p.imagen.path)
+        self.assertEqual(img.size, (120, 90))
+
     def test_post_coordenadas_invalidas_no_rompe(self):
         p = self._producto_con_imagen()
         nombre_antes = p.imagen.name
@@ -197,3 +213,64 @@ class ProductoRecorteTest(TestCase):
         r = self.client.get(
             reverse('core:producto_imagen_recortar', args=[p.pk]))
         self.assertEqual(r.status_code, 302)
+
+
+class ProductoImagenArchivoTest(TestCase):
+    """Al cambiar la imagen se borra la anterior; al eliminarla se borra el archivo."""
+
+    def setUp(self):
+        u = User.objects.create_user(username='img_admin', password='x12345')
+        PerfilUsuario.objects.filter(user=u).update(rol='admin')
+        u.refresh_from_db()
+        self.client.login(username='img_admin', password='x12345')
+        self.tmp = tempfile.mkdtemp(prefix='bizm_img_')
+        self._ov = override_settings(MEDIA_ROOT=self.tmp)
+        self._ov.enable()
+        self.addCleanup(self._ov.disable)
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def _producto_con_imagen(self, nombre='vieja.png'):
+        return Producto.objects.create(
+            nombre='Prod Img', unidad_medida='unidades',
+            precio_compra=1, precio_venta=2, stock=Decimal('1'),
+            imagen=SimpleUploadedFile(
+                nombre, _make_image_bytes('PNG', (200, 200)),
+                content_type='image/png'))
+
+    def _post_editar_con_imagen(self, p, archivo, content_type):
+        return self.client.post(
+            reverse('core:producto_editar', args=[p.pk]),
+            {
+                'nombre': p.nombre, 'descripcion': '', 'categoria': '',
+                'unidad_medida': 'unidades', 'precio_compra': '1',
+                'precio_venta': '2', 'stock_minimo': '0', 'activo': 'on',
+                'presentaciones-TOTAL_FORMS': '0',
+                'presentaciones-INITIAL_FORMS': '0',
+                'presentaciones-MIN_NUM_FORMS': '0',
+                'presentaciones-MAX_NUM_FORMS': '1000',
+                'imagen': SimpleUploadedFile(
+                    archivo, _make_image_bytes('JPEG', (300, 300)),
+                    content_type=content_type),
+            })
+
+    def test_editar_cambia_imagen_borra_anterior(self):
+        p = self._producto_con_imagen()
+        vieja_path = p.imagen.path
+        self.assertTrue(os.path.exists(vieja_path))
+        r = self._post_editar_con_imagen(p, 'nueva.jpg', 'image/jpeg')
+        self.assertEqual(r.status_code, 302)
+        p.refresh_from_db()
+        self.assertTrue(p.imagen)
+        self.assertTrue(os.path.exists(p.imagen.path))
+        self.assertFalse(os.path.exists(vieja_path))
+
+    def test_eliminar_imagen_borra_archivo(self):
+        p = self._producto_con_imagen()
+        ruta = p.imagen.path
+        self.assertTrue(os.path.exists(ruta))
+        r = self.client.post(
+            reverse('core:producto_imagen_eliminar', args=[p.pk]))
+        self.assertEqual(r.status_code, 302)
+        p.refresh_from_db()
+        self.assertFalse(bool(p.imagen))
+        self.assertFalse(os.path.exists(ruta))

@@ -10,25 +10,34 @@
 </div>
 <div class="alert alert-info py-2 small">
   <i class="bi bi-info-circle me-1"></i>
-  Selecciona el área <strong>cuadrada 1:1</strong> que se mostrará en la tienda y el POS.
-  La tarjeta de la tienda es cuadrada (<code>aspect-ratio: 1/1</code>), por eso este encuadre queda perfecto sin recortes.
-  Imagen actual: <strong>{{ ancho }} × {{ alto }} px</strong>. Mínimo 50 px de lado.
+  Selecciona el área que se mostrará en la tienda y el POS.
+  Usa <strong>1:1</strong> para encuadre perfecto en las tarjetas cuadradas, u otra proporción si lo prefieres.
+  Imagen actual: <strong>{{ ancho }} × {{ alto }} px</strong>. Mínimo 50 × 50 px reales.
 </div>
 <div class="row g-4">
   <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
       <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 justify-content-center mb-2" id="ratioBar" role="group" aria-label="Proporción">
+          <button type="button" class="btn btn-sm btn-primary" data-rw="1" data-rh="1">1:1</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-rw="4" data-rh="3">4:3</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-rw="3" data-rh="4">3:4</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-rw="16" data-rh="9">16:9</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-rw="0" data-rh="0">Libre</button>
+        </div>
         <div id="cropViewport" style="position:relative;max-width:640px;margin:0 auto;user-select:none;touch-action:none;background:#111;border-radius:12px;overflow:hidden;display:grid;place-items:center;padding:8px;">
           {% if producto.imagen_url %}
           <div id="cropWrap" style="position:relative;display:inline-block;line-height:0;max-width:100%;">
             <img id="cropImg" src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" style="display:block;max-width:100%;width:auto;height:auto;max-height:70vh;margin:0 auto;" draggable="false">
             <div id="cropBox" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.6);cursor:move;line-height:normal;">
               <div id="cropHandle" title="Arrastrar para cambiar tamaño" style="position:absolute;right:-10px;bottom:-10px;width:22px;height:22px;border-radius:6px;background:#fff;border:2px solid #6f53d9;cursor:nwse-resize;"></div>
+              <div id="cropHandleE" title="Ajustar ancho" style="position:absolute;right:-8px;top:50%;margin-top:-11px;width:16px;height:22px;border-radius:6px;background:#fff;border:2px solid #6f53d9;cursor:ew-resize;"></div>
+              <div id="cropHandleS" title="Ajustar alto" style="position:absolute;bottom:-8px;left:50%;margin-left:-11px;width:22px;height:16px;border-radius:6px;background:#fff;border:2px solid #6f53d9;cursor:ns-resize;"></div>
             </div>
           </div>
           {% endif %}
         </div>
-        <div class="form-text mt-2 text-center">Arrastra el cuadro para moverlo · arrastra la esquina blanca para cambiar el tamaño (siempre cuadrado).</div>
+        <div class="form-text mt-2 text-center">Arrastra el cuadro para moverlo · esquina = tamaño · tiradores laterales = ancho / alto por separado (pasan a Libre).</div>
       </div>
     </div>
   </div>
@@ -48,7 +57,7 @@
             <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar recorte (WebP)</button>
             <a href="{% url 'core:producto_detalle' producto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
           </div>
-          <div class="form-text mt-2">Al guardar se recorta al cuadrado, se convierte a WebP y se reemplaza la imagen.</div>
+          <div class="form-text mt-2">Al guardar se recorta a la proporción elegida, se convierte a WebP y se reemplaza la imagen.</div>
         </form>
       </div>
     </div>
@@ -60,88 +69,155 @@
   var img = document.getElementById('cropImg');
   var box = document.getElementById('cropBox');
   var handle = document.getElementById('cropHandle');
-  var view = document.getElementById('cropViewport');
+  var handleE = document.getElementById('cropHandleE');
+  var handleS = document.getElementById('cropHandleS');
+  var ratioBar = document.getElementById('ratioBar');
+  var ratioW = 1, ratioH = 1; // 0/0 = libre
   if(!img || !box) return;
   function dispSize(){ return {w: img.clientWidth, h: img.clientHeight}; }
+  function setActiveRatio(btn){
+    if(!ratioBar) return;
+    ratioBar.querySelectorAll('button').forEach(function(b){
+      var on = (b === btn);
+      b.classList.toggle('btn-primary', on);
+      b.classList.toggle('btn-outline-secondary', !on);
+    });
+  }
+  function markLibre(){
+    ratioW = 0; ratioH = 0;
+    if(ratioBar){
+      var libre = ratioBar.querySelector('[data-rw="0"]');
+      if(libre) setActiveRatio(libre);
+    }
+  }
+  function fitRatio(w, h){
+    // Ajusta w/h a la proporción activa sin salirse.
+    if(!(ratioW > 0 && ratioH > 0)) return {w: w, h: h};
+    var target = ratioW / ratioH;
+    if(w / h > target) w = h * target; else h = w / target;
+    return {w: w, h: h};
+  }
   function initBox(){
     var d = dispSize();
     if(!d.w || !d.h) return;
-    var side = Math.floor(Math.min(d.w, d.h) * 0.85);
-    side = Math.max(40, side);
-    var left = Math.floor((d.w - side) / 2);
-    var top = Math.floor((d.h - side) / 2);
-    setBox(left, top, side);
+    var w = d.w * 0.85, h = d.h * 0.85;
+    var f = fitRatio(w, h);
+    w = Math.max(40, f.w); h = Math.max(40, f.h);
+    setBoxRect((d.w - w) / 2, (d.h - h) / 2, w, h);
   }
-  function setBox(l, t, s){
+  function setBoxRect(l, t, w, h){
     var d = dispSize();
-    s = Math.max(20, Math.min(s, d.w, d.h));
-    l = Math.max(0, Math.min(l, d.w - s));
-    t = Math.max(0, Math.min(t, d.h - s));
+    w = Math.max(20, Math.min(w, d.w));
+    h = Math.max(20, Math.min(h, d.h));
+    l = Math.max(0, Math.min(l, d.w - w));
+    t = Math.max(0, Math.min(t, d.h - h));
     box.style.left = l + 'px'; box.style.top = t + 'px';
-    box.style.width = s + 'px'; box.style.height = s + 'px';
+    box.style.width = w + 'px'; box.style.height = h + 'px';
     updateInputs();
   }
-  function cur(){ return {l: parseFloat(box.style.left)||0, t: parseFloat(box.style.top)||0, s: parseFloat(box.style.width)||0}; }
+  function cur(){ return {l: parseFloat(box.style.left)||0, t: parseFloat(box.style.top)||0, w: parseFloat(box.style.width)||0, h: parseFloat(box.style.height)||0}; }
   function updateInputs(){
     var d = dispSize(); var c = cur();
     if(!d.w || !d.h || !NAT_W || !NAT_H) return;
     // Escala uniforme: la imagen nunca se deforma (sin upscale),
-    // así el cuadrado en pantalla es cuadrado en píxeles reales.
+    // así lo que ves es proporcional a los píxeles reales.
     var sx = NAT_W / d.w, sy = NAT_H / d.h;
     var scale = (sx + sy) / 2;
-    var side = Math.round(c.s * scale);
+    var w = Math.round(c.w * scale), h = Math.round(c.h * scale);
     var x = Math.round(c.l * scale), y = Math.round(c.t * scale);
     // Limita al borde real sin encoger de más.
     x = Math.max(0, Math.min(x, NAT_W - 1));
     y = Math.max(0, Math.min(y, NAT_H - 1));
-    side = Math.max(1, Math.min(side, NAT_W - x, NAT_H - y));
+    w = Math.max(1, Math.min(w, NAT_W - x));
+    h = Math.max(1, Math.min(h, NAT_H - y));
     document.getElementById('cx').value = x;
     document.getElementById('cy').value = y;
-    document.getElementById('cw').value = side;
-    document.getElementById('ch').value = side;
+    document.getElementById('cw').value = w;
+    document.getElementById('ch').value = h;
     var info = document.getElementById('cropInfo');
-    if(info) info.textContent = x + ', ' + y + ' · ' + side + ' × ' + side + ' px (reales)';
+    if(info) info.textContent = x + ', ' + y + ' · ' + w + ' × ' + h + ' px (reales)';
   }
-  var dragMode = null, sx0=0, sy0=0, bl=0, bt=0, bs=0;
+  var dragMode = null, sx0=0, sy0=0, bl=0, bt=0, bw=0, bh=0;
   function pos(e){ if(e.touches && e.touches[0]) return {x:e.touches[0].clientX, y:e.touches[0].clientY}; return {x:e.clientX, y:e.clientY}; }
+  function isHandle(el){ return el === handle || el === handleE || el === handleS; }
   box.addEventListener('mousedown', function(e){
-    if(e.target === handle) return;
+    if(isHandle(e.target)) return;
     e.preventDefault(); dragMode='move';
-    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t;
+    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bw=c.w; bh=c.h;
   });
   box.addEventListener('touchstart', function(e){
-    if(e.target === handle) return;
-    dragMode='move'; var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t;
+    if(isHandle(e.target)) return;
+    dragMode='move'; var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bw=c.w; bh=c.h;
   }, {passive:true});
-  handle.addEventListener('mousedown', function(e){
-    e.preventDefault(); e.stopPropagation(); dragMode='resize';
-    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bs=c.s;
-  });
-  handle.addEventListener('touchstart', function(e){
-    e.stopPropagation(); dragMode='resize';
-    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bs=c.s;
-  }, {passive:true});
+  function startResize(e, mode){
+    e.preventDefault(); e.stopPropagation(); dragMode=mode;
+    var p=pos(e), c=cur(); sx0=p.x; sy0=p.y; bl=c.l; bt=c.t; bw=c.w; bh=c.h;
+  }
+  if(handle) handle.addEventListener('mousedown', function(e){ startResize(e, 'corner'); });
+  if(handle) handle.addEventListener('touchstart', function(e){ startResize(e, 'corner'); }, {passive:true});
+  if(handleE) handleE.addEventListener('mousedown', function(e){ markLibre(); startResize(e, 'e'); });
+  if(handleE) handleE.addEventListener('touchstart', function(e){ markLibre(); startResize(e, 'e'); }, {passive:true});
+  if(handleS) handleS.addEventListener('mousedown', function(e){ markLibre(); startResize(e, 's'); });
+  if(handleS) handleS.addEventListener('touchstart', function(e){ markLibre(); startResize(e, 's'); }, {passive:true});
   window.addEventListener('mousemove', function(e){
     if(!dragMode) return; var p=pos(e);
     var dx=p.x-sx0, dy=p.y-sy0;
-    if(dragMode==='move'){ setBox(bl+dx, bt+dy, cur().s); }
-    else { var d=Math.max(dx,dy); setBox(bl, bt, bs+d); }
+    if(dragMode==='move'){ setBoxRect(bl+dx, bt+dy, bw, bh); }
+    else if(dragMode==='e'){ setBoxRect(bl, bt, bw+dx, bh); }
+    else if(dragMode==='s'){ setBoxRect(bl, bt, bw, bh+dy); }
+    else {
+      var nw = bw, nh = bh;
+      if(ratioW > 0 && ratioH > 0){
+        var d = Math.max(dx, dy * (ratioW / ratioH));
+        nw = bw + d; nh = (bw + d) * ratioH / ratioW;
+        var f = fitRatio(nw, nh); nw = f.w; nh = f.h;
+      } else { nw = bw + dx; nh = bh + dy; }
+      setBoxRect(bl, bt, nw, nh);
+    }
   });
   window.addEventListener('mouseup', function(){ dragMode=null; });
   window.addEventListener('touchmove', function(e){
     if(!dragMode) return; var p=pos(e);
     var dx=p.x-sx0, dy=p.y-sy0;
-    if(dragMode==='move'){ setBox(bl+dx, bt+dy, cur().s); }
-    else { var d=Math.max(dx,dy); setBox(bl, bt, bs+d); }
+    if(dragMode==='move'){ setBoxRect(bl+dx, bt+dy, bw, bh); }
+    else if(dragMode==='e'){ setBoxRect(bl, bt, bw+dx, bh); }
+    else if(dragMode==='s'){ setBoxRect(bl, bt, bw, bh+dy); }
+    else {
+      var nw2 = bw, nh2 = bh;
+      if(ratioW > 0 && ratioH > 0){
+        var d2 = Math.max(dx, dy * (ratioW / ratioH));
+        nw2 = bw + d2; nh2 = (bw + d2) * ratioH / ratioW;
+        var f2 = fitRatio(nw2, nh2); nw2 = f2.w; nh2 = f2.h;
+      } else { nw2 = bw + dx; nh2 = bh + dy; }
+      setBoxRect(bl, bt, nw2, nh2);
+    }
   }, {passive:true});
   window.addEventListener('touchend', function(){ dragMode=null; });
+  if(ratioBar){
+    ratioBar.addEventListener('click', function(e){
+      var btn = e.target.closest ? e.target.closest('button[data-rw]') : null;
+      if(!btn) return;
+      ratioW = parseFloat(btn.getAttribute('data-rw')) || 0;
+      ratioH = parseFloat(btn.getAttribute('data-rh')) || 0;
+      setActiveRatio(btn);
+      var d = dispSize(), c = cur();
+      if(!(ratioW > 0 && ratioH > 0)){ updateInputs(); return; }
+      // Reencuadra la selección actual a la proporción elegida.
+      var cx = c.l + c.w / 2, cy = c.t + c.h / 2;
+      var w = c.w, h = w * ratioH / ratioW;
+      if(h > d.h){ h = d.h * 0.9; w = h * ratioW / ratioH; }
+      if(w > d.w){ w = d.w * 0.9; h = w * ratioH / ratioW; }
+      setBoxRect(cx - w / 2, cy - h / 2, w, h);
+    });
+  }
   if(img.complete){ initBox(); } else { img.addEventListener('load', initBox); }
   window.addEventListener('resize', updateInputs);
   setTimeout(initBox, 300);
   document.getElementById('cropForm').addEventListener('submit', function(e){
     updateInputs();
     var w = parseInt(document.getElementById('cw').value||'0',10);
-    if(w < 50){ e.preventDefault(); alert('Marca un área cuadrada de al menos 50 px reales.'); }
+    var h = parseInt(document.getElementById('ch').value||'0',10);
+    if(w < 50 || h < 50){ e.preventDefault(); alert('Marca un área de al menos 50 × 50 px reales.'); }
   });
 })();
 </script>

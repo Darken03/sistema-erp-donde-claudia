@@ -432,6 +432,12 @@ def _asegurar_presentacion_default(producto):
 @requiere_admin
 def producto_editar(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
+    # Nombre en BD antes de que el form mutara la instancia (para borrar
+    # el archivo anterior si la imagen cambia).
+    try:
+        imagen_anterior = Producto.objects.filter(pk=producto.pk).values_list('imagen', flat=True).first() or ''
+    except Exception:
+        imagen_anterior = ''
     if request.method == 'POST':
         form = ProductoForm(request.POST, request.FILES, instance=producto)
         # El stock NO se toca aquí: solo se modifica desde Ajustes (o Entradas/Ventas/POS)
@@ -456,6 +462,15 @@ def producto_editar(request, pk):
                 formset.save()
                 _asegurar_presentacion_default(producto)
                 producto.refresh_from_db()
+                # Al cambiar la imagen se borra el archivo anterior (evita huérfanos).
+                imagen_nueva = producto.imagen.name if producto.imagen else ''
+                if imagen_anterior and imagen_nueva and imagen_anterior != imagen_nueva:
+                    try:
+                        from django.core.files.storage import default_storage
+                        if default_storage.exists(imagen_anterior):
+                            default_storage.delete(imagen_anterior)
+                    except Exception:
+                        pass
                 _log_cambio_precio(
                     producto, compra_antes, producto.precio_compra,
                     venta_antes, producto.precio_venta,
@@ -538,11 +553,12 @@ def producto_imagen_eliminar(request, pk):
 
 @requiere_admin
 def producto_imagen_recortar(request, pk):
-    """Recorta la imagen del producto a un cuadrado (medidas de la tienda).
+    """Recorta la imagen del producto (cuadrado 1:1 u otras proporciones).
 
-    GET: editor visual con selector cuadrado 1:1 sobre la imagen real.
-    POST (x, y, w, h en píxeles naturales): recorta, convierte a WebP
-    y reemplaza la imagen (borra el archivo anterior si cambia de nombre).
+    GET: editor visual con selector de proporción sobre la imagen real.
+    POST (x, y, w, h en píxeles naturales): recorta el rectángulo,
+    convierte a WebP y reemplaza la imagen (borra el archivo anterior
+    si cambia de nombre).
     """
     from PIL import Image as _Img
     from django.core.files.base import ContentFile
@@ -557,20 +573,20 @@ def producto_imagen_recortar(request, pk):
             x, y, w, h = (int(request.POST.get(k, 0) or 0) for k in ('x', 'y', 'w', 'h'))
         except (TypeError, ValueError):
             x = y = w = h = 0
-        lado = min(w, h)
-        if x < 0 or y < 0 or lado < 50:
-            messages.error(request, 'Selección inválida: marque un área cuadrada de al menos 50 px.')
+        if x < 0 or y < 0 or w < 50 or h < 50:
+            messages.error(request, 'Selección inválida: marque un área de al menos 50 × 50 px.')
             return redirect('core:producto_imagen_recortar', pk=pk)
         try:
             with default_storage.open(nombre_actual, 'rb') as f:
                 img = _Img.open(f)
                 img.load()
             ancho, alto = img.size
-            # Recorta al cuadrado y limita a los bordes reales.
+            # Recorta el rectángulo y limita a los bordes reales.
             x = max(0, min(x, ancho - 1))
             y = max(0, min(y, alto - 1))
-            lado = max(50, min(lado, ancho - x, alto - y))
-            recorte = img.crop((x, y, x + lado, y + lado))
+            w = max(50, min(w, ancho - x))
+            h = max(50, min(h, alto - y))
+            recorte = img.crop((x, y, x + w, y + h))
             if recorte.mode in ('RGBA', 'LA', 'PA'):
                 try:
                     if recorte.getchannel('A').getextrema() == (255, 255):
