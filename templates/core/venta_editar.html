@@ -16,6 +16,33 @@
 </div>
 {% endif %}
 
+<!-- Cajero -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Cajero</h5>
+    </div>
+    <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="actualizar_cajero">
+            <div class="col-md-6">
+                <label class="form-label">Cajero que realizó la venta</label>
+                <select name="cajero" class="form-select">
+                    <option value="">Seleccionar...</option>
+                    {% for emp in empleados %}
+                    <option value="{{ emp.id }}" {% if emp.user == venta.cajero %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i> Actualizar Cajero
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Metodo de Pago -->
 {% if not venta.cancelada %}
 <div class="card border-0 shadow-sm mb-4">

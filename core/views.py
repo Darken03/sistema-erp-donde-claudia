@@ -1266,6 +1266,7 @@ def venta_editar(request, pk):
     venta = get_object_or_404(Venta, pk=pk)
     detalles = venta.detalles.select_related('producto', 'presentacion').all()
     productos = Producto.objects.filter(activo=True).prefetch_related('presentaciones')
+    empleados = Empleado.objects.select_related('user').filter(Q(activo=True) | Q(user=venta.cajero)).distinct().order_by('user__first_name', 'user__username')
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1428,6 +1429,17 @@ def venta_editar(request, pk):
             messages.success(request, 'Metodo de pago actualizado.')
             return redirect('core:venta_editar', pk=venta.pk)
 
+        elif action == 'actualizar_cajero':
+            empleado_id = request.POST.get('cajero')
+            try:
+                cajero = User.objects.get(empleado__id=empleado_id) if empleado_id else venta.cajero
+                venta.cajero = cajero
+                venta.save(update_fields=['cajero'])
+                messages.success(request, 'Cajero actualizado correctamente.')
+            except Exception:
+                messages.error(request, 'Cajero inválido.')
+            return redirect('core:venta_editar', pk=venta.pk)
+
         elif action == 'guardar':
             messages.success(request, 'Venta actualizada correctamente.')
             return redirect('core:venta_detalle', pk=venta.pk)
@@ -1436,6 +1448,7 @@ def venta_editar(request, pk):
         'venta': venta,
         'detalles': detalles,
         'productos': productos,
+        'empleados': empleados,
     })
 
 
