@@ -67,26 +67,31 @@ class ArqueoConteoTest(TestCase):
         self.assertEqual(arq.contado_efectivo, Decimal('135'))
         self.assertEqual(arq.diferencia_total, Decimal('0'))
 
-    def test_arqueo_exige_motivo_si_descuadra(self):
+    def test_arqueo_ciego_no_revela_esperado_y_declara_sin_motivo(self):
+        """Conteo ciego del arqueo: la página NO muestra el esperado del
+        sistema ni faltante/sobrante, y se puede declarar un descuadre
+        sin motivo (la diferencia solo la ve el admin al confirmar)."""
         self.client.login(username='cajero1', password='x12345')
         self.client.post('/arqueo/', {'action': 'fondo', 'fondo_inicial': '0'})
-        # Declara 30 vs esperado 35 → falta 5 sin motivo: se rechaza.
+        # Paso 2 no revela esperado ni diferencia.
+        r = self.client.get('/arqueo/?paso=2')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotContains(r, 'esperado')
+        self.assertNotContains(r, 'Esperado')
+        self.assertNotContains(r, 'Diferencia')
+        # Declara 30 vs esperado 35 → faltan 5, pero SIN motivo declara igual.
         r = self.client.post('/arqueo/', {
             'action': 'declarar', 'denom_20': '1', 'denom_10': '1',
             'contado_transferencia': '0', 'observacion': '',
         })
-        self.assertEqual(r.status_code, 200)
-        arq = ArqueoTurno.objects.get(turno=self.turno)
-        self.assertEqual(arq.estado, 'borrador')
-        # Con motivo sí declara.
-        r = self.client.post('/arqueo/', {
-            'action': 'declarar', 'denom_20': '1', 'denom_10': '1',
-            'contado_transferencia': '0', 'observacion': 'Faltan $5',
-        })
         self.assertEqual(r.status_code, 302)
-        arq.refresh_from_db()
+        arq = ArqueoTurno.objects.get(turno=self.turno)
         self.assertEqual(arq.estado, 'declarado')
         self.assertEqual(arq.diferencia_total, Decimal('-5'))
+        # Pantalla de espera: muestra lo declarado, pero no el esperado.
+        r = self.client.get('/arqueo/?paso=2')
+        self.assertNotContains(r, 'esperado')
+        self.assertNotContains(r, 'Esperado')
 
     def test_confirmar_cierra_turno(self):
         self.client.login(username='cajero1', password='x12345')

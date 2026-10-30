@@ -13,19 +13,19 @@
 
 <!-- Pasos -->
 <ul class="nav nav-pills mb-4 gap-2">
-    <li class="nav-item"><span class="nav-link {% if paso == '1' %}active{% endif %}">1 · Fondo y esperado</span></li>
-    <li class="nav-item"><span class="nav-link {% if paso == '2' %}active{% endif %}">2 · Conteo y diferencia</span></li>
+    <li class="nav-item"><span class="nav-link {% if paso == '1' %}active{% endif %}">1 · Fondo inicial</span></li>
+    <li class="nav-item"><span class="nav-link {% if paso == '2' %}active{% endif %}">2 · Conteo y declaración</span></li>
     <li class="nav-item"><span class="nav-link {% if paso == 'espera' %}active{% endif %}">3 · Declarado</span></li>
 </ul>
 
 {% if paso == '1' %}
 <div class="row g-4">
-    <div class="col-lg-5">
+    <div class="col-lg-7 mx-auto">
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
                 <div class="form-card-head">
                     <span class="section-icon"><i class="bi bi-cash-stack"></i></span>
-                    <div><h5>Paso 1 · Fondo inicial</h5><small>¿Con cuánto efectivo abrió la caja?</small></div>
+                    <div><h5>Paso 1 · Fondo inicial</h5><small>¿Con cuánto efectivo abriste la caja?</small></div>
                 </div>
                 <form method="post">
                     {% csrf_token %}
@@ -35,7 +35,7 @@
                         <span class="input-group-text">$</span>
                         <input type="number" name="fondo_inicial" class="form-control text-end fw-bold mono" step="0.01" min="0" value="{{ arqueo.fondo_inicial }}" required>
                     </div>
-                    <div class="form-text mb-3">Se suma al esperado en efectivo.</div>
+                    <div class="form-text mb-3">El dinero con el que abriste la caja este turno.</div>
                     <button type="submit" class="btn btn-primary w-100">
                         Guardar y pasar al conteo <i class="bi bi-arrow-right ms-1"></i>
                     </button>
@@ -76,7 +76,7 @@
                 <div class="card-body p-4">
                     <div class="form-card-head">
                         <span class="section-icon"><i class="bi bi-cash-coin"></i></span>
-                        <div><h5>Paso 2 · Cuenta el efectivo</h5><small>Anota cuántos billetes y monedas hay</small></div>
+                        <div><h5>Paso 2 · Cuenta el efectivo</h5><small>Anota cuántos billetes y monedas hay en la caja</small></div>
                         <span class="ms-auto fw-bold fs-5 mono" id="totalEf">$0.00</span>
                     </div>
                     <div class="denom-grid">
@@ -104,7 +104,7 @@
                     </div>
                     <div class="input-group input-group-lg">
                         <span class="input-group-text">$</span>
-                        <input type="number" name="contado_transferencia" id="contTr" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0" oninput="denCalc()">
+                        <input type="number" name="contado_transferencia" id="contTr" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0">
                     </div>
                 </div>
             </div>
@@ -116,8 +116,8 @@
             </div>
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-4">
-                    <label class="form-label">Motivo <span class="text-muted fw-normal" id="motLbl">(obligatorio si descuadra)</span></label>
-                    <input type="text" name="observacion" id="obsInput" class="form-control" placeholder="Ej: faltan $50, se rompió un pomo...">
+                    <label class="form-label">Observación <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" name="observacion" id="obsInput" class="form-control" placeholder="Ej: se rompió un pomo, una venta se canceló...">
                     <button type="submit" class="btn btn-success btn-lg w-100 mt-3">
                         <i class="bi bi-check-circle me-1"></i> Declarar arqueo
                     </button>
@@ -143,6 +143,7 @@
         el.value = v;
         denCalc();
     };
+    // Solo suma lo que el cajero introduce (conteo ciego).
     window.denCalc = function(){
         var tot = 0;
         Object.keys(VALS).forEach(function(k){
@@ -220,9 +221,6 @@
 .form-card-head small { display:block; font-size:12px; color:var(--ink-3); font-weight:400; }
 .nav-pills .nav-link { border:1px solid var(--line); color:var(--ink-3); font-size:13px; }
 .nav-pills .nav-link.active { background:var(--accent); border-color:var(--accent); color:#fff; }
-.esp-box { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
-.esp-box small { color:var(--ink-3); font-weight:700; text-transform:uppercase; font-size:11px; }
-.esp-box strong { font-family:var(--font-mono); font-size:18px; color:var(--ink); }
 .denom-grid { display:grid; gap:8px; }
 .denom-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:6px 10px; }
 .denom-lbl { font-size:13px; font-weight:600; color:var(--ink); }
@@ -230,15 +228,5 @@
 .qty-step { display:flex; align-items:stretch; }
 .qty-step .btn { flex:0 0 34px; padding:0; }
 .qty-step input { width:64px; text-align:center; font-family:var(--font-mono); font-weight:700; border:1px solid var(--line); border-radius:8px; margin:0 4px; min-height:34px; background:var(--surface); color:var(--ink); }
-.dif-val { font-family:var(--font-mono); font-size:2.2rem; font-weight:700; }
-#difBox { border-radius:16px; }
-#difBox.dif-ok { background:var(--success-soft); }
-#difBox.dif-ok .dif-val { color:var(--success-dark); }
-#difBox.dif-sobra { background:#fef3c7; }
-#difBox.dif-sobra .dif-val { color:#92400e; }
-#difBox.dif-falta { background:var(--danger-soft); }
-#difBox.dif-falta .dif-val { color:var(--danger-dark); }
-html[data-theme="dark"] #difBox.dif-sobra { background:rgba(245,158,11,.16); }
-html[data-theme="dark"] #difBox.dif-sobra .dif-val { color:#fbbf24; }
 </style>
 {% endblock %}

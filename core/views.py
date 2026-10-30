@@ -5954,11 +5954,15 @@ def mi_panel(request):
 
 @login_required
 def arqueo(request):
-    """Arqueo del turno abierto en 2 pasos.
+    """Arqueo del turno abierto en 2 pasos (CONTEO CIEGO).
 
-    Paso 1: fondo inicial + foto del esperado por método.
-    Paso 2: el cajero declara lo contado (ayudante por denominaciones);
-        se muestra faltante/sobrante en grande y se exige motivo si descuadra.
+    Paso 1: fondo inicial con el que abrió la caja.
+    Paso 2: el cajero declara lo contado (ayudante por denominaciones)
+        SIN ver cuánto espera el sistema ni si le falta o sobra, para
+        que declare el dinero real sin tentación de maquillar.
+    Las diferencias solo se ven del lado del admin (arqueos_admin /
+    revisar_turno): aquí intencionalmente no se pasa `resumen` a la
+    plantilla ni se exigen motivos por descuadre.
     """
     empleado = _empleado_de(request)
     if empleado is None:
@@ -5976,9 +5980,10 @@ def arqueo(request):
 
     paso = request.GET.get('paso', '1')
     if arqueo.estado == 'declarado':
-        # Ya declarado: mostrar resumen en espera de confirmación.
+        # Ya declarado: pantalla ciega a la espera de confirmación
+        # (solo lo que el cajero declaró, nunca el esperado).
         return render(request, 'core/arqueo.html', {
-            'empleado': empleado, 'turno': turno, 'resumen': resumen,
+            'empleado': empleado, 'turno': turno,
             'arqueo': arqueo, 'paso': 'espera',
             'denominaciones': DENOMINACIONES_CUP,
         })
@@ -6039,12 +6044,13 @@ def arqueo(request):
             except Exception:
                 messages.error(request, 'Transferencia contada inválida.')
                 return render(request, 'core/arqueo.html', {
-                    'empleado': empleado, 'turno': turno, 'resumen': resumen,
+                    'empleado': empleado, 'turno': turno,
                     'arqueo': arqueo, 'paso': '2',
                     'denominaciones': DENOMINACIONES_CUP,
                 })
             observacion = (request.POST.get('observacion', '') or '').strip()
-            # Foto fresca del esperado al declarar.
+            # Foto fresca del esperado al declarar: la calcula el servidor y
+            # solo la verá el admin al confirmar (el cajero nunca la ve).
             arqueo.esperado_efectivo = resumen['esperado_efectivo'] + arqueo.fondo_inicial
             arqueo.esperado_transferencia = resumen['esperado_transferencia']
             arqueo.contado_efectivo = total_ef
@@ -6073,7 +6079,7 @@ def arqueo(request):
             messages.warning(request, 'Primero completa el paso 1 (fondo inicial).')
             paso = '1'
     return render(request, 'core/arqueo.html', {
-        'empleado': empleado, 'turno': turno, 'resumen': resumen,
+        'empleado': empleado, 'turno': turno,
         'arqueo': arqueo, 'paso': paso,
         'denominaciones': DENOMINACIONES_CUP,
     })
