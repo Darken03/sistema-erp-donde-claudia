@@ -6055,8 +6055,7 @@ def arqueo(request):
                 arqueo.save()
                 messages.error(
                     request,
-                    'Hay diferencia de $%.2f: escribe el motivo para poder declarar.'
-                    % arqueo.diferencia_total)
+                    'Hay diferencia entre lo contado y lo esperado: escribe el motivo para poder declarar.')
                 return render(request, 'core/arqueo.html', {
                     'empleado': empleado, 'turno': turno, 'resumen': resumen,
                     'arqueo': arqueo, 'paso': '2',
