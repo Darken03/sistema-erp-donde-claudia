@@ -1177,6 +1177,12 @@ def venta_crear(request):
                 return redirect('core:venta_crear')
             fecha_hora = timezone.make_aware(
                 timezone.datetime.combine(fecha_elegida, ahora_servidor().time()))
+            turno = None
+            if fecha_elegida == hoy:
+                try:
+                    turno = cajero.empleado.turno_abierto
+                except Empleado.DoesNotExist:
+                    turno = None
 
             import json
             items = json.loads(productos_data or '[]')
@@ -1188,6 +1194,7 @@ def venta_crear(request):
                 venta = Venta.objects.create(
                     numero_venta=Venta.generar_numero(),
                     cajero=cajero,
+                    turno=turno,
                     subtotal=Decimal('0'),
                     impuesto=Decimal('0'),
                     total=Decimal('0'),
@@ -1270,6 +1277,15 @@ def venta_editar(request, pk):
 
     if request.method == 'POST':
         action = request.POST.get('action')
+
+        if venta.turno_id is None and venta.fecha_venta.date() == ahora_servidor().date():
+            try:
+                turno = venta.cajero.empleado.turno_abierto
+            except Empleado.DoesNotExist:
+                turno = None
+            if turno is not None:
+                venta.turno = turno
+                venta.save(update_fields=['turno'])
 
         if venta.punto_venta_id is not None and action in (
                 'agregar_producto', 'eliminar_detalle',
@@ -5987,6 +6003,12 @@ def arqueo(request):
         return redirect('core:mi_panel')
     resumen = _resumen_turno(turno)
     arqueo, _ = ArqueoTurno.objects.get_or_create(turno=turno)
+    def denominaciones_form():
+        detalle = arqueo.detalle()
+        return [
+            (key, lbl, detalle.get(key, 0))
+            for key, lbl in DENOMINACIONES_CUP
+        ]
     if arqueo.estado == 'confirmado':
         messages.info(request, 'Este arqueo ya fue confirmado.')
         return redirect('core:mi_panel')
@@ -5998,7 +6020,7 @@ def arqueo(request):
         return render(request, 'core/arqueo.html', {
             'empleado': empleado, 'turno': turno,
             'arqueo': arqueo, 'paso': 'espera',
-            'denominaciones': DENOMINACIONES_CUP,
+            'denominaciones': denominaciones_form(),
         })
 
     if request.method == 'POST':
@@ -6059,7 +6081,7 @@ def arqueo(request):
                 return render(request, 'core/arqueo.html', {
                     'empleado': empleado, 'turno': turno,
                     'arqueo': arqueo, 'paso': '2',
-                    'denominaciones': DENOMINACIONES_CUP,
+                    'denominaciones': denominaciones_form(),
                 })
             observacion = (request.POST.get('observacion', '') or '').strip()
             # Foto fresca del esperado al declarar: la calcula el servidor y
@@ -6070,16 +6092,6 @@ def arqueo(request):
             arqueo.contado_transferencia = cont_tr
             arqueo.detalle_json = _json.dumps(detalle)
             arqueo.observacion = observacion
-            if arqueo.diferencia_total != 0 and not observacion:
-                arqueo.save()
-                messages.error(
-                    request,
-                    'Hay diferencia entre lo contado y lo esperado: escribe el motivo para poder declarar.')
-                return render(request, 'core/arqueo.html', {
-                    'empleado': empleado, 'turno': turno, 'resumen': resumen,
-                    'arqueo': arqueo, 'paso': '2',
-                    'denominaciones': DENOMINACIONES_CUP,
-                })
             arqueo.estado = 'declarado'
             arqueo.declarado_por = request.user
             arqueo.declarado_at = timezone.now()
@@ -6094,7 +6106,7 @@ def arqueo(request):
     return render(request, 'core/arqueo.html', {
         'empleado': empleado, 'turno': turno,
         'arqueo': arqueo, 'paso': paso,
-        'denominaciones': DENOMINACIONES_CUP,
+        'denominaciones': denominaciones_form(),
     })
 
 

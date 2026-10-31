@@ -87,6 +87,7 @@ class ArqueoConteoTest(TestCase):
         self.assertEqual(r.status_code, 302)
         arq = ArqueoTurno.objects.get(turno=self.turno)
         self.assertEqual(arq.estado, 'declarado')
+        self.assertEqual(arq.contado_efectivo, Decimal('30'))
         self.assertEqual(arq.diferencia_total, Decimal('-5'))
         # Pantalla de espera: muestra lo declarado, pero no el esperado.
         r = self.client.get('/arqueo/?paso=2')
@@ -141,6 +142,10 @@ class ArqueoConteoTest(TestCase):
             'action': 'declarar', 'denom_20': '1', 'denom_10': '1',
             'contado_transferencia': '0', 'observacion': 'Faltan $5',
         })
+        arq = ArqueoTurno.objects.get(turno=self.turno)
+        arq.estado = 'declarado'
+        arq.declarado_por = self.cajero
+        arq.save(update_fields=['estado', 'declarado_por'])
         self._conteo_cerrado_decidido()
         self.client.login(username='admin1', password='x12345')
         r = self.client.post(reverse('core:arqueo_confirmar', args=[self.turno.pk]),
@@ -161,6 +166,10 @@ class ArqueoConteoTest(TestCase):
             'action': 'declarar', 'denom_20': '2',
             'contado_transferencia': '0', 'observacion': 'Sobra',
         })
+        arq = ArqueoTurno.objects.get(turno=self.turno)
+        arq.estado = 'declarado'
+        arq.declarado_por = self.cajero
+        arq.save(update_fields=['estado', 'declarado_por'])
         self.client.login(username='admin1', password='x12345')
         r = self.client.post(reverse('core:arqueo_confirmar', args=[self.turno.pk]),
                              {'decision': 'gasto', 'decision_nota': ''})

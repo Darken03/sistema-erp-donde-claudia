@@ -1019,7 +1019,7 @@ class ArqueoTurno(models.Model):
     Paso 1 (sistema): fondo inicial + esperado por método
         (ventas del turno − gastos del turno).
     Paso 2 (cajero): declara lo contado (con ayudante por
-        denominaciones) → diferencia + motivo si descuadra.
+        denominaciones) → diferencia y motivo opcional.
     Después un admin lo confirma y el turno se cierra.
     """
     ESTADOS = [

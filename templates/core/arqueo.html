@@ -80,12 +80,12 @@
                         <span class="ms-auto fw-bold fs-5 mono" id="totalEf">$0.00</span>
                     </div>
                     <div class="denom-grid">
-                        {% for key, lbl in denominaciones %}
+                        {% for key, lbl, qty in denominaciones %}
                         <div class="denom-row">
                             <span class="denom-lbl">{{ lbl }}</span>
                             <div class="qty-step">
                                 <button type="button" class="btn btn-outline-secondary" onclick="denStep('{{ key }}', -1)">−</button>
-                                <input type="number" id="denom_{{ key }}" name="denom_{{ key }}" value="0" min="0" step="1" inputmode="numeric" oninput="denCalc()">
+                                <input type="number" id="denom_{{ key }}" name="denom_{{ key }}" value="{{ qty }}" min="0" step="1" inputmode="numeric" oninput="denCalc()">
                                 <button type="button" class="btn btn-outline-secondary" onclick="denStep('{{ key }}', 1)">+</button>
                             </div>
                             <span class="denom-sub mono" id="sub_{{ key }}">$0</span>
@@ -132,7 +132,7 @@
 (function(){
     // Valor en CUP de cada denominación: la clave es el valor ('5M' = moneda $5).
     var VALS = {};
-    {% for key, lbl in denominaciones %}
+    {% for key, lbl, qty in denominaciones %}
     VALS['{{ key }}'] = parseInt('{{ key }}'.replace(/M$/, ''), 10) || 0;
     {% endfor %}
     var money = function(n){ return '$' + (Number(n) || 0).toFixed(2); };
