@@ -1777,7 +1777,8 @@ async function registrarDeudaPOS(){
   for (const l of deuCarrito){
     if (l.cantidad * l.factor > l.stock + 1e-9){ toast('Stock insuficiente de ' + l.nombre, 'warning'); return; }
   }
-  if (!lockBtn($('deuRegistrarBtn'), true, 'Registrando...')) return;
+  const btn = $('deuRegistrarBtn');
+  if (btn) btn.disabled = true;
   const payload = {
     deudor_id: deuSelec.id,
     fecha_pago: ($('deuFechaPago') && $('deuFechaPago').value) || '',
@@ -1793,7 +1794,7 @@ async function registrarDeudaPOS(){
     hidePosModal('registrarDeudaModal');
     if (typeof buscarProductos === 'function') buscarProductos();
   } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deuRegistrarBtn'), false); }
+  finally { const b = $('deuRegistrarBtn'); if (b) b.disabled = false; }
 }
 
 async function liquidarDeudaPOS(){
