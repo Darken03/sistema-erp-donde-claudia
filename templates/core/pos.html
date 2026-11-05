@@ -870,6 +870,20 @@ let montoEfectivoStr = '0', montoTransferenciaStr = '0', campoActivo = 'efectivo
 let isOnline = navigator.onLine !== false, syncing = false;
 
 const $ = id => document.getElementById(id);
+function lockBtn(btn, lock, text){
+  if (!btn) return true;
+  if (lock){
+    if (btn.dataset && btn.dataset.locked === '1') return false;
+    if (btn.dataset) btn.dataset.locked = '1';
+    btn.disabled = true;
+    if (text){ if (btn.dataset) btn.dataset.origHtml = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + text; }
+    return true;
+  }
+  if (btn.dataset) btn.dataset.locked = '';
+  btn.disabled = false;
+  if (btn.dataset && btn.dataset.origHtml){ btn.innerHTML = btn.dataset.origHtml; }
+  return true;
+}
 /* setTxt tolerante: si un total no existe en esta variante del DOM (móvil/escritorio,
    caché vieja) no debe ensuciar la consola ni romper la venta. */
 function setTxt(id, v){ const el = document.getElementById(id); if (!el){ return; } el.textContent = v; }
