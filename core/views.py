@@ -92,7 +92,6 @@ def _norm_sin_tildes(texto):
 # ============================================================
 # AUTENTICACION
 # ============================================================
-
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('core:redireccion_rol')
@@ -226,7 +225,6 @@ def _resolver_pos_filtro(request):
 # ============================================================
 # DASHBOARD
 # ============================================================
-
 @requiere_admin
 def dashboard(request):
     from datetime import timedelta
@@ -293,7 +291,6 @@ def dashboard(request):
 # ============================================================
 # PRODUCTOS
 # ============================================================
-
 @requiere_admin
 def producto_lista(request):
     productos = Producto.objects.select_related('categoria').order_by('nombre')
@@ -496,6 +493,8 @@ def producto_editar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def presentacion_eliminar(request, pk):
     """Borrado directo de una presentación (cruz ✕ de la tarjeta).
@@ -534,6 +533,8 @@ def presentacion_eliminar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def producto_imagen_eliminar(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
@@ -755,6 +756,8 @@ def producto_eliminar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def producto_eliminar_definitivo(request, pk):
     """Versión JSON del borrado en 2 pasos (para AJAX).
@@ -804,7 +807,6 @@ def producto_eliminar_definitivo(request, pk):
 # ============================================================
 # CATEGORIAS
 # ============================================================
-
 @requiere_admin
 def categoria_lista(request):
     qs = Categoria.objects.select_related('padre').annotate(num_productos=Count('productos'))
@@ -875,7 +877,6 @@ def categoria_eliminar(request, pk):
 # ============================================================
 # EMPLEADOS
 # ============================================================
-
 @requiere_admin
 def empleado_lista(request):
     empleados = Empleado.objects.select_related('user').all()
@@ -932,6 +933,8 @@ def empleado_editar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def empleado_toggle_activo(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk)
@@ -971,8 +974,9 @@ def empleado_eliminar(request, pk):
 # ============================================================
 # TURNOS
 # ============================================================
-
 @requiere_admin
+
+
 @require_POST
 def turno_abrir(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk, activo=True)
@@ -1018,7 +1022,6 @@ def empleado_turnos(request, pk):
 # ============================================================
 # VENTAS
 # ============================================================
-
 @requiere_admin
 def venta_lista(request):
     from datetime import timedelta
@@ -1479,7 +1482,6 @@ def _recalcular_venta(venta):
 # ============================================================
 # PUNTO DE VENTA
 # ============================================================
-
 def _turno_pos_almacen(request):
     """(turno, pos, almacen) del turno abierto para el modo multi-POS.
 
@@ -1685,6 +1687,8 @@ def _limpiar_ids(nodo):
 
 
 @login_required
+
+
 @require_POST
 def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
@@ -1748,6 +1752,8 @@ def _resolver_presentacion(producto, presentacion_id):
 
 
 @login_required
+
+
 @require_POST
 def pos_procesar_venta(request):
     try:
@@ -2000,7 +2006,6 @@ def pos_mis_ventas(request):
 # ============================================================
 # IPB - INVENTARIO PARCIAL DEL DIA
 # ============================================================
-
 def _fmt_cantidad_ipb(valor, unidad_medida):
     """Formato de cantidades para el IPB (usa el helper compartido de models)."""
     return fmt_cantidad_unidad(valor, unidad_medida)
@@ -2239,6 +2244,7 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
         'almacen': None,
     }
 
+
 def _obtener_datos_ipb_por_pos(fecha, pos):
     """IPB de un POS en modo multi-POS (spec §5), sobre el almacén del POS.
 
@@ -2473,6 +2479,7 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
         'almacen': almacen,
     }
 
+
 def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=None, descripcion=''):
     """Registra un movimiento de inventario."""
     stock_anterior = producto.stock
@@ -2496,6 +2503,7 @@ def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=
         descripcion=descripcion,
         usuario=usuario,
     )
+
 
 def _sincronizar_inventario_dia(fecha):
     """Sincroniza el inventario del día con las ventas, entradas y donaciones reales.
@@ -2776,6 +2784,8 @@ def ipb(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_registrar_gasto(request):
     try:
@@ -3264,6 +3274,8 @@ def entrada_lista(request):
 
 
 @requiere_modo('solo_pos')
+
+
 @requiere_admin
 def entrada_crear(request):
     """Entrada directa al punto de venta (solo admin en modo solo-POS).
@@ -3330,7 +3342,11 @@ def entrada_crear(request):
 
 
 @requiere_modo('solo_pos')
+
+
 @requiere_admin
+
+
 @require_POST
 def entrada_eliminar(request, pk):
     """Elimina una entrada directa revirtiendo su stock (solo admin en
@@ -3374,7 +3390,6 @@ def entrada_eliminar(request, pk):
 # ALMACÉN (admin + almacenero; ajeno al IPB y a las ventas).
 # Flujo: entrada al almacén -> traslado al POS (= entrada IPB).
 # ============================================================
-
 def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
                         usuario=None, referencia_id=None, descripcion='',
                         almacen=None):
@@ -3393,6 +3408,8 @@ def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_panel(request):
     """Panel del almacén: existencias valorizadas y actividad del día."""
@@ -3436,6 +3453,8 @@ def almacen_panel(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_stock(request):
     """Existencias del almacén con acceso a trasladar (y ajustar si admin)."""
@@ -3468,6 +3487,8 @@ def almacen_stock(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_entrada_lista(request):
     hoy = ahora_servidor().date()
@@ -3497,6 +3518,8 @@ def almacen_entrada_lista(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_entrada_crear(request):
     """Entrada al almacén: suma al stock del almacén, NO al del POS."""
@@ -3575,7 +3598,11 @@ def almacen_entrada_crear(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_admin
+
+
 @require_POST
 def almacen_entrada_cancelar(request, pk):
     """Cancela una entrada al almacén revirtiendo su stock (solo admin).
@@ -3616,6 +3643,8 @@ def almacen_entrada_cancelar(request, pk):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_traslado_lista(request):
     hoy = ahora_servidor().date()
@@ -3644,6 +3673,8 @@ def almacen_traslado_lista(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_traslado_crear(request):
     """Traslado con origen y destino (POS o almacén).
@@ -3773,7 +3804,11 @@ def almacen_traslado_crear(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_admin
+
+
 @require_POST
 def almacen_traslado_cancelar(request, pk):
     """Cancela un traslado devolviendo todo a la normalidad (solo admin).
@@ -3875,6 +3910,8 @@ def almacen_traslado_cancelar(request, pk):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_almacen
 def almacen_movimientos(request):
     """Auditoría propia del almacén (entradas, traslados y ajustes)."""
@@ -3899,6 +3936,8 @@ def almacen_movimientos(request):
 
 
 @requiere_modo('pos_almacenes', 'multi_pos')
+
+
 @requiere_admin
 def almacen_ajuste(request):
     """Ajuste de existencias del almacén (solo admin)."""
@@ -3948,7 +3987,6 @@ def almacen_ajuste(request):
 # ============================================================
 # CONFIGURACIÓN (tienda + almacenes + apariencia + regional, solo admin)
 # ============================================================
-
 def _tienda_context():
     try:
         cfg = ConfiguracionTienda.get_solo()
@@ -4377,6 +4415,8 @@ def config_almacen_editar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def config_almacen_toggle(request, pk):
     alm = get_object_or_404(Almacen, pk=pk)
@@ -4404,7 +4444,6 @@ def config_almacen_toggle(request, pk):
 # ============================================================
 # RETIROS POR DONACIÓN
 # ============================================================
-
 @requiere_admin
 def retiro_donacion_lista(request):
     hoy = ahora_servidor().date()
@@ -4619,7 +4658,6 @@ def submayor_detalle(request, producto_id):
 # ============================================================
 # DEUDORES Y DEUDAS
 # ============================================================
-
 def _resumen_deuda(deuda):
     """Calcula abonado/saldo de una deuda (aprovecha abonos prefetcheados)."""
     abonado = sum((a.monto for a in deuda.abonos.all()), Decimal('0'))
@@ -4756,37 +4794,80 @@ def _parse_fecha_pago(valor):
 
 
 @login_required
-def deuda_lista(request):
+def deudor_lista(request):
     q = request.GET.get('q', '').strip()
-    pendientes_only = request.GET.get('pendientes') == '1'
-
     deudores = Deudor.objects.prefetch_related('deudas__abonos').order_by('nombre', 'apellido')
     if q:
         deudores = deudores.filter(
-            Q(nombre__icontains=q) | Q(apellido__icontains=q) | Q(ci__icontains=q)
+            Q(nombre__icontains=q) | Q(apellido__icontains=q)
+            | Q(alias__icontains=q) | Q(ci__icontains=q) | Q(telefono__icontains=q)
         )
-    deudores = list(deudores)
+    saldo_total = Decimal('0')
+    lista = []
     for d in deudores:
         d.calc_saldo = saldo_deudor(d)
-        d.calc_pendientes = sum(1 for deuda in d.deudas.all() if _resumen_deuda(deuda).calc_saldo > 0)
+        d.calc_pendientes = sum(1 for de in d.deudas.all() if _resumen_deuda(de).calc_saldo > 0)
+        saldo_total += d.calc_saldo
+        lista.append(d)
+    context = {
+        'deudores': lista,
+        'q': q,
+        'total_deudores': Deudor.objects.filter(activo=True).count(),
+        'num_pendientes': sum(1 for d in lista if d.calc_saldo > 0),
+        'saldo_total': saldo_total,
+    }
+    return render(request, 'core/deudor_lista.html', context)
 
-    deudas = Deuda.objects.select_related('deudor', 'producto', 'presentacion').prefetch_related('abonos').order_by('-fecha_registro')
+
+@login_required
+def deuda_lista(request):
+    q = request.GET.get('q', '').strip()
+    f_desde = (request.GET.get('desde') or '').strip()
+    f_hasta = (request.GET.get('hasta') or '').strip()
+    f_deudor = (request.GET.get('deudor') or '').strip()
+    f_tipo = (request.GET.get('tipo') or '').strip()
+    pendientes_only = request.GET.get('pendientes') == '1'
+
+    deudas = (Deuda.objects.select_related('deudor', 'producto', 'presentacion')
+              .prefetch_related('abonos').order_by('-fecha_registro'))
+    desde = _parse_fecha_pago(f_desde)
+    hasta = _parse_fecha_pago(f_hasta)
+    if desde:
+        deudas = deudas.filter(fecha_registro__date__gte=desde)
+    if hasta:
+        deudas = deudas.filter(fecha_registro__date__lte=hasta)
+    if f_deudor:
+        try:
+            deudas = deudas.filter(deudor_id=int(f_deudor))
+        except ValueError:
+            pass
+    if f_tipo in ('dinero', 'producto'):
+        deudas = deudas.filter(tipo=f_tipo)
+    if q:
+        deudas = deudas.filter(
+            Q(motivo__icontains=q) | Q(numero_deuda__icontains=q)
+            | Q(deudor__nombre__icontains=q) | Q(deudor__apellido__icontains=q)
+            | Q(deudor__alias__icontains=q) | Q(deudor__ci__icontains=q)
+        )
+    deudas_l = [_resumen_deuda(d) for d in list(deudas)]
     if pendientes_only:
-        deudas = [d for d in deudas if _resumen_deuda(d).calc_saldo > 0]
-    else:
-        deudas = [_resumen_deuda(d) for d in deudas]
+        deudas_l = [d for d in deudas_l if d.calc_saldo > 0]
 
-    total_por_cobrar = sum((d.calc_saldo for d in Deuda.objects.prefetch_related('abonos').all() if _resumen_deuda(d).calc_saldo > 0), Decimal('0'))
+    total_por_cobrar = sum((d.calc_saldo for d in Deuda.objects.prefetch_related('abonos') if _resumen_deuda(d).calc_saldo > 0), Decimal('0'))
     total_cobrado = AbonoDeuda.objects.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    total_filtrado = sum((d.calc_saldo for d in deudas_l if d.calc_saldo > 0), Decimal('0'))
 
     context = {
-        'deudores': deudores,
-        'deudas': deudas,
+        'deudas': deudas_l,
+        'deudores_filtro': list(Deudor.objects.filter(activo=True).order_by('nombre', 'apellido')),
         'total_por_cobrar': total_por_cobrar,
         'total_cobrado': total_cobrado,
+        'total_filtrado': total_filtrado,
         'total_deudores': Deudor.objects.filter(activo=True).count(),
+        'num_filtradas': len(deudas_l),
         'q': q,
-        'pendientes_only': pendientes_only,
+        'f_desde': f_desde, 'f_hasta': f_hasta, 'f_deudor': f_deudor,
+        'f_tipo': f_tipo, 'pendientes_only': pendientes_only,
     }
     return render(request, 'core/deuda_lista.html', context)
 
@@ -4795,6 +4876,7 @@ def deuda_lista(request):
 def deudor_crear(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
+        alias = request.POST.get('alias', '').strip()
         apellido = request.POST.get('apellido', '').strip()
         ci = request.POST.get('ci', '').strip() or None
         telefono = request.POST.get('telefono', '').strip()
@@ -4802,15 +4884,15 @@ def deudor_crear(request):
         if not nombre:
             messages.error(request, 'El nombre es requerido.')
             return redirect('core:deudor_crear')
-        if not ci:
-            messages.error(request, 'La CI es requerida.')
+        if not alias:
+            messages.error(request, 'El alias es requerido.')
             return redirect('core:deudor_crear')
-        if Deudor.objects.filter(ci=ci).exists():
+        if ci is not None and Deudor.objects.filter(ci=ci).exists():
             messages.error(request, 'Ya existe un deudor con esa CI.')
             return redirect('core:deudor_crear')
 
-        deudor = Deudor.objects.create(nombre=nombre, apellido=apellido, ci=ci, telefono=telefono)
-        messages.success(request, f'Deudor {deudor.nombre_completo} registrado.')
+        deudor = Deudor.objects.create(nombre=nombre, alias=alias, apellido=apellido, ci=ci, telefono=telefono)
+        messages.success(request, f'Deudor {deudor.nombre_display} registrado.')
         return redirect('core:deudor_detalle', pk=deudor.pk)
 
     return render(request, 'core/deudor_form.html', {'titulo': 'Registrar Deudor'})
@@ -4822,6 +4904,7 @@ def deudor_editar(request, pk):
 
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
+        alias = request.POST.get('alias', '').strip()
         apellido = request.POST.get('apellido', '').strip()
         ci = request.POST.get('ci', '').strip() or None
         telefono = request.POST.get('telefono', '').strip()
@@ -4829,14 +4912,15 @@ def deudor_editar(request, pk):
         if not nombre:
             messages.error(request, 'El nombre es requerido.')
             return redirect('core:deudor_editar', pk=pk)
-        if not ci:
-            messages.error(request, 'La CI es requerida.')
+        if not alias:
+            messages.error(request, 'El alias es requerido.')
             return redirect('core:deudor_editar', pk=pk)
-        if Deudor.objects.filter(ci=ci).exclude(pk=pk).exists():
+        if ci is not None and Deudor.objects.filter(ci=ci).exclude(pk=pk).exists():
             messages.error(request, 'Ya existe otro deudor con esa CI.')
             return redirect('core:deudor_editar', pk=pk)
 
         deudor.nombre = nombre
+        deudor.alias = alias
         deudor.apellido = apellido
         deudor.ci = ci
         deudor.telefono = telefono
@@ -4850,14 +4934,19 @@ def deudor_editar(request, pk):
 @login_required
 def deudor_detalle(request, pk):
     deudor = get_object_or_404(Deudor.objects.prefetch_related('deudas__abonos', 'deudas__producto', 'deudas__presentacion'), pk=pk)
+    mostrar_todas = request.GET.get('todas') == '1'
     deudas = sorted(deudor.deudas.all(), key=lambda d: d.fecha_registro, reverse=True)
     for d in deudas:
         _resumen_deuda(d)
+    deudas_mostrar = list(deudas) if mostrar_todas else [d for d in deudas if d.calc_saldo > 0]
     abonos = AbonoDeuda.objects.filter(deuda__deudor=deudor).select_related('deuda').order_by('-fecha')
     saldo = sum((d.calc_saldo for d in deudas), Decimal('0'))
     context = {
         'deudor': deudor,
         'deudas': deudas,
+        'deudas_mostrar': deudas_mostrar,
+        'mostrar_todas': mostrar_todas,
+        'num_pendientes': sum(1 for d in deudas if d.calc_saldo > 0),
         'abonos': abonos,
         'saldo': saldo,
     }
@@ -4871,7 +4960,7 @@ def deudor_toggle(request, pk):
     deudor.save()
     estado = 'activado' if deudor.activo else 'desactivado'
     messages.success(request, f'Deudor {estado}.')
-    return redirect('core:deuda_lista')
+    return redirect('core:deudor_lista')
 
 
 @login_required
@@ -4904,7 +4993,7 @@ def deudor_eliminar(request, pk):
         nombre = deudor.nombre_completo
         deudor.delete()
         messages.success(request, f'Deudor {nombre} eliminado.')
-        return redirect('core:deuda_lista')
+        return redirect('core:deudor_lista')
     return render(request, 'core/deudor_confirmar_eliminar.html', {'deudor': deudor})
 
 
@@ -5053,7 +5142,6 @@ def deuda_eliminar(request, pk):
 # ============================================================
 # POS - DEUDORES Y DEUDAS (solo online)
 # ============================================================
-
 @login_required
 def pos_deudores(request):
     q = request.GET.get('q', '').strip()
@@ -5070,7 +5158,9 @@ def pos_deudores(request):
             'id': d.id,
             'nombre': d.nombre,
             'apellido': d.apellido,
+            'alias': d.alias,
             'nombre_completo': d.nombre_completo,
+            'nombre_display': d.nombre_display,
             'ci': d.ci or '',
             'telefono': d.telefono or '',
             'saldo': str(saldo_deudor(d)),
@@ -5105,6 +5195,8 @@ def pos_deudor_detalle(request, pk):
     return JsonResponse({
         'id': deudor.id,
         'nombre_completo': deudor.nombre_completo,
+        'alias': deudor.alias,
+        'nombre_display': deudor.nombre_display,
         'ci': deudor.ci or '',
         'saldo': str(sum((Decimal(i['saldo']) for i in items), Decimal('0'))),
         'deudas': items,
@@ -5112,25 +5204,30 @@ def pos_deudor_detalle(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def pos_deudor_crear(request):
     try:
         data = json.loads(request.body)
         nombre = (data.get('nombre') or '').strip()
+        alias = (data.get('alias') or '').strip()
         apellido = (data.get('apellido') or '').strip()
         ci = (data.get('ci') or '').strip()
         telefono = (data.get('telefono') or '').strip()
         if not nombre:
             return JsonResponse({'error': 'El nombre es requerido.'}, status=400)
-        if not ci:
-            return JsonResponse({'error': 'La CI es requerida.'}, status=400)
-        if Deudor.objects.filter(ci=ci).exists():
+        if not alias:
+            return JsonResponse({'error': 'El alias es requerido.'}, status=400)
+        if ci and Deudor.objects.filter(ci=ci).exists():
             return JsonResponse({'error': 'Ya existe un deudor con esa CI.'}, status=400)
-        deudor = Deudor.objects.create(nombre=nombre, apellido=apellido, ci=ci, telefono=telefono)
+        deudor = Deudor.objects.create(nombre=nombre, alias=alias, apellido=apellido, ci=ci or None, telefono=telefono)
         return JsonResponse({
             'success': True,
             'id': deudor.id,
             'nombre_completo': deudor.nombre_completo,
+            'alias': deudor.alias,
+            'nombre_display': deudor.nombre_display,
             'ci': deudor.ci,
             'saldo': '0',
         })
@@ -5139,17 +5236,81 @@ def pos_deudor_crear(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_deuda_crear(request):
     try:
         data = json.loads(request.body)
         deudor = get_object_or_404(Deudor, pk=data.get('deudor_id'))
-        tipo = data.get('tipo', 'dinero')
-        if tipo not in ('dinero', 'producto'):
-            return JsonResponse({'error': 'Tipo de deuda inválido.'}, status=400)
         from .models import PresentacionProducto
         motivo_base = data.get('motivo', '')
         fecha_pago = _parse_fecha_pago(data.get('fecha_pago', ''))
+        tipo = data.get('tipo', None)
+
+        # Modo mixto: sin 'tipo', procesa 'dinero' (lista) y/o 'items' (lista).
+        if tipo is None:
+            dinero_list = data.get('dinero') or []
+            items_list = data.get('items') or []
+            if not dinero_list and not items_list:
+                return JsonResponse({'error': 'Agregue dinero o al menos un producto.'}, status=400)
+            # Pre-validación de presentaciones.
+            for it in items_list:
+                producto = get_object_or_404(Producto, pk=it.get('producto_id'))
+                pres_id = it.get('presentacion_id') or None
+                if pres_id and not PresentacionProducto.objects.filter(
+                        pk=pres_id, producto=producto, activo=True).exists():
+                    return JsonResponse(
+                        {'error': f'Presentación inválida para {producto.nombre}.'}, status=400)
+            creadas = []
+            dinero_count = 0
+            producto_count = 0
+            with transaction.atomic():
+                try:
+                    for entrada in dinero_list:
+                        m = entrada.get('monto', 0) if isinstance(entrada, dict) else entrada
+                        mot = (entrada.get('motivo') if isinstance(entrada, dict) else None) or motivo_base
+                        creadas.append(_crear_deuda(
+                            deudor=deudor,
+                            tipo='dinero',
+                            usuario=request.user,
+                            monto=m,
+                            motivo=mot,
+                            fecha_pago=fecha_pago,
+                        ))
+                        dinero_count += 1
+                    for it in items_list:
+                        producto = get_object_or_404(Producto, pk=it.get('producto_id'))
+                        creadas.append(_crear_deuda(
+                            deudor=deudor,
+                            tipo='producto',
+                            usuario=request.user,
+                            producto=producto,
+                            cantidad=it.get('cantidad', 1),
+                            motivo=motivo_base,
+                            fecha_pago=fecha_pago,
+                            presentacion_id=it.get('presentacion_id') or None,
+                        ))
+                        producto_count += 1
+                except ValueError as e:
+                    transaction.set_rollback(True)
+                    return JsonResponse({'error': str(e)}, status=400)
+            total = sum((d.monto for d in creadas), Decimal('0'))
+            deuda = creadas[0]
+            return JsonResponse({
+                'success': True,
+                'numeros': [d.numero_deuda for d in creadas],
+                'count': len(creadas),
+                'monto': str(total),
+                'numero': deuda.numero_deuda,
+                'motivo': deuda.motivo_display,
+                'saldo_deudor': str(saldo_deudor(deudor)),
+                'dinero_count': dinero_count,
+                'producto_count': producto_count,
+            })
+
+        if tipo not in ('dinero', 'producto'):
+            return JsonResponse({'error': 'Tipo de deuda inválido.'}, status=400)
         if tipo == 'producto':
             # Multiproducto: lista de líneas; compat con línea única anterior.
             raw_items = data.get('items')
@@ -5207,6 +5368,7 @@ def pos_deuda_crear(request):
             except ValueError as e:
                 return JsonResponse({'error': str(e)}, status=400)
             extra_resp = {}
+            total = deuda.monto
         resp = {
             'success': True,
             'numero': deuda.numero_deuda,
@@ -5221,6 +5383,8 @@ def pos_deuda_crear(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_deuda_abonar(request):
     """Liquida: selecciona al deudor y reduce su saldo (reparte en las más antiguas)."""
@@ -5832,6 +5996,8 @@ def mostrador_estado(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_mostrador_empujar(request):
     """El POS empuja el carrito actual para una pantalla (llamado en cada renderCart)."""
@@ -5879,6 +6045,8 @@ def pos_mostrador_empujar(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_mostrador_limpiar(request):
     """Avisa al mostrador: venta completada (muestra gracias) o carrito cancelado."""
@@ -5906,7 +6074,6 @@ def pos_mostrador_limpiar(request):
 # ============================================================
 # PANEL DEL VENDEDOR + ARQUEO DE TURNO + CONTEO CIEGO
 # ============================================================
-
 def _empleado_de(request):
     """Empleado del usuario actual o None."""
     try:
@@ -6111,6 +6278,8 @@ def arqueo(request):
 
 
 @requiere_admin
+
+
 @require_POST
 def arqueo_confirmar(request, pk):
     """El admin confirma el arqueo declarado ELIGIENDO qué hacer con la
@@ -6173,6 +6342,8 @@ def arqueo_confirmar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def arqueo_recontar(request, pk):
     """El admin pide reconteo de dinero: anula la declaración del arqueo
@@ -6224,6 +6395,8 @@ def _bloqueos_cierre_turno(turno, incluir_arqueo=True):
 
 
 @requiere_admin
+
+
 @require_POST
 def turno_cerrar(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk)
@@ -6339,6 +6512,8 @@ def conteo_contar(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def conteo_autosave(request, pk):
     """Autoguardado incremental del conteo ciego (opción C: cola offline).
@@ -6420,6 +6595,8 @@ def conteo_autosave(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def conteo_cerrar(request, pk):
     """Cierra el conteo y congela el stock del sistema por producto."""
@@ -6475,7 +6652,6 @@ def conteo_comparar(request, pk):
 # ============================================================
 # REVISIÓN ADMIN: ARQUEOS + CONTEOS (qué hacer con las diferencias)
 # ============================================================
-
 @requiere_admin
 def arqueos_admin(request):
     """Sección del admin: turnos abiertos con su arqueo/conteos (pendientes)
@@ -6572,6 +6748,8 @@ def _aplicar_ajuste_producto(producto, nuevo_stock, descripcion, usuario):
 
 
 @requiere_admin
+
+
 @require_POST
 def conteo_decidir(request, pk):
     """Decisión del admin sobre un conteo cerrado:

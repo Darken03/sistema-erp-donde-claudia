@@ -48,7 +48,7 @@
                 <select name="deudor" class="form-select" required>
                     <option value="">Seleccione el deudor...</option>
                     {% for d in deudores %}
-                    <option value="{{ d.pk }}" {% if preselect == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.nombre_completo }} ({{ d.ci|default:'sin CI' }})</option>
+                    <option value="{{ d.pk }}" {% if preselect == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.nombre_display }} ({{ d.ci|default:'sin CI' }})</option>
                     {% endfor %}
                 </select>
                 <div class="form-text">¿No existe? <a href="{% url 'core:deudor_crear' %}">Regístrelo aquí primero</a>.</div>

@@ -560,6 +560,31 @@ h2 {
 .side-sub-link.active { background: var(--accent-tint) !important; color: var(--accent) !important; font-weight: 600; }
 .side-sub-link.active::before { background: var(--accent); }
 
+/* ---- Sub-grupo anidado (ej. Deudas) ---- */
+.side-sub-toggle {
+    width: 100%; display: flex; align-items: center; gap: 0.5rem;
+    padding: 6px 12px 6px 40px !important; border-radius: 8px !important;
+    margin: 2px 0 !important; color: var(--ink-2) !important;
+    font-size: 13px; font-weight: 500; font-family: var(--font-sans);
+    border: 1px solid transparent; background: transparent; cursor: pointer; position: relative;
+}
+.side-sub-toggle::before {
+    content: ""; position: absolute; left: 26px; top: 50%;
+    width: 5px; height: 5px; border-radius: 99px;
+    background: var(--ink-3); transform: translateY(-50%);
+}
+.side-sub-toggle i:first-child { color: var(--ink-3); font-size: 1rem; width: 1.2rem; text-align: center; }
+.side-sub-toggle:hover { background: var(--soft) !important; color: var(--ink) !important; }
+.side-sub-toggle:hover i:first-child { color: var(--accent); }
+.side-sub-toggle.active {
+    background: var(--accent-tint) !important; color: var(--accent) !important;
+    border-color: var(--accent-soft); font-weight: 600;
+}
+.side-sub-toggle.active i:first-child { color: var(--accent); }
+.side-sub-toggle.active::before { background: var(--accent); }
+.side-sub-toggle .chev { margin-left: auto; font-size: 10px; color: var(--ink-3); transition: transform 200ms; }
+.side-sub-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
 /* ---- Topbar ---- */
 .navbar.navbar-light {
     background: var(--surface) !important; border-bottom: 1px solid var(--line) !important;

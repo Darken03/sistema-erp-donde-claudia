@@ -87,6 +87,7 @@ urlpatterns = [
     path('submayor/<int:producto_id>/', views.submayor_detalle, name='submayor_detalle'),
     # Deudas
     # Deudores y Deudas
+    path('deudores/', views.deudor_lista, name='deudor_lista'),
     path('deudores/crear/', views.deudor_crear, name='deudor_crear'),
     path('deudores/<int:pk>/', views.deudor_detalle, name='deudor_detalle'),
     path('deudores/<int:pk>/editar/', views.deudor_editar, name='deudor_editar'),
