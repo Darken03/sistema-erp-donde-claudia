@@ -5041,7 +5041,7 @@ def deuda_crear(request):
                     nums += f' y {len(creadas) - 3} más'
                 messages.success(
                     request,
-                    f'{len(creadas)} deuda(s) de productos para {deudor.nombre_completo} '
+                    f'{len(creadas)} deuda(s) de productos para {deudor.nombre_display} '
                     f'(total ${total:.2f}): {nums}.'
                 )
             else:
@@ -5053,7 +5053,7 @@ def deuda_crear(request):
                     motivo=motivo_base,
                     fecha_pago=fecha_pago,
                 )
-                messages.success(request, f'Deuda {deuda.numero_deuda} registrada para {deudor.nombre_completo} (${deuda.monto}).')
+                messages.success(request, f'Deuda {deuda.numero_deuda} registrada para {deudor.nombre_display} (${deuda.monto}).')
             return redirect('core:deudor_detalle', pk=deudor.pk)
         except ValueError as e:
             messages.error(request, str(e))

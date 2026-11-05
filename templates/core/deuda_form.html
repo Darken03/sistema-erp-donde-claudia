@@ -151,7 +151,7 @@
             </div>
             {% else %}
             <div class="alert alert-info">
-                <strong>{{ deuda.numero_deuda }}</strong> · {{ deuda.deudor.nombre_completo }} ·
+                <strong>{{ deuda.numero_deuda }}</strong> · {{ deuda.deudor.nombre_display }} ·
                 {% if deuda.tipo == 'producto' %}Producto: {{ deuda.producto.nombre }}{% if deuda.presentacion %} ({{ deuda.cantidad }} x {{ deuda.presentacion.nombre }}){% else %} x{{ deuda.cantidad }}{% endif %}{% else %}Dinero{% endif %} ·
                 Monto: ${{ deuda.monto|floatformat:2 }} · Abonado: ${{ deuda.calc_abonado|floatformat:2 }}
             </div>
