@@ -870,7 +870,7 @@ let montoEfectivoStr = '0', montoTransferenciaStr = '0', campoActivo = 'efectivo
 let isOnline = navigator.onLine !== false, syncing = false;
 
 const $ = id => document.getElementById(id);
-function lockBtn(btn, lock, text){
+function deuLockBtn(btn, lock, text){
   if (!btn) return true;
   if (lock){
     if (btn.dataset && btn.dataset.locked === '1') return false;
@@ -1483,13 +1483,13 @@ $('gastoForm').addEventListener('submit', async function(e){
     descripcion:this.querySelector('[name="descripcion"]').value};
   if (data.cantidad_efectivo<=0 && data.cantidad_transferencia<=0){ toast('Ingrese al menos una cantidad','warning'); return; }
   const btn = this.querySelector('[type="submit"]');
-  if (!lockBtn(btn, true, 'Registrando...')) return;
+  if (!deuLockBtn(btn, true, 'Registrando...')) return;
   try {
     const r = await fetch('{% url "core:pos_registrar_gasto" %}', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF_TOKEN}, body:JSON.stringify(data)});
-    if (r.ok){ hidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); }
+    if (r.ok){ deuHidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); }
     else { const j = await r.json(); toast(j.error||'Error al registrar gasto','danger'); }
   } catch(err){ toast('Error al registrar gasto','danger'); }
-  finally { lockBtn(btn, false); }
+  finally { deuLockBtn(btn, false); }
 });
 /* ---------- deudas: deudores, nueva deuda (dinero/producto) y liquidación (solo online) ---------- */
 const URL_DEUDORES = '{% url "core:pos_deudores" %}';
@@ -1562,7 +1562,7 @@ async function crearDeudorPOS(){
   const alias = ($('deudaNewAlias').value || '').trim();
   if (!nombre || !alias){ toast('Nombre y alias son requeridos','warning'); return; }
   if (!isOnline){ toast('Sin conexión','warning'); return; }
-  if (!lockBtn($('deudaNewGuardar'), true, 'Guardando...')) return;
+  if (!deuLockBtn($('deudaNewGuardar'), true, 'Guardando...')) return;
   try {
     const j = await deuFetch(URL_DEUDOR_CREAR, {
       nombre: nombre,
@@ -1578,7 +1578,7 @@ async function crearDeudorPOS(){
     await seleccionarDeudor(j.id);
     toast('Deudor registrado','success');
   } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deudaNewGuardar'), false); }
+  finally { deuLockBtn($('deudaNewGuardar'), false); }
 }
 
 /* ===== mini-POS deuda: carrito + productos ===== */
@@ -1769,6 +1769,25 @@ function volverAPaso1(){
   else { cargarDeudores(); }
 }
 
+function deuLockBtn(btn, lock, text){
+  if (!btn) return true;
+  if (lock){
+    if (btn.dataset && btn.dataset.locked === '1') return false;
+    btn.dataset.locked = '1';
+    btn.disabled = true;
+    if (text) btn.textContent = text;
+  } else {
+    delete (btn.dataset || {}).locked;
+    btn.disabled = false;
+  }
+  return true;
+}
+function deuHidePosModal(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  const inst = (typeof bootstrap !== 'undefined' && bootstrap.Modal) ? bootstrap.Modal.getInstance(el) : null;
+  if (inst) inst.hide(); else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) new bootstrap.Modal(el).hide();
+}
 async function registrarDeudaPOS(){
   if (!isOnline){ toast('Sin conexión: las deudas se registran solo online','warning'); return; }
   if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
@@ -1791,7 +1810,7 @@ async function registrarDeudaPOS(){
     deuCarrito = []; deuDineros = [];
     if ($('deuFechaPago')) $('deuFechaPago').value = '';
     deuRenderCarrito();
-    hidePosModal('registrarDeudaModal');
+    deuHidePosModal('registrarDeudaModal');
     if (typeof buscarProductos === 'function') buscarProductos();
   } catch(e){ toast(e.message,'danger'); }
   finally { const b = $('deuRegistrarBtn'); if (b) b.disabled = false; }
@@ -1800,7 +1819,7 @@ async function registrarDeudaPOS(){
 async function liquidarDeudaPOS(){
   if (!isOnline){ toast('Sin conexión','warning'); return; }
   if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
-  if (!lockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
+  if (!deuLockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
   try {
     const j = await deuFetch(URL_DEUDA_ABONAR, {
       deudor_id: deuSelec.id,
@@ -1821,9 +1840,9 @@ async function liquidarDeudaPOS(){
     }
     // refrescar deudas
     try { await seleccionarDeudor(deuSelec.id); } catch(e){}
-    hidePosModal('deudaAbonarModal');
+    deuHidePosModal('deudaAbonarModal');
   } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deuAbonarBtn'), false); }
+  finally { deuLockBtn($('deuAbonarBtn'), false); }
 }
 
 function deuResetAll(){
@@ -1853,13 +1872,6 @@ if ($('deudaSelX')) $('deudaSelX').onclick = ()=>{ deuSelec = null; if ($('deuda
 if ($('deudaNuevoBtn')) $('deudaNuevoBtn').onclick = ()=>{ const b = $('deudaNuevoBox'); if (!b) return; b.style.display = (b.style.display === 'none' || b.style.display === '') ? '' : 'none'; };
 if ($('deudaNewGuardar')) $('deudaNewGuardar').onclick = crearDeudorPOS;
 
-function hidePosModal(id){
-  const el = document.getElementById(id);
-  if (!el) return;
-  const inst = bootstrap.Modal.getInstance(el);
-  if (inst) inst.hide(); else new bootstrap.Modal(el).hide();
-}
-
 if ($('deuContinuar')) $('deuContinuar').onclick = abrirWorkspace;
 if ($('deuVolverBtn')) $('deuVolverBtn').onclick = volverAPaso1;
 
@@ -1872,7 +1884,7 @@ if ($('deuDineroAgregar')) $('deuDineroAgregar').onclick = ()=>{
   if (m <= 0){ toast('Ingrese un monto mayor a 0','warning'); return; }
   const motivo = ($('deuDineroMotivo').value || '').trim();
   deuDineros.push({monto: m, motivo: motivo});
-  hidePosModal('deudaDineroModal');
+  deuHidePosModal('deudaDineroModal');
   deuRenderCarrito();
 };
 if ($('deuRegistrarBtn')) $('deuRegistrarBtn').onclick = registrarDeudaPOS;
@@ -1969,7 +1981,7 @@ $('donacionForm').addEventListener('submit', async function(e){
   const ben = $('donBeneficiario').value.trim();
   if (!ben){ toast('Indique el beneficiario.','warning'); $('donBeneficiario').focus(); return; }
   const btn = this.querySelector('[type="submit"]');
-  if (!lockBtn(btn, true, 'Registrando...')) return;
+  if (!deuLockBtn(btn, true, 'Registrando...')) return;
   const fd = new FormData();
   fd.append('productos_data', JSON.stringify(donLineas.map(l=>({producto_id:l.id, cantidad:l.cantidad}))));
   fd.append('beneficiario_nombre', ben);
@@ -1978,13 +1990,13 @@ $('donacionForm').addEventListener('submit', async function(e){
     const r = await fetch(URL_DONACION_CREAR, {method:'POST', headers:{'X-CSRFToken':CSRF_TOKEN, 'X-Requested-With':'XMLHttpRequest'}, body:fd});
     const j = await r.json().catch(()=>({}));
     if (!r.ok || !j.ok) throw new Error((j && j.error) || 'Error al registrar donación');
-    hidePosModal('registrarDonacionModal');
+    deuHidePosModal('registrarDonacionModal');
     donLineas = []; donRenderLineas();
     $('donProdSearch').value = ''; $('donBeneficiario').value = ''; $('donMotivo').value = '';
     toast(j.message || 'Donación registrada','success');
     if (typeof buscarProductos === 'function') buscarProductos();
   } catch(err){ toast(err.message || 'Error al registrar donación','danger'); }
-  finally { lockBtn(btn, false); }
+  finally { deuLockBtn(btn, false); }
 });
 
 /* ---------- teclado ---------- */
