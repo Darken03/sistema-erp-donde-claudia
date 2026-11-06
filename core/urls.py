@@ -87,8 +87,11 @@ urlpatterns = [
     path('submayor/<int:producto_id>/', views.submayor_detalle, name='submayor_detalle'),
     # Deudas
     # Deudores y Deudas
+    path('deudores/', views.deudor_lista, name='deudor_lista'),
     path('deudores/crear/', views.deudor_crear, name='deudor_crear'),
     path('deudores/<int:pk>/', views.deudor_detalle, name='deudor_detalle'),
+    path('deudores/<int:pk>/imprimir/', views.deudor_impresion, name='deudor_impresion'),
+    path('deudores/totales/imprimir/', views.deudores_totales_impresion, name='deudores_totales_impresion'),
     path('deudores/<int:pk>/editar/', views.deudor_editar, name='deudor_editar'),
     path('deudores/<int:pk>/toggle/', views.deudor_toggle, name='deudor_toggle'),
     path('deudores/<int:pk>/abonar/', views.deudor_abonar, name='deudor_abonar'),

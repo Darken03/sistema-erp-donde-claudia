@@ -37,10 +37,19 @@ ALLOWED_HOSTS = [
     '192.168.86.206',
     'dondeclaudia.pythonanywhere.com',
 ]
+# Hosts extra vía entorno (Enzonic: DJANGO_ALLOWED_HOSTS=mi-app.enzonic.com).
+ALLOWED_HOSTS += [
+    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if h.strip()
+]
 
 # Necesario para que los POST (login, formularios, POS) funcionen por HTTPS.
 CSRF_TRUSTED_ORIGINS = [
     'https://dondeclaudia.pythonanywhere.com',
+]
+CSRF_TRUSTED_ORIGINS += [
+    ('https://' + h.strip()) for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if h.strip()
 ]
 
 LOGIN_URL = '/login/'

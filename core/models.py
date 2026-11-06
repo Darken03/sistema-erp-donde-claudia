@@ -804,6 +804,7 @@ class InventarioDiario(models.Model):
 class Deudor(models.Model):
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100, blank=True, default='')
+    alias = models.CharField('Alias', max_length=100, blank=True, default='')
     ci = models.CharField(max_length=20, unique=True, null=True, blank=True)
     telefono = models.CharField(max_length=30, blank=True, default='')
     activo = models.BooleanField(default=True)
@@ -816,8 +817,7 @@ class Deudor(models.Model):
         ordering = ['nombre', 'apellido']
 
     def __str__(self):
-        nombre = f"{self.nombre} {self.apellido}".strip()
-        return f"{nombre} ({self.ci})" if self.ci else nombre
+        return self.nombre_display
 
     def save(self, *args, **kwargs):
         if not self.ci:
@@ -827,6 +827,12 @@ class Deudor(models.Model):
     @property
     def nombre_completo(self):
         return f"{self.nombre} {self.apellido}".strip()
+
+    @property
+    def nombre_display(self):
+        """Nombre con alias entre paréntesis: 'Jose Manuel (Pepito)'."""
+        base = self.nombre_completo
+        return f"{base} ({self.alias})" if (self.alias or '').strip() else base
 
     @property
     def saldo_total(self):
@@ -1322,12 +1328,6 @@ class AlmacenStock(models.Model):
         verbose_name = 'Existencia de Almacén'
         verbose_name_plural = 'Existencias de Almacén'
         unique_together = ['producto', 'almacen']
-    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
-    fecha_actualizacion = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Existencia de Almacén'
-        verbose_name_plural = 'Existencias de Almacén'
 
     def __str__(self):
         return f"{self.producto.nombre}: {self.cantidad}"
