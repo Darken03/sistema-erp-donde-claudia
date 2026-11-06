@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Historial de Deudas - {{ deudor.nombre_display }}</title>
+    <style>
+        @media print { @page { size: A4; margin: 1.2cm; } .no-print { display: none !important; } }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1f1f2c; margin: 0; padding: 16px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #6f53d9; padding-bottom: 6px; margin-bottom: 10px; }
+        .title { font-size: 16pt; font-weight: bold; color: #6f53d9; }
+        .sub { font-size: 9pt; color: #8d8da0; }
+        .card { border: 1px solid #e6e6ec; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+        .kv { display: inline-block; margin-right: 18px; }
+        .kv small { color: #8d8da0; font-size: 8pt; display: block; }
+        .kv strong { font-size: 11pt; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        th { background: #6f53d9; color: #fff; font-size: 8.5pt; padding: 6px 4px; text-align: left; }
+        th.r { text-align: right; } th.c { text-align: center; }
+        td { font-size: 8.5pt; padding: 5px 4px; border-bottom: 1px solid #f0f0f5; }
+        td.r { text-align: right; } td.c { text-align: center; }
+        tr.alt td { background: #f7f5ff; }
+        .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 8pt; color: #fff; }
+        .b-danger { background: #dc3545; } .b-warning { background: #ffc107; color: #000; } .b-success { background: #198754; }
+        .total-row td { font-weight: bold; background: #f0f0f5; }
+        .right { text-align: right; }
+        .btn-print { position: fixed; top: 10px; right: 10px; }
+    </style>
+</head>
+<body>
+    <button class="btn-print no-print" onclick="window.print()">Imprimir</button>
+    <div class="header">
+        <div>
+            <div class="title">Historial de Deudas</div>
+            <div class="sub">Deudor: <strong>{{ deudor.nombre_display }}</strong></div>
+        </div>
+        <div class="right">
+            <div class="sub">Impreso: {{ ahora|date:"d/m/Y H:i" }}</div>
+            <div class="sub">{{ deudas|length }} deuda(s)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="kv"><small>Alias</small><strong>{{ deudor.alias|default:'-' }}</strong></div>
+        <div class="kv"><small>CI</small><strong>{{ deudor.ci|default:'-' }}</strong></div>
+        <div class="kv"><small>Teléfono</small><strong>{{ deudor.telefono|default:'-' }}</strong></div>
+        <div class="kv"><small>Estado</small><strong>{% if deudor.activo %}Activo{% else %}Inactivo{% endif %}</strong></div>
+        <div class="kv"><small>Saldo pendiente</small><strong style="color:#dc3545;">${{ saldo|floatformat:2 }}</strong></div>
+        <div class="kv"><small>Pendientes</small><strong>{{ num_pendientes }}</strong></div>
+    </div>
+
+    <h3 style="font-size:12pt; margin:10px 0 4px;">Deudas</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>No.</th><th>Tipo</th><th>Motivo</th><th class="r">Monto</th><th class="r">Abonado</th><th class="r">Saldo</th><th class="c">Estado</th><th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in deudas %}
+            <tr class="{% cycle '' 'alt' %}">
+                <td class="mono">{{ d.numero_deuda }}</td>
+                <td>{% if d.tipo == 'producto' %}Producto{% if d.presentacion %} ({{ d.cantidad }} x {{ d.presentacion.nombre }}){% endif %}{% else %}Dinero{% endif %}</td>
+                <td>{{ d.motivo_display|truncatechars:40 }}</td>
+                <td class="r">${{ d.monto|floatformat:2 }}</td>
+                <td class="r">${{ d.calc_abonado|floatformat:2 }}</td>
+                <td class="r" style="font-weight:bold; color:{% if d.calc_saldo > 0 %}#dc3545{% else %}#198754{% endif %};">${{ d.calc_saldo|floatformat:2 }}</td>
+                <td class="c">
+                    {% if d.calc_pagada %}<span class="badge b-success">Pagada</span>
+                    {% elif d.calc_abonado > 0 %}<span class="badge b-warning">Parcial</span>
+                    {% else %}<span class="badge b-danger">Pendiente</span>{% endif %}
+                </td>
+                <td>{{ d.fecha_registro|date:"d/m/Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" style="text-align:center; color:#8d8da0;">Sin deudas registradas</td></tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="3" class="r">Totales</td>
+                <td class="r">${{ total_monto|floatformat:2 }}</td>
+                <td class="r">${{ total_abonado|floatformat:2 }}</td>
+                <td class="r">${{ saldo|floatformat:2 }}</td>
+                <td colspan="2"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    {% if abonos %}
+    <h3 style="font-size:12pt; margin:14px 0 4px;">Historial de Pagos</h3>
+    <table>
+        <thead>
+            <tr><th>Fecha</th><th>Deuda</th><th class="r">Monto</th><th>Método</th><th>Nota</th></tr>
+        </thead>
+        <tbody>
+            {% for a in abonos %}
+            <tr class="{% cycle '' 'alt' %}">
+                <td>{{ a.fecha|date:"d/m/Y H:i" }}</td>
+                <td class="mono">{{ a.numero_deuda }}</td>
+                <td class="r">${{ a.monto|floatformat:2 }}</td>
+                <td>{{ a.get_metodo_display }}</td>
+                <td>{{ a.nota|default:'-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <script>window.onload = function(){ window.print(); };</script>
+</body>
+</html>

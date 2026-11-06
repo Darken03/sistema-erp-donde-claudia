@@ -16,6 +16,7 @@ urlpatterns = [
     path('productos/<int:pk>/', views.producto_detalle, name='producto_detalle'),
     path('productos/<int:pk>/editar/', views.producto_editar, name='producto_editar'),
     path('presentaciones/<int:pk>/eliminar/', views.presentacion_eliminar, name='presentacion_eliminar'),
+    path('productos/<int:pk>/imagen/recortar/', views.producto_imagen_recortar, name='producto_imagen_recortar'),
     path('productos/<int:pk>/eliminar-imagen/', views.producto_imagen_eliminar, name='producto_imagen_eliminar'),
     path('productos/<int:pk>/eliminar/', views.producto_eliminar, name='producto_eliminar'),
     path('productos/<int:pk>/eliminar-definitivo/', views.producto_eliminar_definitivo, name='producto_eliminar_definitivo'),
@@ -61,10 +62,22 @@ urlpatterns = [
     path('gastos/crear/', views.gasto_crear, name='gasto_crear'),
     path('gastos/<int:pk>/editar/', views.gasto_editar, name='gasto_editar'),
     path('gastos/<int:pk>/eliminar/', views.gasto_eliminar, name='gasto_eliminar'),
-    # Entradas
+    # Entradas (historial de solo lectura: el flujo actual es almacén -> traslado;
+    # en modo solo-POS el admin crea/elimina entradas directas al POS)
     path('entradas/', views.entrada_lista, name='entrada_lista'),
     path('entradas/crear/', views.entrada_crear, name='entrada_crear'),
     path('entradas/<int:pk>/eliminar/', views.entrada_eliminar, name='entrada_eliminar'),
+    # Almacén (admin + almacenero)
+    path('almacen/', views.almacen_panel, name='almacen_panel'),
+    path('almacen/existencias/', views.almacen_stock, name='almacen_stock'),
+    path('almacen/entradas/', views.almacen_entrada_lista, name='almacen_entrada_lista'),
+    path('almacen/entradas/nueva/', views.almacen_entrada_crear, name='almacen_entrada_crear'),
+    path('almacen/entradas/<int:pk>/cancelar/', views.almacen_entrada_cancelar, name='almacen_entrada_cancelar'),
+    path('almacen/traslados/', views.almacen_traslado_lista, name='almacen_traslado_lista'),
+    path('almacen/traslados/nuevo/', views.almacen_traslado_crear, name='almacen_traslado_crear'),
+    path('almacen/traslados/<int:pk>/cancelar/', views.almacen_traslado_cancelar, name='almacen_traslado_cancelar'),
+    path('almacen/movimientos/', views.almacen_movimientos, name='almacen_movimientos'),
+    path('almacen/ajuste/', views.almacen_ajuste, name='almacen_ajuste'),
     # Retiros Donacion
     path('donaciones/', views.retiro_donacion_lista, name='retiro_donacion_lista'),
     path('donaciones/crear/', views.retiro_donacion_crear, name='retiro_donacion_crear'),
@@ -74,8 +87,11 @@ urlpatterns = [
     path('submayor/<int:producto_id>/', views.submayor_detalle, name='submayor_detalle'),
     # Deudas
     # Deudores y Deudas
+    path('deudores/', views.deudor_lista, name='deudor_lista'),
     path('deudores/crear/', views.deudor_crear, name='deudor_crear'),
     path('deudores/<int:pk>/', views.deudor_detalle, name='deudor_detalle'),
+    path('deudores/<int:pk>/imprimir/', views.deudor_impresion, name='deudor_impresion'),
+    path('deudores/totales/imprimir/', views.deudores_totales_impresion, name='deudores_totales_impresion'),
     path('deudores/<int:pk>/editar/', views.deudor_editar, name='deudor_editar'),
     path('deudores/<int:pk>/toggle/', views.deudor_toggle, name='deudor_toggle'),
     path('deudores/<int:pk>/abonar/', views.deudor_abonar, name='deudor_abonar'),
@@ -111,8 +127,19 @@ urlpatterns = [
     path('mostrador/', views.mostrador_display, name='mostrador_display'),
     # Catálogo público de la tienda (vitrina web, sin login ni compra)
     path('catalogo/', views.catalogo, name='catalogo'),
+    # Vitrina Marketplace /store (existencias exactas en tiempo real, sin login)
+    path('store/', views.store, name='store'),
+    path('store/buscar/', views.store_buscar, name='store_buscar'),
+    path('store/categoria/<int:pk>/', views.store_categoria, name='store_categoria'),
+    path('store/api/estado/', views.store_api_estado, name='store_api'),
+    path('store/api/producto/<int:pk>/', views.store_producto_detalle, name='store_producto_api'),
     path('mostrador/estado/', views.mostrador_estado, name='mostrador_estado'),
     path('pos/mostrador/empujar/', views.pos_mostrador_empujar, name='pos_mostrador_empujar'),
     path('pos/mostrador/limpiar/', views.pos_mostrador_limpiar, name='pos_mostrador_limpiar'),
+    # Configuración (solo admin)
+    path('configuracion/', views.configuracion, name='configuracion'),
+    path('configuracion/almacenes/crear/', views.config_almacen_crear, name='config_almacen_crear'),
+    path('configuracion/almacenes/<int:pk>/editar/', views.config_almacen_editar, name='config_almacen_editar'),
+    path('configuracion/almacenes/<int:pk>/toggle/', views.config_almacen_toggle, name='config_almacen_toggle'),
 ]
 

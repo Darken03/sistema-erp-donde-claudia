@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms import inlineformset_factory
 from PIL import Image
-from .models import Producto, Categoria, Empleado, PresentacionProducto, PerfilUsuario
+from .models import Producto, Categoria, Empleado, PresentacionProducto, PerfilUsuario, Almacen, ConfiguracionTienda
 
 try:
     from pillow_heif import register_heif_opener
@@ -20,6 +20,35 @@ def _es_heic(nombre, content_type=None):
         return True
     ct = (content_type or '').lower()
     return ct in ('image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence')
+
+
+def _convertir_a_webp(upload, max_lado=1600, calidad=85):
+    """Convierte una imagen subida a WebP (mismo recorte, fondo si hay alfa)."""
+    upload.seek(0)
+    img = Image.open(upload)
+    img.load()
+    if img.mode in ('RGBA', 'LA', 'PA'):
+        try:
+            if img.getchannel('A').getextrema() == (255, 255):
+                img = img.convert('RGB')
+        except Exception:
+            img = img.convert('RGB')
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    # Limita a max_lado px para no guardar fotos gigantes de celular.
+    img.thumbnail((max_lado, max_lado), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format='WEBP', quality=calidad, method=6)
+    buf.seek(0)
+    base = os.path.splitext(getattr(upload, 'name', 'foto') or 'foto')[0]
+    return SimpleUploadedFile(f'{base}.webp', buf.read(), content_type='image/webp')
+
+
+def _es_webp(nombre, content_type=None):
+    ext = os.path.splitext(nombre or '')[1].lower()
+    if ext == '.webp':
+        return True
+    return (content_type or '').lower() == 'image/webp'
 
 
 def _convertir_a_jpeg(uploaded_file):
@@ -66,14 +95,25 @@ class ProductoForm(forms.ModelForm):
         f = self.cleaned_data.get('imagen')
         if not f:
             return f
-        if _es_heic(getattr(f, 'name', ''), getattr(f, 'content_type', '')):
+        nombre = getattr(f, 'name', '') or ''
+        content_type = getattr(f, 'content_type', '') if hasattr(f, 'content_type') else ''
+        if _es_heic(nombre, content_type):
             try:
-                return _convertir_a_jpeg(f)
+                # HEIC -> JPEG intermedio (luego cae al WebP de abajo).
+                f = _convertir_a_jpeg(f)
+                nombre, content_type = f.name, f.content_type
             except Exception:
                 raise forms.ValidationError(
                     'No se pudo leer la imagen HEIC. Cambie el iPhone a '
                     'Ajustes > Camara > Formatos > Mas compatible o use JPG.'
                 )
+        if not _es_webp(nombre, content_type) and hasattr(f, 'content_type'):
+            # Archivo recién subido en otro formato: normalizar a WebP.
+            try:
+                return _convertir_a_webp(f)
+            except Exception:
+                raise forms.ValidationError(
+                    'No se pudo procesar la imagen. Use JPG, PNG o WebP.')
         return f
 
     class Meta:
@@ -132,14 +172,98 @@ PresentacionFormSet = inlineformset_factory(
 )
 
 
+class AlmacenForm(forms.ModelForm):
+    class Meta:
+        model = Almacen
+        fields = ['nombre', 'descripcion', 'activo']
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre del almacén'}),
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'activo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_nombre(self):
+        nombre = (self.cleaned_data.get('nombre') or '').strip()
+        if not nombre:
+            raise forms.ValidationError('El nombre es obligatorio.')
+        qs = Almacen.objects.filter(nombre__iexact=nombre)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('Ya existe un almacén con ese nombre.')
+        return nombre
+
+
+class ConfigTiendaForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['nombre_tienda', 'logo', 'telefono', 'direccion']
+        widgets = {
+            'nombre_tienda': forms.TextInput(attrs={'class': 'form-control'}),
+            'logo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control'}),
+            'direccion': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+
+class ConfigAparienciaForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['color_acento', 'tema_por_defecto']
+        widgets = {
+            'color_acento': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
+            'tema_por_defecto': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+
+class ConfigRegionalForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = ['moneda', 'simbolo_moneda', 'impuesto_defecto', 'idioma']
+        widgets = {
+            'moneda': forms.TextInput(attrs={'class': 'form-control'}),
+            'simbolo_moneda': forms.TextInput(attrs={'class': 'form-control'}),
+            'impuesto_defecto': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'idioma': forms.Select(attrs={'class': 'form-select'}, choices=[('es', 'Español')]),
+        }
+
+
 class CategoriaForm(forms.ModelForm):
     class Meta:
         model = Categoria
-        fields = ['nombre', 'descripcion']
+        fields = ['nombre', 'descripcion', 'padre', 'visible_store', 'icono']
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la categoria'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'padre': forms.Select(attrs={'class': 'form-select'}),
+            'visible_store': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'icono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '🎃 o bi-basket', 'maxlength': '30'}),
         }
+        labels = {
+            'padre': 'Categoría padre (opcional)',
+            'visible_store': 'Mostrar en la tienda (/store)',
+            'icono': 'Icono (emoji o clase Bootstrap)',
+        }
+        help_texts = {
+            'icono': 'Emoji (🎃, 🍎) o clase Bootstrap Icons (bi-basket, bi-cup). Vacío = inicial del nombre.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # La padre no puede ser uno mismo ni uno de sus descendientes.
+        qs = Categoria.objects.order_by('nombre')
+        inst = getattr(self, 'instance', None)
+        if inst is not None and inst.pk:
+            excluidos = {inst.pk}
+            pendientes = list(inst.hijas.all())
+            while pendientes:
+                h = pendientes.pop()
+                if h.pk not in excluidos:
+                    excluidos.add(h.pk)
+                    pendientes.extend(list(h.hijas.all()))
+            qs = qs.exclude(pk__in=excluidos)
+        self.fields['padre'].queryset = qs
+        self.fields['padre'].required = False
 
 
 class EmpleadoForm(forms.ModelForm):

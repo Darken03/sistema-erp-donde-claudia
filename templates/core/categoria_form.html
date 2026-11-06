@@ -34,6 +34,18 @@
                         {% endif %}
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.icono.id_for_label }}">Icono</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="flex-grow-1">{{ form.icono }}</div>
+                            <span class="cat-preview-icon" id="iconoPreview">C</span>
+                        </div>
+                        <div class="form-text">Emoji (🎃, 🍎) o clase Bootstrap Icons (bi-basket). Vacío = inicial del nombre. Se muestra en el POS y menús.</div>
+                        {% if form.icono.errors %}
+                            <div class="text-danger small mt-1">{{ form.icono.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
                     <div class="mb-1">
                         <label class="form-label" for="{{ form.descripcion.id_for_label }}">Descripción</label>
                         {{ form.descripcion }}
@@ -45,6 +57,32 @@
                             <div class="text-danger small mt-1">{{ form.descripcion.errors.0 }}</div>
                         {% endif %}
                     </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-diagram-3"></i></span>
+                        <div><h5>Organización y tienda</h5><small>Agrupa bajo una padre y decide si se muestra en /store</small></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ form.padre.id_for_label }}">Categoría padre (opcional)</label>
+                        {{ form.padre }}
+                        <div class="form-text">Vacío = categoría principal en la tienda.</div>
+                        {% if form.padre.errors %}
+                            <div class="text-danger small mt-1">{{ form.padre.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-check form-switch">
+                        {{ form.visible_store }}
+                        <label class="form-check-label" for="{{ form.visible_store.id_for_label }}">Mostrar en la tienda (/store)</label>
+                    </div>
+                    {% if form.visible_store.errors %}
+                        <div class="text-danger small mt-1">{{ form.visible_store.errors.0 }}</div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -116,6 +154,8 @@ textarea.form-control { min-height:96px; resize:vertical; }
     var prevName = document.getElementById('catPrevName');
     var prevIcon = document.getElementById('catPrevIcon');
     var descCount = document.getElementById('descCount');
+    var iconoInput = document.getElementById('{{ form.icono.id_for_label }}');
+    var iconoPreview = document.getElementById('iconoPreview');
     function paint(){
         var v = (nameInput && nameInput.value || '').trim();
         if (nameCount) nameCount.textContent = (nameInput ? nameInput.value.length : 0) + '/100';
@@ -126,6 +166,19 @@ textarea.form-control { min-height:96px; resize:vertical; }
     function paintDesc(){
         if (descCount && descInput) descCount.textContent = (descInput.value.length ? descInput.value.length + ' car.' : '');
     }
+    function paintIcono(){
+        if (!iconoPreview || !iconoInput) return;
+        var v = (iconoInput.value || '').trim();
+        iconoPreview.textContent = '';
+        iconoPreview.style.background = v ? 'transparent' : '';
+        if (v.slice(0, 3) === 'bi-'){
+            var i = document.createElement('i');
+            i.className = 'bi ' + v;
+            iconoPreview.appendChild(i);
+        } else {
+            iconoPreview.textContent = v || ((nameInput && nameInput.value.trim().charAt(0) || 'C').toUpperCase());
+        }
+    }
     if (nameInput){
         nameInput.setAttribute('maxlength', '100');
         if (!nameInput.getAttribute('placeholder')) nameInput.setAttribute('placeholder', 'Ej. Carnes, Lácteos, Bebidas…');
@@ -135,7 +188,9 @@ textarea.form-control { min-height:96px; resize:vertical; }
         if (!descInput.getAttribute('placeholder')) descInput.setAttribute('placeholder', 'Detalle opcional de la categoría…');
         descInput.addEventListener('input', paintDesc);
     }
-    paint(); paintDesc();
+    paint(); paintDesc(); paintIcono();
+    if (iconoInput) iconoInput.addEventListener('input', paintIcono);
+    if (nameInput) nameInput.addEventListener('input', paintIcono);
     if (nameInput) nameInput.focus();
 })();
 </script>

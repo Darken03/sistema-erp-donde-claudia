@@ -12,7 +12,7 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4 text-center">
                 <p class="lead">¿Está seguro que desea eliminar al siguiente deudor?</p>
-                <p><strong>Deudor:</strong> {{ deudor.nombre_completo }}</p>
+                <p><strong>Deudor:</strong> {{ deudor.nombre_display }}</p>
                 <p><strong>CI:</strong> {{ deudor.ci|default:'-' }}</p>
                 <form method="post" class="d-flex justify-content-center gap-2 mt-3">
                     {% csrf_token %}

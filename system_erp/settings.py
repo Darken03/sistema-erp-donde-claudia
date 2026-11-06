@@ -34,13 +34,22 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
-    '192.168.86.213',
+    '192.168.86.206',
     'dondeclaudia.pythonanywhere.com',
+]
+# Hosts extra vía entorno (Enzonic: DJANGO_ALLOWED_HOSTS=mi-app.enzonic.com).
+ALLOWED_HOSTS += [
+    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if h.strip()
 ]
 
 # Necesario para que los POST (login, formularios, POS) funcionen por HTTPS.
 CSRF_TRUSTED_ORIGINS = [
     'https://dondeclaudia.pythonanywhere.com',
+]
+CSRF_TRUSTED_ORIGINS += [
+    ('https://' + h.strip()) for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if h.strip()
 ]
 
 LOGIN_URL = '/login/'
@@ -82,6 +91,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.views.configuracion_tienda',
             ],
         },
     },

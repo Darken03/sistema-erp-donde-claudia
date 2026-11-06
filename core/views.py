@@ -22,8 +22,14 @@ from .models import (
     Producto, Categoria, Venta, DetalleVenta, PerfilUsuario, Empleado, Turno, Gasto, EntradaProducto, RetiroDonacion, InventarioDiario, MovimientoInventario, Deuda, Deudor, AbonoDeuda, MostradorEstado,
     fmt_cantidad_unidad, ArqueoTurno, ConteoCiego, ConteoCiegoLinea,
     DENOMINACIONES_CUP, DENOMINACIONES_CUP_VALOR,
+    ALMACEN_PROVEEDOR, almacen_proveedor_nombre, Almacen, ConfiguracionTienda,
+    get_almacen_unico, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento,
+    PuntoVenta,
 )
-from .forms import ProductoForm, CategoriaForm, EmpleadoForm, PresentacionFormSet
+from .forms import (
+    ProductoForm, CategoriaForm, EmpleadoForm, PresentacionFormSet,
+    AlmacenForm, ConfigTiendaForm, ConfigAparienciaForm, ConfigRegionalForm,
+)
 
 
 def ahora_servidor():
@@ -34,6 +40,41 @@ def ahora_servidor():
 # Pedir una fecha más vieja solo generaba filas ficticias en la BD
 # (inicial = stock vivo), por eso se bloquea a toda costa.
 FECHA_INICIO_SISTEMA = datetime(2026, 9, 22).date()
+
+
+def _log_cambio_precio(producto, compra_antes, compra_despues,
+                       venta_antes, venta_despues,
+                       accion='edicion_manual', motivo='', usuario=None,
+                       costo_entrada=None, entrada=None):
+    """Audita un cambio de costo/venta (Cuba: precios volátiles).
+
+    Sin cambio real no crea fila (devuelve None). Minimal para que el IPB
+    futuro pueda mostrar el precio del día en vez del actual.
+    """
+    from decimal import Decimal as _D
+    from .models import HistorialPrecio
+    try:
+        ca = _D(str(compra_antes or 0))
+        cd = _D(str(compra_despues or 0))
+        va = _D(str(venta_antes or 0))
+        vd = _D(str(venta_despues or 0))
+    except Exception:
+        return None
+    if ca == cd and va == vd:
+        return None
+    try:
+        margen = (vd - cd) / cd if cd > 0 else _D('0')
+    except Exception:
+        margen = _D('0')
+    return HistorialPrecio.objects.create(
+        producto=producto,
+        precio_compra_antes=ca, precio_compra_despues=cd,
+        precio_venta_antes=va, precio_venta_despues=vd,
+        costo_entrada=(None if costo_entrada is None else _D(str(costo_entrada))),
+        entrada=entrada,
+        margen_resultante=margen,
+        accion=accion, motivo=motivo or '', usuario=usuario,
+    )
 
 
 def _norm_sin_tildes(texto):
@@ -51,7 +92,6 @@ def _norm_sin_tildes(texto):
 # ============================================================
 # AUTENTICACION
 # ============================================================
-
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('core:redireccion_rol')
@@ -78,6 +118,15 @@ def redireccion_rol(request):
         perfil = request.user.perfil
         if perfil.es_admin:
             return redirect('core:dashboard')
+        elif perfil.es_almacenero:
+            if modo_actual() == 'solo_pos':
+                # Spec §3: en solo-POS el almacenero queda sin pantallas.
+                messages.warning(
+                    request,
+                    'El rol almacenero no tiene pantallas en el modo solo-POS: '
+                    'se sugiere reasignarlo a cajero.')
+                return redirect('core:pos')
+            return redirect('core:almacen_panel')
         else:
             return redirect('core:pos')
     except PerfilUsuario.DoesNotExist:
@@ -99,10 +148,83 @@ def requiere_admin(view_func):
     return wrapper
 
 
+def requiere_almacen(view_func):
+    """Permite admin o almacenero. El cajero rebota al POS."""
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('core:login')
+        try:
+            perfil = request.user.perfil
+            if not (perfil.es_admin or perfil.es_almacenero):
+                return redirect('core:pos')
+        except PerfilUsuario.DoesNotExist:
+            pass
+        return view_func(request, *args, **kwargs)
+    wrapper.__name__ = view_func.__name__
+    wrapper.__doc__ = view_func.__doc__
+    return wrapper
+
+
+# ============================================================
+# MODOS DE OPERACIÓN (spec 2026-10-10-modos-operacion, §1-2).
+# Cambiar de modo NUNCA borra datos: lo no aplicable se oculta
+# (sidebar + decorador) y reaparece intacto al volver.
+# ============================================================
+
+MODOS_OPERACION = ('solo_pos', 'pos_almacenes', 'multi_pos')
+
+
+def modo_actual():
+    """Modo vigente según ConfiguracionTienda (default: comportamiento actual)."""
+    try:
+        modo = ConfiguracionTienda.get_solo().modo_operacion
+    except Exception:
+        return 'pos_almacenes'
+    return modo if modo in MODOS_OPERACION else 'pos_almacenes'
+
+
+def requiere_modo(*modos):
+    """Bloquea URLs fuera del modo actual (redirect + mensaje, sin 500)."""
+    def deco(view_func):
+        def wrapper(request, *args, **kwargs):
+            if modo_actual() not in modos:
+                messages.warning(
+                    request, 'No disponible en el modo actual.')
+                try:
+                    es_admin = request.user.perfil.es_admin
+                except Exception:
+                    es_admin = False
+                if es_admin:
+                    return redirect('core:dashboard')
+                return redirect('core:pos')
+            return view_func(request, *args, **kwargs)
+        wrapper.__name__ = view_func.__name__
+        wrapper.__doc__ = view_func.__doc__
+        return wrapper
+    return deco
+
+
+def _resolver_pos_filtro(request):
+    """PuntoVenta activo de `?pos=` solo en modo multi-POS.
+
+    Devuelve `(pos_o_None, puntos_venta_activos)`. Fuera de multi-POS el
+    filtro se ignora (historia con `punto_venta=NULL`): `(None, [])`.
+    Un `?pos=` ausente/inválido/inactivo también da `(None, lista)`.
+    """
+    if modo_actual() != 'multi_pos':
+        return None, []
+    puntos = list(PuntoVenta.activos().select_related('almacen'))
+    try:
+        pid = int(request.GET.get('pos') or 0)
+    except (ValueError, TypeError):
+        pid = 0
+    pos = next((p for p in puntos if p.pk == pid), None)
+    return pos, puntos
+
+
 # ============================================================
 # DASHBOARD
 # ============================================================
-
 @requiere_admin
 def dashboard(request):
     from datetime import timedelta
@@ -169,7 +291,6 @@ def dashboard(request):
 # ============================================================
 # PRODUCTOS
 # ============================================================
-
 @requiere_admin
 def producto_lista(request):
     productos = Producto.objects.select_related('categoria').order_by('nombre')
@@ -219,10 +340,36 @@ def producto_detalle(request, pk):
 
 @requiere_admin
 def producto_crear(request):
+    def _next_seguro(valor):
+        if not valor:
+            return ''
+        valor = str(valor).strip()
+        # Solo rutas internas (evita open-redirect): /algo, sin // ni esquema.
+        if not valor.startswith('/') or valor.startswith('//'):
+            return ''
+        if ' ' in valor or '\\' in valor:
+            return ''
+        return valor
+
+    next_url = _next_seguro(request.POST.get('next') or request.GET.get('next'))
+    desde_almacen = next_url.startswith('/almacen/')
     if request.method == 'POST':
         form = ProductoForm(request.POST, request.FILES)
         if form.is_valid():
             producto = form.save()
+            if desde_almacen:
+                # Nace solo en almacén: sin stock en el POS e invisible
+                # hasta su primer traslado. La mercancía entra vía Entrada.
+                producto.stock = Decimal('0')
+                producto.visible_pos = False
+                producto.save(update_fields=['stock', 'visible_pos'])
+                messages.info(
+                    request,
+                    f'{producto.nombre} nace solo en el almacén (sin stock en el POS). '
+                    'Regístrele una Entrada y trasládelo para publicarlo.')
+            else:
+                producto.visible_pos = True
+                producto.save(update_fields=['visible_pos'])
             formset = PresentacionFormSet(request.POST, instance=producto)
             if formset.is_valid():
                 formset.save()
@@ -230,6 +377,9 @@ def producto_crear(request):
             else:
                 _asegurar_presentacion_default(producto)
                 messages.warning(request, 'Producto creado, pero revise las presentaciones.')
+            if next_url:
+                sep = '&' if '?' in next_url else '?'
+                return redirect(f'{next_url}{sep}producto={producto.pk}')
             return redirect('core:producto_lista')
         else:
             formset = PresentacionFormSet(request.POST)
@@ -238,6 +388,7 @@ def producto_crear(request):
         formset = PresentacionFormSet()
     return render(request, 'core/producto_form.html', {
         'form': form, 'formset': formset, 'titulo': 'Crear Producto',
+        'next': next_url,
     })
 
 
@@ -278,6 +429,12 @@ def _asegurar_presentacion_default(producto):
 @requiere_admin
 def producto_editar(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
+    # Nombre en BD antes de que el form mutara la instancia (para borrar
+    # el archivo anterior si la imagen cambia).
+    try:
+        imagen_anterior = Producto.objects.filter(pk=producto.pk).values_list('imagen', flat=True).first() or ''
+    except Exception:
+        imagen_anterior = ''
     if request.method == 'POST':
         form = ProductoForm(request.POST, request.FILES, instance=producto)
         # El stock NO se toca aquí: solo se modifica desde Ajustes (o Entradas/Ventas/POS)
@@ -296,9 +453,26 @@ def producto_editar(request, pk):
                     ': tiene venta(s) en el día de hoy.'
                 )
             else:
+                compra_antes = producto.precio_compra
+                venta_antes = producto.precio_venta
                 form.save()
                 formset.save()
                 _asegurar_presentacion_default(producto)
+                producto.refresh_from_db()
+                # Al cambiar la imagen se borra el archivo anterior (evita huérfanos).
+                imagen_nueva = producto.imagen.name if producto.imagen else ''
+                if imagen_anterior and imagen_nueva and imagen_anterior != imagen_nueva:
+                    try:
+                        from django.core.files.storage import default_storage
+                        if default_storage.exists(imagen_anterior):
+                            default_storage.delete(imagen_anterior)
+                    except Exception:
+                        pass
+                _log_cambio_precio(
+                    producto, compra_antes, producto.precio_compra,
+                    venta_antes, producto.precio_venta,
+                    accion='edicion_manual', motivo='',
+                    usuario=request.user)
                 return redirect('core:producto_detalle', pk=producto.pk)
     else:
         form = ProductoForm(instance=producto)
@@ -319,6 +493,8 @@ def producto_editar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def presentacion_eliminar(request, pk):
     """Borrado directo de una presentación (cruz ✕ de la tarjeta).
@@ -357,6 +533,8 @@ def presentacion_eliminar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def producto_imagen_eliminar(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
@@ -372,6 +550,90 @@ def producto_imagen_eliminar(request, pk):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'ok': True})
     return redirect('core:producto_editar', pk=pk)
+
+
+@requiere_admin
+def producto_imagen_recortar(request, pk):
+    """Recorta la imagen del producto (cuadrado 1:1 u otras proporciones).
+
+    GET: editor visual con selector de proporción sobre la imagen real.
+    POST (x, y, w, h en píxeles naturales): recorta el rectángulo,
+    convierte a WebP y reemplaza la imagen (borra el archivo anterior
+    si cambia de nombre).
+    """
+    from PIL import Image as _Img
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    producto = get_object_or_404(Producto, pk=pk)
+    nombre_actual = producto.imagen.name if producto.imagen else ''
+    if not nombre_actual or not default_storage.exists(nombre_actual):
+        messages.warning(request, 'Este producto no tiene imagen para recortar.')
+        return redirect('core:producto_detalle', pk=pk)
+    if request.method == 'POST':
+        try:
+            x, y, w, h = (int(request.POST.get(k, 0) or 0) for k in ('x', 'y', 'w', 'h'))
+        except (TypeError, ValueError):
+            x = y = w = h = 0
+        if x < 0 or y < 0 or w < 50 or h < 50:
+            messages.error(request, 'Selección inválida: marque un área de al menos 50 × 50 px.')
+            return redirect('core:producto_imagen_recortar', pk=pk)
+        try:
+            with default_storage.open(nombre_actual, 'rb') as f:
+                img = _Img.open(f)
+                img.load()
+            ancho, alto = img.size
+            # Recorta el rectángulo y limita a los bordes reales.
+            x = max(0, min(x, ancho - 1))
+            y = max(0, min(y, alto - 1))
+            w = max(50, min(w, ancho - x))
+            h = max(50, min(h, alto - y))
+            recorte = img.crop((x, y, x + w, y + h))
+            if recorte.mode in ('RGBA', 'LA', 'PA'):
+                try:
+                    if recorte.getchannel('A').getextrema() == (255, 255):
+                        recorte = recorte.convert('RGB')
+                except Exception:
+                    recorte = recorte.convert('RGB')
+            elif recorte.mode != 'RGB':
+                recorte = recorte.convert('RGB')
+            import io as _io
+            import os as _os
+            import re as _re
+            import time as _time
+            buf = _io.BytesIO()
+            recorte.save(buf, format='WEBP', quality=88, method=6)
+            buf.seek(0)
+            base = _os.path.splitext(nombre_actual)[0]
+            # Quita sufijo previo de recorte para no acumular (_r123_r456...).
+            base = _re.sub(r'_r\d+$', '', base)
+            # Nombre único por recorte: la URL cambia y la Store/POS
+            # muestra la nueva imagen sin quedar la anterior cacheada.
+            nuevo = f"{base}_r{int(_time.time() * 1000)}.webp"
+            if default_storage.exists(nuevo):
+                default_storage.delete(nuevo)
+            default_storage.save(nuevo, ContentFile(buf.read()))
+            producto.imagen = nuevo
+            producto.save(update_fields=['imagen', 'fecha_actualizacion'])
+            if nuevo != nombre_actual and default_storage.exists(nombre_actual):
+                default_storage.delete(nombre_actual)
+        except Exception:
+            messages.error(request, 'No se pudo procesar la imagen. Inténtelo de nuevo.')
+            return redirect('core:producto_imagen_recortar', pk=pk)
+        messages.success(request, f'Imagen de "{producto.nombre}" recortada y convertida a WebP.')
+        return redirect('core:producto_detalle', pk=pk)
+    try:
+        with default_storage.open(nombre_actual, 'rb') as f:
+            img = _Img.open(f)
+            img.load()
+            tamano = img.size
+    except Exception:
+        messages.error(request, 'No se pudo leer la imagen actual.')
+        return redirect('core:producto_detalle', pk=pk)
+    return render(request, 'core/producto_imagen_recortar.html', {
+        'producto': producto,
+        'ancho': tamano[0],
+        'alto': tamano[1],
+    })
 
 
 def _conteo_relacionados_producto(producto):
@@ -494,6 +756,8 @@ def producto_eliminar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def producto_eliminar_definitivo(request, pk):
     """Versión JSON del borrado en 2 pasos (para AJAX).
@@ -543,22 +807,48 @@ def producto_eliminar_definitivo(request, pk):
 # ============================================================
 # CATEGORIAS
 # ============================================================
-
 @requiere_admin
 def categoria_lista(request):
-    categorias = Categoria.objects.annotate(num_productos=Count('productos'))
-    return render(request, 'core/categoria_lista.html', {'categorias': categorias})
+    qs = Categoria.objects.select_related('padre').annotate(num_productos=Count('productos'))
+    cats = list(qs)
+    por_padre = {}
+    for c in cats:
+        por_padre.setdefault(c.padre_id, []).append(c)
+    for lista in por_padre.values():
+        lista.sort(key=lambda c: c.nombre.lower())
+    # Subtotales: productos del subárbol (padre + hijas recursivas).
+    hijos_map = {}
+    for c in cats:
+        hijos_map.setdefault(c.padre_id, []).append(c)
+    def _subtotal(cat):
+        total = getattr(cat, 'num_productos', 0) or 0
+        for h in hijos_map.get(cat.id, []):
+            total += _subtotal(h)
+        return total
+    for c in cats:
+        c.subtotal = _subtotal(c)
+    padres = por_padre.get(None, [])
+    arbol = [{'padre': p, 'hijas': por_padre.get(p.id, [])} for p in padres]
+    huerfanas = [c for c in cats if c.padre_id and not any(c.padre_id == x.id for x in cats)]
+    return render(request, 'core/categoria_lista.html', {'categorias': cats, 'padres': padres, 'arbol': arbol, 'huerfanas': huerfanas})
 
 
 @requiere_admin
 def categoria_crear(request):
+    padre_init = request.GET.get('padre')
     if request.method == 'POST':
         form = CategoriaForm(request.POST)
         if form.is_valid():
             form.save()
             return redirect('core:categoria_lista')
     else:
-        form = CategoriaForm()
+        initial = {}
+        try:
+            if padre_init and Categoria.objects.filter(pk=int(padre_init)).exists():
+                initial['padre'] = int(padre_init)
+        except (ValueError, TypeError):
+            pass
+        form = CategoriaForm(initial=initial)
     return render(request, 'core/categoria_form.html', {'form': form, 'titulo': 'Crear Categoria'})
 
 
@@ -587,13 +877,16 @@ def categoria_eliminar(request, pk):
 # ============================================================
 # EMPLEADOS
 # ============================================================
-
 @requiere_admin
 def empleado_lista(request):
     empleados = Empleado.objects.select_related('user').all()
+    es_multi_pos = modo_actual() == 'multi_pos'
     context = {
         'empleados': empleados,
         'ahora': timezone.make_aware(ahora_servidor()),
+        'es_multi_pos': es_multi_pos,
+        'puntos_venta': list(
+            PuntoVenta.activos().select_related('almacen')) if es_multi_pos else [],
     }
     return render(request, 'core/empleado_lista.html', context)
 
@@ -608,6 +901,11 @@ def empleado_crear(request):
             return redirect('core:empleado_lista')
     else:
         form = EmpleadoForm()
+        if modo_actual() == 'solo_pos':
+            messages.warning(
+                request,
+                'En el modo solo-POS el rol almacenero no tiene pantallas: '
+                'se sugiere asignar cajero.')
     return render(request, 'core/empleado_form.html', {'form': form, 'titulo': 'Crear Empleado'})
 
 
@@ -622,6 +920,11 @@ def empleado_editar(request, pk):
             return redirect('core:empleado_lista')
     else:
         form = EmpleadoForm(instance=empleado, user_instance=empleado.user)
+        if modo_actual() == 'solo_pos':
+            messages.warning(
+                request,
+                'En el modo solo-POS el rol almacenero no tiene pantallas: '
+                'se sugiere asignar cajero.')
     return render(request, 'core/empleado_form.html', {
         'form': form,
         'titulo': 'Editar Empleado',
@@ -630,6 +933,8 @@ def empleado_editar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def empleado_toggle_activo(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk)
@@ -669,13 +974,35 @@ def empleado_eliminar(request, pk):
 # ============================================================
 # TURNOS
 # ============================================================
-
 @requiere_admin
+
+
 @require_POST
 def turno_abrir(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk, activo=True)
     if empleado.en_turno:
         messages.warning(request, f'{empleado} ya tiene un turno abierto.')
+    elif modo_actual() == 'multi_pos':
+        # Spec §5: un POS por turno. El trabajador selecciona a qué POS va
+        # a trabajar (POST 'punto_venta'); su asignación se fija al abrir
+        # turno y puede cambiar entre turnos. Sin POS no hay turno.
+        try:
+            pos_id = int(request.POST.get('punto_venta') or 0)
+        except (ValueError, TypeError):
+            pos_id = 0
+        pos = PuntoVenta.objects.filter(pk=pos_id, activo=True).first()
+        if pos is None:
+            messages.error(
+                request,
+                'Seleccione el punto de venta del turno '
+                '(obligatorio en el modo multi-POS).')
+        else:
+            Turno.objects.create(empleado=empleado, punto_venta=pos)
+            if empleado.punto_venta_id != pos.pk:
+                empleado.punto_venta = pos
+                empleado.save(update_fields=['punto_venta'])
+            messages.success(
+                request, f'Turno abierto para {empleado} en {pos}.')
     else:
         Turno.objects.create(empleado=empleado)
         messages.success(request, f'Turno abierto para {empleado}.')
@@ -695,7 +1022,6 @@ def empleado_turnos(request, pk):
 # ============================================================
 # VENTAS
 # ============================================================
-
 @requiere_admin
 def venta_lista(request):
     from datetime import timedelta
@@ -714,7 +1040,13 @@ def venta_lista(request):
     else:
         fecha = hoy
 
-    ventas = Venta.objects.filter(cancelada=False).select_related('cajero')
+    ventas = Venta.objects.filter(cancelada=False).select_related('cajero', 'punto_venta')
+
+    # Spec §5 multi-POS: filtro ?pos= por punto_venta (fuera de
+    # multi-POS se ignora).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
+    if pos_actual is not None:
+        ventas = ventas.filter(punto_venta=pos_actual)
 
     if periodo == 'dia':
         titulo = f'Ventas del dia {fecha.strftime("%d/%m/%Y")}'
@@ -764,6 +1096,11 @@ def venta_lista(request):
     
     if empleado_filtro:
         gastos_qs = gastos_qs.filter(cajero__username=empleado_filtro)
+
+    # En la vista por POS, los gastos atribuidos son los de sus turnos
+    # (Gasto.turno→punto_venta); los de admin sin turno quedan en el global.
+    if pos_actual is not None:
+        gastos_qs = gastos_qs.filter(turno__punto_venta=pos_actual)
     
     resumen_gastos = gastos_qs.aggregate(
         total=Sum(F('cantidad_efectivo') + F('cantidad_transferencia')) or 0,
@@ -789,6 +1126,9 @@ def venta_lista(request):
         'resumen_gastos_cantidad': resumen_gastos['cantidad'] or 0,
         'resumen_neto': (resumen['total'] or 0) - (resumen_gastos['total'] or 0),
         'hoy': hoy.strftime('%Y-%m-%d'),
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
     }
     return render(request, 'core/venta_lista.html', context)
 
@@ -810,6 +1150,12 @@ def venta_crear(request):
             pass
 
     if request.method == 'POST':
+        if modo_actual() == 'multi_pos':
+            messages.error(
+                request,
+                'En modo multi-POS la venta manual está desactivada: '
+                'venda desde el terminal del POS.')
+            return redirect('core:venta_crear')
         empleado_id = request.POST.get('cajero')
         fecha_str = request.POST.get('fecha', '')
         metodo_pago = request.POST.get('metodo_pago', 'efectivo')
@@ -834,6 +1180,12 @@ def venta_crear(request):
                 return redirect('core:venta_crear')
             fecha_hora = timezone.make_aware(
                 timezone.datetime.combine(fecha_elegida, ahora_servidor().time()))
+            turno = None
+            if fecha_elegida == hoy:
+                try:
+                    turno = cajero.empleado.turno_abierto
+                except Empleado.DoesNotExist:
+                    turno = None
 
             import json
             items = json.loads(productos_data or '[]')
@@ -845,6 +1197,7 @@ def venta_crear(request):
                 venta = Venta.objects.create(
                     numero_venta=Venta.generar_numero(),
                     cajero=cajero,
+                    turno=turno,
                     subtotal=Decimal('0'),
                     impuesto=Decimal('0'),
                     total=Decimal('0'),
@@ -876,6 +1229,7 @@ def venta_crear(request):
                         cantidad_base=cantidad_base,
                         precio_unitario=precio,
                         subtotal=precio * cantidad,
+                        costo_unitario_base=producto.precio_compra or 0,
                     )
                     _registrar_movimiento(producto, 'venta', cantidad_base, request.user,
                                           venta.id, f'Venta #{venta.numero_venta} manual ({fecha_elegida:%d/%m/%Y})')
@@ -922,9 +1276,28 @@ def venta_editar(request, pk):
     venta = get_object_or_404(Venta, pk=pk)
     detalles = venta.detalles.select_related('producto', 'presentacion').all()
     productos = Producto.objects.filter(activo=True).prefetch_related('presentaciones')
+    empleados = Empleado.objects.select_related('user').filter(Q(activo=True) | Q(user=venta.cajero)).distinct().order_by('user__first_name', 'user__username')
 
     if request.method == 'POST':
         action = request.POST.get('action')
+
+        if venta.turno_id is None and venta.fecha_venta.date() == ahora_servidor().date():
+            try:
+                turno = venta.cajero.empleado.turno_abierto
+            except Empleado.DoesNotExist:
+                turno = None
+            if turno is not None:
+                venta.turno = turno
+                venta.save(update_fields=['turno'])
+
+        if venta.punto_venta_id is not None and action in (
+                'agregar_producto', 'eliminar_detalle',
+                'actualizar_cantidad', 'cancelar_venta'):
+            messages.error(
+                request,
+                'Esta venta es de un punto de venta y no puede editarse '
+                'ni cancelarse aquí: use el terminal del POS.')
+            return redirect('core:venta_editar', pk=venta.pk)
 
         if action == 'agregar_producto':
             producto_id = request.POST.get('producto_id')
@@ -962,7 +1335,8 @@ def venta_editar(request, pk):
                         cantidad=cantidad,
                         cantidad_base=cantidad_base,
                         precio_unitario=precio,
-                        subtotal=precio * cantidad
+                        subtotal=precio * cantidad,
+                        costo_unitario_base=producto.precio_compra or 0,
                     )
 
                 _registrar_movimiento(producto, 'venta', cantidad_base, request.user, venta.id, f'Venta #{venta.numero_venta} - Producto agregado en edición')
@@ -1074,6 +1448,17 @@ def venta_editar(request, pk):
             messages.success(request, 'Metodo de pago actualizado.')
             return redirect('core:venta_editar', pk=venta.pk)
 
+        elif action == 'actualizar_cajero':
+            empleado_id = request.POST.get('cajero')
+            try:
+                cajero = User.objects.get(empleado__id=empleado_id) if empleado_id else venta.cajero
+                venta.cajero = cajero
+                venta.save(update_fields=['cajero'])
+                messages.success(request, 'Cajero actualizado correctamente.')
+            except Exception:
+                messages.error(request, 'Cajero inválido.')
+            return redirect('core:venta_editar', pk=venta.pk)
+
         elif action == 'guardar':
             messages.success(request, 'Venta actualizada correctamente.')
             return redirect('core:venta_detalle', pk=venta.pk)
@@ -1082,6 +1467,7 @@ def venta_editar(request, pk):
         'venta': venta,
         'detalles': detalles,
         'productos': productos,
+        'empleados': empleados,
     })
 
 
@@ -1096,12 +1482,38 @@ def _recalcular_venta(venta):
 # ============================================================
 # PUNTO DE VENTA
 # ============================================================
+def _turno_pos_almacen(request):
+    """(turno, pos, almacen) del turno abierto para el modo multi-POS.
+
+    Spec §5: el POS vende y descuenta directo del `AlmacenStock` del
+    almacén asignado (sin stock propio). Si el usuario no tiene turno
+    abierto o el turno no tiene POS, devuelve Nones y la vista debe
+    bloquear con mensaje (sin descontar nada).
+    """
+    try:
+        turno = request.user.empleado.turno_abierto
+    except Exception:
+        return None, None, None
+    if turno is None or turno.punto_venta_id is None:
+        return turno, None, None
+    pos = turno.punto_venta
+    almacen = pos.almacen if pos is not None else None
+    if pos is None or almacen is None:
+        return turno, None, None
+    return turno, pos, almacen
+
 
 @login_required
 def pos(request):
     # Verificar si es cajero y si tiene turno abierto
     try:
         perfil = request.user.perfil
+        if perfil.es_almacenero and not perfil.es_admin:
+            if modo_actual() != 'solo_pos':
+                return redirect('core:almacen_panel')
+            # En solo-POS el almacenero queda sin pantallas y opera en el
+            # POS (el aviso de reasignarlo a cajero se da en
+            # redireccion_rol): sigue al render del POS.
         if perfil.es_cajero:
             try:
                 empleado = request.user.empleado
@@ -1112,21 +1524,67 @@ def pos(request):
     except PerfilUsuario.DoesNotExist:
         pass
 
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
-    categorias = Categoria.objects.filter(productos__activo=True, productos__stock__gt=0).distinct()
-    
     es_admin = request.user.perfil.es_admin if hasattr(request.user, 'perfil') else False
 
+    if modo_actual() == 'multi_pos':
+        # Spec §5: catálogo = existencias del almacén del turno
+        # (`visible_pos` y `Producto.stock` no son la fuente aquí).
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            messages.warning(
+                request,
+                'Sin punto de venta asignado en el turno: abra el turno '
+                'seleccionando el punto de venta para vender.')
+            return render(request, 'core/pos.html', {
+                'productos': [],
+                'categorias': [],
+                'es_admin': es_admin,
+                'es_multi_pos': True,
+                'pos_actual': None,
+                'almacen_origen': None,
+                'bloqueo_pos': True,
+            })
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos_multi = list(Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones').order_by('nombre'))
+        for p in productos_multi:
+            # Solo memoria (NO guardar): la plantilla y el catálogo JS
+            # leen `producto.stock` como stock disponible.
+            p.stock = stock_map.get(p.id, Decimal('0'))
+        categorias_multi = Categoria.objects.filter(
+            productos__id__in=ids_multi).select_related('padre').distinct()
+        return render(request, 'core/pos.html', {
+            'productos': productos_multi,
+            'categorias': categorias_multi,
+            'arbol_pos': _arbol_pos(categorias_multi),
+            'es_admin': es_admin,
+            'es_multi_pos': True,
+            'pos_actual': pos_obj,
+            'almacen_origen': almacen,
+            'bloqueo_pos': False,
+        })
+
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').prefetch_related('presentaciones').order_by('nombre')
+    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True, productos__stock__gt=0).select_related('padre').distinct()
+    
     context = {
         'productos': productos,
         'categorias': categorias,
+        'arbol_pos': _arbol_pos(categorias),
         'es_admin': es_admin,
     }
     return render(request, 'core/pos.html', context)
 
 
-def _serializar_producto_pos(p):
-    """Producto + presentaciones para el POS (precio manual por presentación)."""
+def _serializar_producto_pos(p, stock_override=None):
+    """Producto + presentaciones para el POS (precio manual por presentación).
+
+    `stock_override`: en multi-POS el disponible viene del AlmacenStock
+    del turno (no de `Producto.stock`); el payload no cambia, así la
+    cola offline (`bizm_offline_queue_v1`) sigue compatible.
+    """
     pres = [{
         'id': pr.id,
         'nombre': pr.nombre,
@@ -1137,32 +1595,123 @@ def _serializar_producto_pos(p):
     if not pres:
         pres = [{'id': None, 'nombre': 'Unidad', 'factor': '1',
                  'precio': str(p.precio_venta), 'es_default': True}]
+    stock = stock_override if stock_override is not None else p.stock
     return {
         'id': p.id,
         'codigo': p.codigo,
         'nombre': p.nombre,
         'precio': str(p.precio_para()),
-        'stock': str(p.stock),
-        'stock_display': ('%g' % float(p.stock)),
+        'stock': str(stock),
+        'stock_display': ('%g' % float(stock)),
         'unidad': p.unidad_medida,
         'permite_decimal': p.permite_decimal,
         'imagen': p.imagen_url,
         'categoria': p.categoria.nombre if p.categoria else '',
         'categoria_id': p.categoria_id,
+        'es_nuevo': p.es_nuevo,
         'presentaciones': pres,
     }
 
 
+def _subarbol_categoria_ids(categoria_id):
+    """Id de la categoría + todos sus descendientes (para filtrar familia)."""
+    try:
+        cid = int(categoria_id)
+    except (TypeError, ValueError):
+        return set()
+    ids = {cid}
+    pendientes = [cid]
+    while pendientes:
+        actual = pendientes.pop()
+        hijas = list(Categoria.objects.filter(padre_id=actual).values_list('id', flat=True))
+        for h in hijas:
+            if h not in ids:
+                ids.add(h)
+                pendientes.append(h)
+    return ids
+
+
+def _arbol_pos(categorias):
+    """Padres con hijas (recursivo) para el menú en cascada del POS.
+
+    Incluye a los padres aunque no tengan productos directos, para
+    poder llegar a las hijas. Cada nodo: id, nombre, icono, hijas y
+    `familia` (ids del subárbol separados por coma, para filtrar).
+    """
+    por_id = {}
+    for c in categorias:
+        por_id[c.id] = c
+    # Ancestros necesarios aunque no tengan productos directos.
+    faltantes = set()
+    for c in list(por_id.values()):
+        a = c.padre
+        while a is not None and a.id not in por_id:
+            faltantes.add(a.id)
+            a = a.padre
+    if faltantes:
+        for c in Categoria.objects.filter(pk__in=faltantes).select_related('padre'):
+            por_id[c.id] = c
+    # Hijas en una sola query (sin N+1).
+    hijas_map = {}
+    for h in Categoria.objects.filter(padre_id__in=list(por_id)).order_by('nombre'):
+        if h.id in por_id:
+            hijas_map.setdefault(h.padre_id, []).append(h)
+
+    def _nodo(cat):
+        nodos_hijas = [_nodo(h) for h in hijas_map.get(cat.id, [])]
+        fam = [cat.id]
+        for nh in nodos_hijas:
+            fam.extend(nh['_ids'])
+        return {
+            'id': cat.id, 'nombre': cat.nombre,
+            'icono': (cat.icono or '').strip(),
+            'hijas': nodos_hijas,
+            'familia': ','.join(str(i) for i in fam),
+            '_ids': fam,
+        }
+
+    raices = sorted(
+        [c for c in por_id.values() if c.padre_id not in por_id],
+        key=lambda c: c.nombre.lower())
+    arbol = [_nodo(c) for c in raices]
+    for n in arbol:
+        del n['_ids']
+        _limpiar_ids(n)
+    return arbol
+
+
+def _limpiar_ids(nodo):
+    for h in nodo['hijas']:
+        del h['_ids']
+        _limpiar_ids(h)
+
+
 @login_required
+
+
 @require_POST
 def pos_buscar_productos(request):
     query = request.POST.get('q', '').strip()
     categoria_id = request.POST.get('categoria', '')
 
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related(
-        'categoria').prefetch_related('presentaciones')
+    es_multi = (modo_actual() == 'multi_pos')
+    stock_map = {}
+    if es_multi:
+        # Spec §5: disponibilidad = AlmacenStock del almacén del turno.
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos = Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones')
+    else:
+        productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
+            'categoria').prefetch_related('presentaciones')
     if categoria_id:
-        productos = productos.filter(categoria_id=categoria_id)
+        # La familia incluye a la categoría elegida y sus descendientes.
+        productos = productos.filter(categoria_id__in=_subarbol_categoria_ids(categoria_id))
     if query:
         q_norm = _norm_sin_tildes(query)
         # El código no lleva tildes: filtro directo en BD.
@@ -1176,7 +1725,12 @@ def pos_buscar_productos(request):
                     ids_nombre.append(pid)
         productos = productos.filter(Q(id__in=set(ids_codigo) | set(ids_nombre)))
 
-    data = [_serializar_producto_pos(p) for p in productos.order_by('nombre')[:50]]
+    if es_multi:
+        data = [_serializar_producto_pos(
+            p, stock_override=stock_map.get(p.id, Decimal('0'))
+        ) for p in productos.order_by('nombre')[:50]]
+    else:
+        data = [_serializar_producto_pos(p) for p in productos.order_by('nombre')[:50]]
 
     return JsonResponse({'productos': data})
 
@@ -1198,6 +1752,8 @@ def _resolver_presentacion(producto, presentacion_id):
 
 
 @login_required
+
+
 @require_POST
 def pos_procesar_venta(request):
     try:
@@ -1213,11 +1769,28 @@ def pos_procesar_venta(request):
         if not items:
             return JsonResponse({'error': 'No hay productos en la venta.'}, status=400)
 
+        es_multi = (modo_actual() == 'multi_pos')
+        turno = None
+        pos_obj = None
+        almacen = None
+        if es_multi:
+            # Spec §5: el POS descuenta del almacén asignado al turno.
+            # Sin POS asignado se bloquea con mensaje (nada se descuenta).
+            turno, pos_obj, almacen = _turno_pos_almacen(request)
+            if pos_obj is None or almacen is None:
+                return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+            stock_map = _stock_map_para(almacen)
+
         subtotal = Decimal('0')
         detalles_data = []
 
         for item in items:
             producto = get_object_or_404(Producto, pk=item['id'])
+            if es_multi:
+                if not producto.activo:
+                    return JsonResponse({'error': f'{producto.nombre} no está disponible en el punto de venta.'}, status=400)
+            elif not producto.activo or not producto.visible_pos:
+                return JsonResponse({'error': f'{producto.nombre} no está disponible en el punto de venta.'}, status=400)
             try:
                 cantidad = Decimal(str(item['cantidad']))
             except Exception:
@@ -1234,7 +1807,11 @@ def pos_procesar_venta(request):
             cantidad_base = (cantidad * factor).quantize(Decimal('0.001'))
             if cantidad_base <= 0:
                 return JsonResponse({'error': f'Cantidad invalida para {producto.nombre}.'}, status=400)
-            if cantidad_base > producto.stock:
+            if es_multi:
+                disponible = stock_map.get(producto.id, Decimal('0'))
+                if cantidad_base > disponible:
+                    return JsonResponse({'error': f'Stock insuficiente para {producto.nombre}. Disponible: {"%g" % float(disponible)} {producto.unidad_medida} (Almacén {almacen.nombre})'}, status=400)
+            elif cantidad_base > producto.stock:
                 return JsonResponse({'error': f'Stock insuficiente para {producto.nombre}. Disponible: {"%g" % float(producto.stock)} {producto.unidad_medida}'}, status=400)
             # Precio y subtotal en enteros (ej. 220.2 -> 220). Cantidad sí puede ser decimal (lb, fracciones).
             precio_entero = precio.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
@@ -1247,6 +1824,7 @@ def pos_procesar_venta(request):
                 'cantidad_base': cantidad_base,
                 'precio_unitario': precio_entero,
                 'subtotal': item_subtotal,
+                'costo_unitario_base': producto.precio_compra or Decimal('0'),
             })
 
         total = subtotal.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
@@ -1257,39 +1835,69 @@ def pos_procesar_venta(request):
 
         cambio = total_pagado - total
 
-        # Obtener turno activo del empleado
-        turno = None
-        try:
-            empleado = request.user.empleado
-            turno = empleado.turno_abierto
-        except Empleado.DoesNotExist:
-            pass
+        if not es_multi:
+            # Obtener turno activo del empleado
+            turno = None
+            try:
+                empleado = request.user.empleado
+                turno = empleado.turno_abierto
+            except Empleado.DoesNotExist:
+                pass
 
-        numero_venta = Venta.generar_numero()
-        venta = Venta.objects.create(
-            numero_venta=numero_venta,
-            cajero=request.user,
-            turno=turno,
-            subtotal=subtotal,
-            impuesto=Decimal('0'),
-            total=total,
-            metodo_pago=metodo_pago,
-            monto_recibido=monto_efectivo,
-            monto_transferencia=monto_transferencia,
-            cambio=cambio,
-        )
-
-        for d in detalles_data:
-            DetalleVenta.objects.create(
-                venta=venta,
-                producto=d['producto'],
-                presentacion=d['presentacion'],
-                cantidad=d['cantidad'],
-                cantidad_base=d['cantidad_base'],
-                precio_unitario=d['precio_unitario'],
-                subtotal=d['subtotal'],
+        with transaction.atomic():
+            numero_venta = Venta.generar_numero()
+            venta = Venta.objects.create(
+                numero_venta=numero_venta,
+                cajero=request.user,
+                turno=turno,
+                punto_venta=(pos_obj if es_multi else (turno.punto_venta if turno is not None and turno.punto_venta_id else None)),
+                subtotal=subtotal,
+                impuesto=Decimal('0'),
+                total=total,
+                metodo_pago=metodo_pago,
+                monto_recibido=monto_efectivo,
+                monto_transferencia=monto_transferencia,
+                cambio=cambio,
             )
-            _registrar_movimiento(d['producto'], 'venta', d['cantidad_base'], request.user, venta.id, f'Venta #{venta.numero_venta}')
+
+            for d in detalles_data:
+                DetalleVenta.objects.create(
+                    venta=venta,
+                    producto=d['producto'],
+                    presentacion=d['presentacion'],
+                    cantidad=d['cantidad'],
+                    cantidad_base=d['cantidad_base'],
+                    precio_unitario=d['precio_unitario'],
+                    subtotal=d['subtotal'],
+                    costo_unitario_base=d.get('costo_unitario_base', 0),
+                )
+                if es_multi:
+                    # Descuento directo del almacén del POS (Producto.stock
+                    # NO se toca) + auditoría propia del almacén. El IPB del
+                    # día lo refleja vía _sincronizar_inventario_dia
+                    # (columna de ventas sobre los detalles).
+                    stock = _stock_de(d['producto'], almacen)
+                    anterior = stock.cantidad if stock is not None else Decimal('0')
+                    if stock is None:
+                        stock, _ = _get_or_create_stock(d['producto'], almacen)
+                        anterior = stock.cantidad
+                    if d['cantidad_base'] > anterior:
+                        # Revalidación bajo lock (otra caja pudo vender
+                        # entre la validación y el descuento).
+                        raise ValueError(
+                            f'Stock insuficiente para {d["producto"].nombre}. '
+                            f'Disponible: {"%g" % float(anterior)} '
+                            f'{d["producto"].unidad_medida} (Almacén {almacen.nombre})')
+                    stock_nuevo = anterior - d['cantidad_base']
+                    stock.cantidad = stock_nuevo
+                    stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+                    _movimiento_almacen(
+                        d['producto'], 'venta', d['cantidad_base'],
+                        anterior, stock_nuevo, request.user, venta.id,
+                        f'Venta #{venta.numero_venta} en {pos_obj.nombre}',
+                        almacen=almacen)
+                else:
+                    _registrar_movimiento(d['producto'], 'venta', d['cantidad_base'], request.user, venta.id, f'Venta #{venta.numero_venta}')
 
         _sincronizar_inventario_dia(ahora_servidor().date())
 
@@ -1300,6 +1908,8 @@ def pos_procesar_venta(request):
             'total': str(venta.total),
             'cambio': str(venta.cambio),
         })
+    except ValueError as e:
+        return JsonResponse({'error': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -1312,12 +1922,33 @@ def pos_ping(request):
 
 @login_required
 def pos_catalogo(request):
-    """Catálogo completo para cache offline del POS (productos + categorías)."""
-    productos = Producto.objects.filter(activo=True).select_related(
+    """Catálogo completo para cache offline del POS (productos + categorías).
+
+    En multi-POS el catálogo es por POS (existencias del almacén del
+    turno); el payload no cambia, así la caché local
+    (`bizm_products_cache_v1`) y la cola offline siguen compatibles.
+    """
+    if modo_actual() == 'multi_pos':
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            return JsonResponse({'error': 'Sin punto de venta asignado en el turno: abra el turno seleccionando el punto de venta para vender.'}, status=400)
+        stock_map = _stock_map_para(almacen)
+        ids_multi = [pid for pid, cant in stock_map.items() if cant > 0]
+        productos = Producto.objects.filter(
+            activo=True, id__in=ids_multi).select_related(
+            'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
+        data = [_serializar_producto_pos(
+            p, stock_override=stock_map.get(p.id, Decimal('0')))
+            for p in productos]
+        categorias = list(Categoria.objects.filter(
+            productos__id__in=ids_multi).distinct().values('id', 'nombre'))
+        return JsonResponse({'productos': data, 'categorias': categorias})
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related(
         'categoria').prefetch_related('presentaciones').order_by('nombre')[:2000]
     data = [_serializar_producto_pos(p) for p in productos]
     categorias = list(Categoria.objects.filter(
-        productos__activo=True).distinct().values('id', 'nombre'))
+        productos__activo=True, productos__visible_pos=True,
+        productos__stock__gt=0).distinct().values('id', 'nombre'))
     return JsonResponse({'productos': data, 'categorias': categorias})
 
 
@@ -1375,14 +2006,20 @@ def pos_mis_ventas(request):
 # ============================================================
 # IPB - INVENTARIO PARCIAL DEL DIA
 # ============================================================
-
 def _fmt_cantidad_ipb(valor, unidad_medida):
     """Formato de cantidades para el IPB (usa el helper compartido de models)."""
     return fmt_cantidad_unidad(valor, unidad_medida)
 
 
-def _obtener_datos_ipb(fecha):
-    """Prepara los datos del IPB para una fecha dada. Retorna un diccionio con el contexto."""
+def _obtener_datos_ipb(fecha, punto_venta=None):
+    """Prepara los datos del IPB para una fecha dada. Retorna un diccionio con el contexto.
+
+    Con `punto_venta` (modo multi-POS, filtro `?pos=`): IPB de ese POS
+    calculado sobre el stock del almacén asignado (ver
+    `_obtener_datos_ipb_por_pos`); sin él, el IPB global actual.
+    """
+    if punto_venta is not None:
+        return _obtener_datos_ipb_por_pos(fecha, punto_venta)
     from datetime import timedelta
     from django.db.models import Sum
     
@@ -1392,7 +2029,8 @@ def _obtener_datos_ipb(fecha):
     
     inventarios = InventarioDiario.objects.filter(
         fecha=fecha,
-        producto__activo=True
+        producto__activo=True,
+        producto__visible_pos=True
     ).select_related('producto__categoria').order_by('producto__nombre')
     
     entradas_dia = EntradaProducto.objects.filter(
@@ -1410,6 +2048,22 @@ def _obtener_datos_ipb(fecha):
         venta__fecha_venta__date=fecha, venta__cancelada=False
     ).values('producto_id').annotate(ingreso_real=Sum('subtotal'))
     ingreso_map = {v['producto_id']: Decimal(str(v['ingreso_real'] or 0)) for v in ventas_det}
+    # Precio histórico del día: PU dominante cobrado ese día por producto.
+    # Sin esto, un cambio 520→540 reescribe el IPB viejo con el precio actual.
+    pu_qs = DetalleVenta.objects.filter(
+        venta__fecha_venta__date=fecha, venta__cancelada=False
+    ).values('producto_id', 'precio_unitario').annotate(cant=Sum('cantidad'))
+    _pu_best = {}
+    for r in pu_qs:
+        pid = r['producto_id']
+        try:
+            c = Decimal(str(r['cant'] or 0))
+            pu = Decimal(str(r['precio_unitario'] or 0))
+        except Exception:
+            continue
+        if pid not in _pu_best or c > _pu_best[pid][1]:
+            _pu_best[pid] = (pu, c)
+    precio_hist_map = {pid: pu for pid, (pu, _c) in _pu_best.items()}
     # Desglose por presentación para mostrar el mix (ej. "2 x Cartón 30").
     # Solo presentaciones distintas a la unidad base (factor != 1): las ventas
     # en unidades no ensucian el IPB.
@@ -1485,7 +2139,8 @@ def _obtener_datos_ipb(fecha):
         if inv.stock_final == 0 and inv.ventas > 0:
             productos_sin_stock += 1
         
-        precio_venta = Decimal(str(inv.producto.precio_venta))
+        precio_venta = precio_hist_map.get(
+            inv.producto.id, Decimal(str(inv.producto.precio_venta)))
         
         entrada_info = entrada_costo_map.get(inv.producto.id)
         if entrada_info and entrada_info['cantidad'] > 0:
@@ -1584,7 +2239,246 @@ def _obtener_datos_ipb(fecha):
             'productos_en_deuda': productos_en_deuda,
         },
         'ahora': timezone.now(),
+        'es_por_pos': False,
+        'punto_venta': None,
+        'almacen': None,
     }
+
+
+def _obtener_datos_ipb_por_pos(fecha, pos):
+    """IPB de un POS en modo multi-POS (spec §5), sobre el almacén del POS.
+
+    Review-focus del plan: se calcula sobre el stock del almacén asignado
+    (`AlmacenStock`), NO sobre `Producto.stock`:
+    - ventas/ingresos/mix: `DetalleVenta` del día con `venta.punto_venta=pos`.
+    - stock_final: existencia actual en el almacén del POS; inicial =
+      final + ventas (en multi-POS no hay entradas directas al POS ni
+      traslados →POS: el mostrador solo sale por venta).
+    - entradas del POS: 0 por lo mismo (las `AlmacenEntrada` van al almacén,
+      no al mostrador).
+    - donaciones/deudas: salidas del mostrador sin atribución por POS; se
+      muestran globales como en el IPB general (informativo, no restan del
+      inicial derivado).
+    - dinero: ventas del POS; gastos: `Gasto` del día con
+      `turno.punto_venta=pos` (gastos de admin sin turno no se atribuyen).
+    No toca `InventarioDiario` (historia global intacta) ni borra nada.
+    """
+    from django.db.models import Sum as _Sum
+
+    hoy = ahora_servidor().date()
+    almacen = pos.almacen if pos is not None else None
+
+    def _dec(v):
+        return Decimal(str(v or 0))
+
+    ventas_qs = DetalleVenta.objects.filter(
+        venta__fecha_venta__date=fecha, venta__cancelada=False,
+        venta__punto_venta=pos)
+    ventas_map = {
+        v['producto_id']: _dec(v['t'])
+        for v in ventas_qs.values('producto_id').annotate(t=_Sum('cantidad_base'))
+    }
+    ingreso_map = {
+        v['producto_id']: _dec(v['ingreso_real'])
+        for v in ventas_qs.values('producto_id').annotate(
+            ingreso_real=_Sum('subtotal'))
+    }
+    # Precio histórico del día por POS (igual que el IPB global):
+    # PU dominante cobrado ese día en ese POS.
+    _pu_best = {}
+    for r in ventas_qs.values(
+            'producto_id', 'precio_unitario').annotate(cant=_Sum('cantidad')):
+        pid = r['producto_id']
+        try:
+            c = _dec(r['cant'])
+            pu = _dec(r['precio_unitario'])
+        except Exception:
+            continue
+        if pid not in _pu_best or c > _pu_best[pid][1]:
+            _pu_best[pid] = (pu, c)
+    precio_hist_map = {pid: pu for pid, (pu, _c) in _pu_best.items()}
+    mix_map = {}
+    for m in ventas_qs.values(
+            'producto_id', 'presentacion__nombre',
+            'presentacion__factor').annotate(cant=_Sum('cantidad'),
+                                             sub=_Sum('subtotal')):
+        if not m['presentacion__nombre']:
+            continue
+        try:
+            if Decimal(str(m['presentacion__factor'] or 1)) == 1:
+                continue
+        except Exception:
+            pass
+        try:
+            c = _dec(m['cant'])
+            cs = format(c.quantize(Decimal('0.001')).normalize(), 'f')
+        except Exception:
+            cs = str(m['cant'] or 0)
+        mix_map.setdefault(m['producto_id'], []).append(
+            f"{cs} x {m['presentacion__nombre']}")
+
+    # Donaciones/deudas globales del día (sin atribución por POS).
+    donado_map = {
+        d['producto_id']: _dec(d['total'])
+        for d in RetiroDonacion.objects.filter(
+            fecha_retiro__date=fecha
+        ).values('producto_id').annotate(total=_Sum('cantidad'))
+    }
+    try:
+        deuda_map = {
+            d['producto_id']: _dec(d['total'])
+            for d in Deuda.objects.filter(
+                fecha_registro__date=fecha, tipo='producto'
+            ).values('producto_id').annotate(total=_Sum('cantidad_base'))
+        }
+        if any(v == 0 for v in deuda_map.values()):
+            for d in Deuda.objects.filter(
+                    fecha_registro__date=fecha, tipo='producto',
+                    cantidad_base=0).values('producto_id').annotate(
+                        total=_Sum('cantidad')):
+                if deuda_map.get(d['producto_id'], 0) == 0:
+                    deuda_map[d['producto_id']] = _dec(d['total'])
+    except Exception:
+        deuda_map = {
+            d['producto_id']: _dec(d['total'])
+            for d in Deuda.objects.filter(
+                fecha_registro__date=fecha, tipo='producto'
+            ).values('producto_id').annotate(total=_Sum('cantidad'))
+        }
+
+    stock_map = _stock_map_para(almacen) if almacen is not None else {}
+    ids = {pid for pid, cant in stock_map.items() if _dec(cant) != 0}
+    ids |= set(ventas_map)
+    productos = (Producto.objects.filter(
+        activo=True, id__in=ids
+    ).select_related('categoria').order_by('nombre') if ids else [])
+
+    total_inicial = Decimal('0')
+    total_entradas = Decimal('0')
+    total_ventas = Decimal('0')
+    total_final = Decimal('0')
+    productos_movimiento = 0
+    productos_sin_stock = 0
+    total_donado = Decimal('0')
+    total_en_deuda = Decimal('0')
+    productos_donados = 0
+    productos_en_deuda = 0
+
+    reporte = []
+    for producto in productos:
+        ventas = ventas_map.get(producto.id, Decimal('0'))
+        stock_final = _dec(stock_map.get(producto.id, 0))
+        stock_inicial = stock_final + ventas
+        entradas = Decimal('0')
+        total_inicial += stock_inicial
+        total_entradas += entradas
+        total_ventas += ventas
+        total_final += stock_final
+
+        if ventas > 0 or entradas > 0:
+            productos_movimiento += 1
+        if stock_final == 0 and ventas > 0:
+            productos_sin_stock += 1
+
+        precio_venta = precio_hist_map.get(producto.id, Decimal(str(producto.precio_venta)))
+        costo_unit = producto.precio_compra
+        costo_venta = ventas * costo_unit
+        ingreso = ingreso_map.get(producto.id, ventas * precio_venta)
+        ganancia = ingreso - costo_venta
+
+        donado = donado_map.get(producto.id, Decimal('0'))
+        en_deuda = deuda_map.get(producto.id, Decimal('0'))
+        if donado > 0:
+            total_donado += donado
+            productos_donados += 1
+        if en_deuda > 0:
+            total_en_deuda += en_deuda
+            productos_en_deuda += 1
+
+        reporte.append({
+            'inventario': None,
+            'producto': producto,
+            'categoria': producto.categoria,
+            'stock_inicial': stock_inicial,
+            'entradas': entradas,
+            'ventas': ventas,
+            'stock_final': stock_final,
+            'stock_inicial_fmt': _fmt_cantidad_ipb(
+                stock_inicial, producto.unidad_medida),
+            'entradas_fmt': _fmt_cantidad_ipb(
+                entradas, producto.unidad_medida),
+            'ventas_fmt': _fmt_cantidad_ipb(
+                ventas, producto.unidad_medida),
+            'stock_final_fmt': _fmt_cantidad_ipb(
+                stock_final, producto.unidad_medida),
+            'precio_venta': precio_venta,
+            'precio_compra': costo_unit,
+            'costo_venta': costo_venta,
+            'ingreso': ingreso,
+            'ganancia': ganancia,
+            'mix_txt': ' + '.join(mix_map.get(producto.id, [])),
+            'agotado': stock_final == 0 and ventas > 0,
+            'donado': donado,
+            'donado_fmt': _fmt_cantidad_ipb(
+                donado, producto.unidad_medida),
+            'tiene_donacion': donado > 0,
+            'en_deuda': en_deuda,
+            'en_deuda_fmt': _fmt_cantidad_ipb(
+                en_deuda, producto.unidad_medida),
+            'tiene_deuda': en_deuda > 0,
+        })
+
+    resumen_dinero = Venta.objects.filter(
+        fecha_venta__date=fecha, cancelada=False,
+        punto_venta=pos).aggregate(
+        efectivo=_Sum('monto_recibido'),
+        transferencia=_Sum('monto_transferencia'),
+        cambio=_Sum('cambio'),
+        total_ventas=_Sum('total'),
+    )
+    gastos_dia = Gasto.objects.filter(
+        fecha_gasto__date=fecha, turno__punto_venta=pos)
+    resumen_gastos = gastos_dia.aggregate(
+        total=_Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
+        efectivo=_Sum('cantidad_efectivo'),
+        transferencia=_Sum('cantidad_transferencia'),
+    )
+    total_gastos = resumen_gastos['total'] or 0
+    total_ventas_monto = resumen_dinero['total_ventas'] or 0
+
+    total_costo_unitario = sum(
+        float(r['precio_compra'] * r['stock_inicial']) for r in reporte)
+    total_ingreso = sum(float(r['ingreso']) for r in reporte)
+    total_ganancia = sum(float(r['ganancia']) for r in reporte)
+
+    return {
+        'fecha': fecha,
+        'hoy': hoy,
+        'es_hoy': fecha == hoy,
+        'reporte': reporte,
+        'resumen': {
+            'total_productos': len(reporte),
+            'total_stock_inicial': total_inicial,
+            'total_entradas': total_entradas,
+            'total_ventas': total_ventas,
+            'total_stock_final': total_final,
+            'productos_movimiento': productos_movimiento,
+            'productos_sin_stock': productos_sin_stock,
+            'total_ingreso': total_ingreso,
+            'total_gastos': total_gastos,
+            'total_recaudado': total_ventas_monto - total_gastos,
+            'total_ganancia': total_ganancia,
+            'total_donado': total_donado,
+            'total_en_deuda': total_en_deuda,
+            'productos_donados': productos_donados,
+            'productos_en_deuda': productos_en_deuda,
+        },
+        'ahora': timezone.now(),
+        'es_por_pos': True,
+        'punto_venta': pos,
+        'almacen': almacen,
+    }
+
 
 def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=None, descripcion=''):
     """Registra un movimiento de inventario."""
@@ -1610,6 +2504,7 @@ def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=
         usuario=usuario,
     )
 
+
 def _sincronizar_inventario_dia(fecha):
     """Sincroniza el inventario del día con las ventas, entradas y donaciones reales.
 
@@ -1633,8 +2528,8 @@ def _sincronizar_inventario_dia(fecha):
     if fecha < FECHA_INICIO_SISTEMA:
         return
 
-    productos = Producto.objects.filter(activo=True)
-    
+    productos = Producto.objects.filter(activo=True, visible_pos=True)
+
     ventas_dia = DetalleVenta.objects.filter(
         venta__fecha_venta__date=fecha,
         venta__cancelada=False
@@ -1876,11 +2771,21 @@ def ipb(request):
         messages.warning(request, 'El IPB existe desde el 22/09/2026 (inicio del sistema).')
         fecha = FECHA_INICIO_SISTEMA
 
-    context = _obtener_datos_ipb(fecha)
+    # Spec §5 multi-POS: filtro ?pos= con cálculo sobre el almacén de
+    # cada POS (fuera de multi-POS se ignora).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
+    context = _obtener_datos_ipb(fecha, punto_venta=pos_actual)
+    context.update({
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
+    })
     return render(request, 'core/ipb.html', context)
 
 
 @login_required
+
+
 @require_POST
 def pos_registrar_gasto(request):
     try:
@@ -2055,6 +2960,11 @@ def venta_impresion(request, fecha=None):
     if empleado_filtro:
         ventas = ventas.filter(cajero__username=empleado_filtro)
     
+    # Consecuencial Task 5: el PDF respeta el filtro ?pos= de la lista.
+    pos_imp, _puntos_imp = _resolver_pos_filtro(request)
+    if pos_imp is not None:
+        ventas = ventas.filter(punto_venta=pos_imp)
+
     try:
         ventas = ventas.prefetch_related('detalles__producto')
         ventas_list = list(ventas)
@@ -2117,6 +3027,7 @@ def venta_impresion(request, fecha=None):
         'ranking': ranking,
         'periodo': periodo,
         'empleado_filtro': empleado_filtro,
+        'punto_venta': pos_imp,
     }
     
     html_string = render_to_string('core/venta_impresion.html', context)
@@ -2173,7 +3084,10 @@ def ipb_impresion(request, fecha=None):
         fecha = FECHA_INICIO_SISTEMA
 
     _sincronizar_inventario_dia(fecha)
-    context = _obtener_datos_ipb(fecha)
+    # Consecuencial (nota de alcance Task 5): el PDF respeta el mismo
+    # filtro ?pos= del IPB en pantalla (cálculo por almacén del POS).
+    pos_actual, _puntos = _resolver_pos_filtro(request)
+    context = _obtener_datos_ipb(fecha, punto_venta=pos_actual)
     
     html_string = render_to_string('core/ipb_impresion.html', context)
     
@@ -2325,7 +3239,7 @@ def gasto_eliminar(request, pk):
 def entrada_lista(request):
     hoy = ahora_servidor().date()
     fecha_str = request.GET.get('fecha', '')
-    
+
     if fecha_str:
         try:
             fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -2335,32 +3249,53 @@ def entrada_lista(request):
         fecha = hoy
 
     entradas = EntradaProducto.objects.filter(fecha_entrada__date=fecha).select_related('producto').order_by('-fecha_entrada')
-    
+
     resumen = entradas.aggregate(
         total=Sum('costo_total'),
         cantidad=Count('id'),
     )
+
+    try:
+        es_admin = request.user.perfil.es_admin
+    except Exception:
+        es_admin = False
+    # Spec §3: crear/eliminar entradas directas solo admin en solo-POS.
+    # En los demás modos el historial sigue visible pero de solo lectura.
+    puede_gestionar = es_admin and modo_actual() == 'solo_pos'
 
     context = {
         'entradas': entradas,
         'fecha': fecha.strftime('%Y-%m-%d'),
         'resumen_total': float(resumen['total'] or 0),
         'resumen_cantidad': resumen['cantidad'] or 0,
+        'puede_gestionar': puede_gestionar,
     }
     return render(request, 'core/entrada_lista.html', context)
 
 
+@requiere_modo('solo_pos')
+
+
 @requiere_admin
 def entrada_crear(request):
+    """Entrada directa al punto de venta (solo admin en modo solo-POS).
+
+    Suma a `Producto.stock` y lo deja `visible_pos=True` de inmediato
+    (entra directo al mostrador). El proveedor es libre: el marcador
+    `ALMACEN_PROVEEDOR` NO aplica (ese es solo de traslados).
+    """
     productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('nombre')
-    
+
     if request.method == 'POST':
         producto_id = request.POST.get('producto')
         try:
             cantidad = Decimal(str(request.POST.get('cantidad', '0')))
         except Exception:
             cantidad = Decimal('0')
-        costo_unitario = Decimal(request.POST.get('costo_unitario', '0'))
+        try:
+            costo_unitario = Decimal(str(request.POST.get('costo_unitario', '0')))
+        except Exception:
+            costo_unitario = Decimal('0')
         proveedor = request.POST.get('proveedor', '').strip()
         descripcion = request.POST.get('descripcion', '').strip()
 
@@ -2368,25 +3303,34 @@ def entrada_crear(request):
             messages.error(request, 'Seleccione un producto y cantidad mayor a 0 (admite 3 decimales, ej. 2.500 lb).')
             return redirect('core:entrada_crear')
 
-        producto = Producto.objects.get(pk=producto_id)
-        numero_entrada = EntradaProducto.generar_numero()
-        
-        costo_unitario_dec = Decimal(request.POST.get('costo_unitario', '0'))
-        
-        if costo_unitario_dec > Decimal('0'):
-            producto.precio_compra = costo_unitario_dec
-            producto.save()
+        producto = get_object_or_404(Producto, pk=producto_id)
+
+        if costo_unitario > 0:
+            compra_antes = producto.precio_compra
+            venta_antes = producto.precio_venta
+            producto.precio_compra = costo_unitario
+            producto.save(update_fields=['precio_compra'])
             producto.refresh_from_db()
-        
+
+        numero_entrada = EntradaProducto.generar_numero()
         entrada = EntradaProducto.objects.create(
             numero_entrada=numero_entrada,
             producto=producto,
             cantidad=cantidad,
-            costo_unitario=costo_unitario_dec,
+            costo_unitario=costo_unitario,
             proveedor=proveedor,
             descripcion=descripcion,
         )
-        
+        if costo_unitario > 0:
+            _log_cambio_precio(
+                producto, compra_antes, producto.precio_compra,
+                venta_antes, producto.precio_venta,
+                accion='entrada_ok', motivo=f'Entrada {numero_entrada}',
+                usuario=request.user, costo_entrada=costo_unitario,
+                entrada=entrada)
+
+        if not producto.visible_pos:
+            producto.visible_pos = True
         _registrar_movimiento(producto, 'entrada', cantidad, request.user, entrada.id, f'Entrada #{numero_entrada}')
 
         _sincronizar_inventario_dia(ahora_servidor().date())
@@ -2397,45 +3341,1109 @@ def entrada_crear(request):
     return render(request, 'core/entrada_form.html', {'productos': productos})
 
 
+@requiere_modo('solo_pos')
+
+
 @requiere_admin
+
+
+@require_POST
 def entrada_eliminar(request, pk):
+    """Elimina una entrada directa revirtiendo su stock (solo admin en
+    modo solo-POS). Las entradas generadas por traslados del almacén no
+    se tocan aquí (se gestionan cancelando el traslado)."""
     entrada = get_object_or_404(EntradaProducto, pk=pk)
-    if request.method == 'POST':
-        numero = entrada.numero_entrada
-        producto = entrada.producto
-        cantidad = entrada.cantidad
-        
-        # Revertir efectos en el producto (descontar stock)
-        if producto.stock >= cantidad:
-            producto.stock -= cantidad
-            producto.save()
-        else:
-            messages.error(request, f'No se puede eliminar. Stock actual ({producto.stock}) menor que cantidad de entrada ({cantidad}).')
+    if entrada.traslados_almacen.exists():
+        messages.error(
+            request,
+            f'La entrada {entrada.numero_entrada} viene de un traslado del '
+            'almacén: cancélelo desde Traslados en un modo con almacén.')
+        return redirect('core:entrada_lista')
+    numero = entrada.numero_entrada
+    cantidad = entrada.cantidad
+    fecha = entrada.fecha_entrada.date()
+    with transaction.atomic():
+        producto = Producto.objects.select_for_update().get(pk=entrada.producto_id)
+        if producto.stock < cantidad:
+            messages.error(
+                request,
+                f'No se puede eliminar. Stock actual ({"%g" % float(producto.stock)}) '
+                f'menor que cantidad de entrada ({"%g" % float(cantidad)}).')
             return redirect('core:entrada_lista')
-        
-        # Eliminar movimiento de inventario relacionado
+        producto.stock -= cantidad
+        producto.save(update_fields=['stock'])
         MovimientoInventario.objects.filter(
             producto=producto,
             referencia_id=entrada.id,
             tipo='entrada'
         ).delete()
-        
-        # Eliminar la entrada
         entrada.delete()
-        
-        # Recalcular inventario diario
-        _sincronizar_inventario_dia(entrada.fecha_entrada.date())
-        
-        messages.success(request, f'Entrada {numero} eliminada. Se revirtieron {cantidad} unidades del stock de {producto.nombre}.')
-        return redirect('core:entrada_lista')
-    
-    return render(request, 'core/entrada_confirmar_eliminar.html', {'entrada': entrada})
+    _sincronizar_inventario_dia(fecha)
+    messages.success(
+        request,
+        f'Entrada {numero} eliminada. Se revirtieron {"%g" % float(cantidad)} '
+        f'unidades del stock de {producto.nombre}.')
+    return redirect('core:entrada_lista')
+
+
+# ============================================================
+# ALMACÉN (admin + almacenero; ajeno al IPB y a las ventas).
+# Flujo: entrada al almacén -> traslado al POS (= entrada IPB).
+# ============================================================
+def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
+                        usuario=None, referencia_id=None, descripcion='',
+                        almacen=None):
+    """Auditoría propia del almacén (no toca IPB ni MovimientoInventario)."""
+    AlmacenMovimiento.objects.create(
+        producto=producto,
+        almacen=almacen,
+        tipo=tipo,
+        cantidad=cantidad,
+        stock_anterior=stock_anterior,
+        stock_nuevo=stock_nuevo,
+        referencia_id=referencia_id,
+        descripcion=descripcion,
+        usuario=usuario,
+    )
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_panel(request):
+    """Panel del almacén: existencias valorizadas y actividad del día."""
+    hoy = ahora_servidor().date()
+    almacen_f, multi = _resolver_almacen(request)
+    existencias = AlmacenStock.objects.select_related(
+        'producto', 'almacen').order_by('producto__nombre')
+    movs = AlmacenMovimiento.objects.select_related('producto', 'almacen')
+    entradas_qs = AlmacenEntrada.objects.filter(fecha_entrada__date=hoy)
+    traslados_qs = AlmacenTraslado.objects.filter(fecha_traslado__date=hoy)
+    if almacen_f:
+        existencias = existencias.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        entradas_qs = entradas_qs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+        traslados_qs = traslados_qs.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f) | Q(origen__isnull=True))
+    valor = sum((s.valor for s in existencias), Decimal('0'))
+    mapa_cad = _mapa_caducidad(almacen_f)
+    cad_por_vencer = sum(1 for v in mapa_cad.values() if v == 'por_vencer')
+    cad_vencidos = sum(1 for v in mapa_cad.values() if v == 'vencido')
+    almacenes_info = []
+    if multi:
+        for a in Almacen.activos():
+            st = AlmacenStock.objects.filter(
+                Q(almacen=a) | Q(almacen__isnull=True)).select_related('producto') if a.es_principal else AlmacenStock.objects.filter(almacen=a).select_related('producto')
+            v = sum((s.valor for s in st), Decimal('0'))
+            almacenes_info.append({'obj': a, 'productos': st.count(), 'valor': v})
+    context = {
+        'total_productos': existencias.count(),
+        'valor_almacen': valor,
+        'entradas_hoy': entradas_qs.count(),
+        'traslados_hoy': traslados_qs.count(),
+        'recientes': movs.order_by('-fecha')[:10],
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+        'almacenes_info': almacenes_info,
+        'cad_por_vencer': cad_por_vencer,
+        'cad_vencidos': cad_vencidos,
+    }
+    return render(request, 'core/almacen_panel.html', context)
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_stock(request):
+    """Existencias del almacén con acceso a trasladar (y ajustar si admin)."""
+    query = (request.GET.get('q') or '').strip()
+    almacen_f, multi = _resolver_almacen(request)
+    stocks = AlmacenStock.objects.select_related(
+        'producto__categoria', 'almacen').order_by('producto__nombre')
+    if almacen_f:
+        stocks = stocks.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+    if query:
+        q_norm = _norm_sin_tildes(query)
+        ids_codigo = [s.producto_id for s in stocks
+                      if query.lower() in (s.producto.codigo or '').lower()]
+        ids_nombre = [s.producto_id for s in stocks
+                      if q_norm and q_norm in _norm_sin_tildes(s.producto.nombre)]
+        stocks = stocks.filter(producto_id__in=set(ids_codigo) | set(ids_nombre))
+    try:
+        es_admin = request.user.perfil.es_admin
+    except PerfilUsuario.DoesNotExist:
+        es_admin = True
+    mapa_cad = _mapa_caducidad(almacen_f)
+    stocks = list(stocks)
+    for s in stocks:
+        s.caducidad = mapa_cad.get(s.producto_id, 'ok')
+    return render(request, 'core/almacen_stock.html', {
+        'stocks': stocks, 'q': query, 'es_admin': es_admin,
+        'almacenes': Almacen.activos(), 'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_entrada_lista(request):
+    hoy = ahora_servidor().date()
+    fecha_str = request.GET.get('fecha', '')
+    if fecha_str:
+        try:
+            fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha = hoy
+    else:
+        fecha = hoy
+    almacen_f, multi = _resolver_almacen(request)
+    entradas = AlmacenEntrada.objects.filter(
+        fecha_entrada__date=fecha).select_related('producto', 'almacen').order_by('-fecha_entrada')
+    if almacen_f:
+        entradas = entradas.filter(almacen=almacen_f)
+    resumen = entradas.aggregate(total=Sum('costo_total'), cantidad=Count('id'))
+    return render(request, 'core/almacen_entrada_lista.html', {
+        'entradas': entradas,
+        'fecha': fecha.strftime('%Y-%m-%d'),
+        'resumen_total': float(resumen['total'] or 0),
+        'resumen_cantidad': resumen['cantidad'] or 0,
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_entrada_crear(request):
+    """Entrada al almacén: suma al stock del almacén, NO al del POS."""
+    productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('nombre')
+    if request.method == 'POST':
+        producto_id = request.POST.get('producto')
+        try:
+            cantidad = Decimal(str(request.POST.get('cantidad', '0')))
+        except Exception:
+            cantidad = Decimal('0')
+        try:
+            costo_unitario = Decimal(str(request.POST.get('costo_unitario', '0')))
+        except Exception:
+            costo_unitario = Decimal('0')
+        proveedor = request.POST.get('proveedor', '').strip()
+        descripcion = request.POST.get('descripcion', '').strip()
+        fecha_caducidad = (request.POST.get('fecha_caducidad') or '').strip() or None
+        if fecha_caducidad:
+            try:
+                timezone.datetime.strptime(fecha_caducidad, '%Y-%m-%d')
+            except ValueError:
+                messages.error(request, 'Fecha de caducidad inválida.')
+                return redirect('core:almacen_entrada_crear')
+        almacen_f, multi = _resolver_almacen(request)
+        if multi and not almacen_f:
+            messages.error(request, 'Seleccione el almacén destino.')
+            return redirect('core:almacen_entrada_crear')
+        if not producto_id or cantidad <= 0:
+            messages.error(request, 'Seleccione un producto y cantidad mayor a 0 (admite 3 decimales, ej. 2.500 lb).')
+            return redirect('core:almacen_entrada_crear')
+        producto = get_object_or_404(Producto, pk=producto_id)
+        if costo_unitario > 0:
+            producto.precio_compra = costo_unitario
+            producto.save(update_fields=['precio_compra'])
+            producto.refresh_from_db()
+        with transaction.atomic():
+            entrada = AlmacenEntrada.objects.create(
+                numero_entrada=AlmacenEntrada.generar_numero(),
+                producto=producto,
+                almacen=almacen_f,
+                cantidad=cantidad,
+                costo_unitario=costo_unitario,
+                proveedor=proveedor,
+                descripcion=descripcion,
+                fecha_caducidad=fecha_caducidad,
+                registrado_por=request.user,
+            )
+            stock, _ = _get_or_create_stock(producto, almacen_f)
+            anterior = stock.cantidad
+            stock.cantidad = anterior + cantidad
+            stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            _movimiento_almacen(producto, 'entrada', cantidad, anterior,
+                                stock.cantidad, request.user, entrada.id,
+                                f'Entrada almacén #{entrada.numero_entrada}',
+                                almacen=almacen_f)
+        messages.success(
+            request,
+            f'Entrada {entrada.numero_entrada} al almacén: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre}.')
+        return redirect('core:almacen_entrada_lista')
+    preseleccionado = request.GET.get('producto', '') or request.POST.get('producto', '')
+    from urllib.parse import quote as _quote
+    _aqui = request.get_full_path()
+    next_crear = f'/productos/crear/?next={_quote(_aqui, safe="")}'
+    almacen_f, multi = _resolver_almacen(request)
+    stock_map = _stock_map_para(almacen_f)
+    return render(request, 'core/almacen_entrada_form.html', {
+        'productos': productos,
+        'preseleccionado': str(preseleccionado),
+        'next_crear': next_crear,
+        'stock_map': stock_map,
+        'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_admin
+
+
+@require_POST
+def almacen_entrada_cancelar(request, pk):
+    """Cancela una entrada al almacén revirtiendo su stock (solo admin).
+
+    El costo del producto no se revierte (pudo cambiar con entradas
+    posteriores). Se bloquea si el almacén ya no tiene suficiente
+    (parte de la mercancía se trasladó al POS).
+    """
+    from django.urls import reverse as _reverse
+    entrada = get_object_or_404(AlmacenEntrada, pk=pk)
+    producto = entrada.producto
+    cantidad = entrada.cantidad
+    numero = entrada.numero_entrada
+    fecha_qs = entrada.fecha_entrada.date().isoformat()
+    with transaction.atomic():
+        stock = _stock_de(producto, entrada.almacen)
+        disponible = stock.cantidad if stock else Decimal('0')
+        if disponible < cantidad:
+            messages.error(
+                request,
+                f'No se puede cancelar la entrada {numero}: el almacén solo tiene '
+                f'{"%g" % float(disponible)} {producto.unidad_medida} de {producto.nombre} '
+                '(parte ya se trasladó al punto de venta).')
+            return redirect(f"{_reverse('core:almacen_entrada_lista')}?fecha={fecha_qs}")
+        anterior = stock.cantidad
+        stock.cantidad = anterior - cantidad
+        stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+        entrada.delete()
+        _movimiento_almacen(producto, 'ajuste', cantidad, anterior,
+                            stock.cantidad, request.user, None,
+                            f'Cancelación entrada almacén #{numero}',
+                            almacen=stock.almacen)
+    messages.success(
+        request,
+        f'Entrada {numero} cancelada: {"%g" % float(cantidad)} {producto.unidad_medida} '
+        f'de {producto.nombre} devueltos (existencia actual: {"%g" % float(stock.cantidad)}).')
+    return redirect(f"{_reverse('core:almacen_entrada_lista')}?fecha={fecha_qs}")
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_traslado_lista(request):
+    hoy = ahora_servidor().date()
+    fecha_str = request.GET.get('fecha', '')
+    if fecha_str:
+        try:
+            fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha = hoy
+    else:
+        fecha = hoy
+    almacen_f, multi = _resolver_almacen(request)
+    traslados = AlmacenTraslado.objects.filter(
+        fecha_traslado__date=fecha).select_related(
+        'producto', 'origen', 'destino_almacen').order_by('-fecha_traslado')
+    if almacen_f:
+        traslados = traslados.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f))
+    return render(request, 'core/almacen_traslado_lista.html', {
+        'traslados': traslados,
+        'fecha': fecha.strftime('%Y-%m-%d'),
+        'resumen_cantidad': traslados.count(),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_traslado_crear(request):
+    """Traslado con origen y destino (POS o almacén).
+
+    - destino POS: genera EntradaProducto (proveedor 'Almacén: <nombre>')
+      visible en IPB/POS.
+    - destino ALMACEN: mueve entre stocks sin tocar el POS.
+    """
+    almacen_sel, multi = _resolver_almacen(request, campo='origen')
+    productos = Producto.objects.filter(
+        activo=True, almacen_stock__cantidad__gt=0).select_related('categoria').order_by('nombre')
+    stock_map = _stock_map_para(almacen_sel)
+    preseleccionado = request.GET.get('producto', '')
+    if request.method == 'POST':
+        producto_id = request.POST.get('producto')
+        try:
+            cantidad = Decimal(str(request.POST.get('cantidad', '0')))
+        except Exception:
+            cantidad = Decimal('0')
+        origen, multi_post = _resolver_almacen(request, campo='origen')
+        destino_tipo = (request.POST.get('destino_tipo') or 'POS').upper()
+        if destino_tipo not in ('POS', 'ALMACEN'):
+            destino_tipo = 'POS'
+        # Spec §5 multi-POS: traslados hacia POS no existen (el POS vende
+        # directo del almacén); solo entre almacenes. Sin borrar nada.
+        if modo_actual() == 'multi_pos' and destino_tipo == 'POS':
+            messages.error(
+                request,
+                'En el modo multi-POS los traslados al punto de venta no '
+                'existen: solo entre almacenes.')
+            return redirect('core:almacen_traslado_crear')
+        destino_almacen = None
+        if destino_tipo == 'ALMACEN':
+            try:
+                destino_almacen = Almacen.objects.get(
+                    pk=int(request.POST.get('destino_almacen') or 0), activo=True)
+            except (Almacen.DoesNotExist, ValueError, TypeError):
+                destino_almacen = None
+            if not destino_almacen:
+                messages.error(request, 'Seleccione el almacén destino.')
+                return redirect('core:almacen_traslado_crear')
+        if multi_post and not origen:
+            messages.error(request, 'Seleccione el almacén origen.')
+            return redirect('core:almacen_traslado_crear')
+        if destino_tipo == 'ALMACEN' and origen and destino_almacen and origen.pk == destino_almacen.pk:
+            messages.error(request, 'El origen y el destino no pueden ser el mismo almacén.')
+            return redirect('core:almacen_traslado_crear')
+        if not producto_id or cantidad <= 0:
+            messages.error(request, 'Seleccione un producto y cantidad mayor a 0.')
+            return redirect('core:almacen_traslado_crear')
+        producto = get_object_or_404(Producto, pk=producto_id)
+        with transaction.atomic():
+            stock = _stock_de(producto, origen)
+            disponible = stock.cantidad if stock else Decimal('0')
+            if disponible < cantidad:
+                messages.error(
+                    request,
+                    f'Sin existencias suficientes en {origen.nombre if origen else "almacén"} para {producto.nombre} (disponible: {"%g" % float(disponible)}).')
+                return redirect('core:almacen_traslado_crear')
+            costo = producto.precio_compra or Decimal('0')
+            num_traslado = AlmacenTraslado.generar_numero()
+            entrada = None
+            num_entrada = None
+            if destino_tipo == 'POS':
+                num_entrada = EntradaProducto.generar_numero()
+                entrada = EntradaProducto.objects.create(
+                    numero_entrada=num_entrada,
+                    producto=producto,
+                    cantidad=cantidad,
+                    costo_unitario=costo,
+                    proveedor=almacen_proveedor_nombre(origen.nombre if origen else ''),
+                    descripcion=f'Traslado {num_traslado} de {origen.nombre if origen else "almacén"} al punto de venta',
+                )
+                _registrar_movimiento(producto, 'entrada', cantidad, request.user,
+                                      entrada.id, f'Entrada #{num_entrada} (traslado {num_traslado} del almacén)')
+            traslado = AlmacenTraslado.objects.create(
+                numero_traslado=num_traslado,
+                producto=producto,
+                cantidad=cantidad,
+                costo_unitario=costo,
+                origen=origen,
+                destino_tipo=destino_tipo,
+                destino_almacen=destino_almacen,
+                registrado_por=request.user,
+                entrada_generada=entrada,
+            )
+            anterior = stock.cantidad
+            stock.cantidad = anterior - cantidad
+            stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            if destino_tipo == 'POS':
+                if not producto.visible_pos:
+                    producto.visible_pos = True
+                    producto.save(update_fields=['visible_pos'])
+                _movimiento_almacen(producto, 'traslado', cantidad, anterior,
+                                    stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} al punto de venta (entrada {num_entrada})',
+                                    almacen=origen)
+                _sincronizar_inventario_dia(ahora_servidor().date())
+                messages.success(
+                    request,
+                    f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} al punto de venta (entrada {num_entrada} en el IPB, ahora visible en el POS).')
+            else:
+                dest_stock, _ = _get_or_create_stock(producto, destino_almacen)
+                ant_dest = dest_stock.cantidad
+                dest_stock.cantidad = ant_dest + cantidad
+                dest_stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+                _movimiento_almacen(producto, 'traslado', cantidad, anterior,
+                                    stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} a {destino_almacen.nombre}',
+                                    almacen=origen)
+                _movimiento_almacen(producto, 'entrada', cantidad, ant_dest,
+                                    dest_stock.cantidad, request.user, traslado.id,
+                                    f'Traslado #{num_traslado} desde {origen.nombre if origen else "?"}',
+                                    almacen=destino_almacen)
+                messages.success(
+                    request,
+                    f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} de {origen.nombre} a {destino_almacen.nombre}.')
+        return redirect('core:almacen_traslado_lista')
+    return render(request, 'core/almacen_traslado_form.html', {
+        'productos': productos, 'stock_map': stock_map,
+        'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
+        'preseleccionado': str(preseleccionado),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_sel,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_admin
+
+
+@require_POST
+def almacen_traslado_cancelar(request, pk):
+    """Cancela un traslado devolviendo todo a la normalidad (solo admin).
+
+    Devuelve la cantidad al almacén, la descuenta del punto de venta,
+    elimina la entrada IPB generada y el traslado, con rastro en ambas
+    auditorías. Se bloquea si el POS ya no tiene suficiente (se vendió)
+    o si el día del IPB está cerrado. Si el producto había sido publicado
+    por este traslado y queda sin más traslados ni stock en el POS, vuelve
+    a ocultarse.
+    """
+    from django.urls import reverse as _reverse
+    traslado = get_object_or_404(AlmacenTraslado, pk=pk)
+    producto = traslado.producto
+    cantidad = traslado.cantidad
+    numero = traslado.numero_traslado
+    fecha = traslado.fecha_traslado.date()
+    fecha_qs = fecha.isoformat()
+    if InventarioDiario.objects.filter(
+            producto=producto, fecha=fecha, cerrado=True).exists():
+        messages.error(
+            request,
+            f'No se puede cancelar el traslado {numero}: el IPB del '
+            f'{fecha.strftime("%d/%m/%Y")} ya está cerrado.')
+        return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+    with transaction.atomic():
+        producto = Producto.objects.select_for_update().get(pk=producto.pk)
+        origen = traslado.origen
+        if traslado.destino_tipo == 'ALMACEN' and traslado.destino_almacen_id:
+            dest = _stock_de(producto, traslado.destino_almacen)
+            disp_dest = dest.cantidad if dest else Decimal('0')
+            if disp_dest < cantidad:
+                messages.error(
+                    request,
+                    f'No se puede cancelar el traslado {numero}: el almacén destino solo tiene '
+                    f'{"%g" % float(disp_dest)} {producto.unidad_medida} de {producto.nombre}.')
+                return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+            stock = _stock_de(producto, origen)
+            if stock is None:
+                stock, _ = _get_or_create_stock(producto, origen)
+            ant_alm = stock.cantidad
+            stock.cantidad = ant_alm + cantidad
+            stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            ant_dest = dest.cantidad
+            dest.cantidad = ant_dest - cantidad
+            dest.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            num_entrada = None
+            traslado.delete()
+            _movimiento_almacen(producto, 'ajuste', cantidad, ant_dest,
+                                dest.cantidad, request.user, None,
+                                f'Cancelación traslado #{numero} (devolución a origen)',
+                                almacen=dest.almacen)
+            messages.success(request, f'Traslado {numero} cancelado: devuelto al almacén origen.')
+            return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+        if producto.stock < cantidad:
+            messages.error(
+                request,
+                f'No se puede cancelar el traslado {numero}: el punto de venta solo tiene '
+                f'{"%g" % float(producto.stock)} {producto.unidad_medida} de {producto.nombre} '
+                '(parte ya se vendió).')
+            return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+        stock = _stock_de(producto, origen)
+        if stock is None:
+            stock, _ = _get_or_create_stock(producto, origen)
+        ant_alm = stock.cantidad
+        ant_pos = producto.stock
+        producto.stock = ant_pos - cantidad
+        campos = ['stock']
+        otros = AlmacenTraslado.objects.filter(producto=producto).exclude(pk=traslado.pk).exists()
+        if producto.stock == 0 and not otros:
+            producto.visible_pos = False
+            campos.append('visible_pos')
+        producto.save(update_fields=campos)
+        stock.cantidad = ant_alm + cantidad
+        stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+        entrada = traslado.entrada_generada
+        num_entrada = entrada.numero_entrada if entrada else None
+        if entrada is not None:
+            entrada.delete()
+        traslado.delete()
+        _movimiento_almacen(producto, 'ajuste', cantidad, ant_alm,
+                            stock.cantidad, request.user, None,
+                            f'Cancelación traslado #{numero} (devolución al almacén)',
+                            almacen=origen)
+        MovimientoInventario.objects.create(
+            producto=producto, tipo='ajuste', cantidad=-cantidad,
+            stock_anterior=ant_pos, stock_nuevo=producto.stock,
+            referencia_id=None,
+            descripcion=(f'Cancelación traslado #{numero}' +
+                         (f' (entrada {num_entrada} eliminada)' if num_entrada else '')),
+            usuario=request.user,
+        )
+        _sincronizar_inventario_dia(fecha)
+    messages.success(
+        request,
+        f'Traslado {numero} cancelado: {"%g" % float(cantidad)} {producto.unidad_medida} '
+        f'de {producto.nombre} devueltos al almacén.')
+    return redirect(f"{_reverse('core:almacen_traslado_lista')}?fecha={fecha_qs}")
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_almacen
+def almacen_movimientos(request):
+    """Auditoría propia del almacén (entradas, traslados y ajustes)."""
+    query = (request.GET.get('q') or '').strip()
+    tipo = request.GET.get('tipo', '')
+    almacen_f, multi = _resolver_almacen(request)
+    movs = AlmacenMovimiento.objects.select_related('producto', 'usuario', 'almacen').order_by('-fecha')
+    if almacen_f:
+        movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+    if tipo in ('entrada', 'traslado', 'ajuste'):
+        movs = movs.filter(tipo=tipo)
+    if query:
+        q_norm = _norm_sin_tildes(query)
+        ids = [m.producto_id for m in movs.select_related('producto')
+               if q_norm in _norm_sin_tildes(m.producto.nombre)]
+        movs = movs.filter(producto_id__in=ids)
+    return render(request, 'core/almacen_movimientos.html', {
+        'movimientos': movs[:300], 'q': query, 'tipo': tipo,
+        'almacenes': Almacen.activos(), 'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+@requiere_modo('pos_almacenes', 'multi_pos')
+
+
+@requiere_admin
+def almacen_ajuste(request):
+    """Ajuste de existencias del almacén (solo admin)."""
+    productos = Producto.objects.filter(activo=True).order_by('nombre')
+    almacen_f, multi = _resolver_almacen(request)
+    stock_map = _stock_map_para(almacen_f)
+    preseleccionado = request.GET.get('producto', '') or request.POST.get('producto', '')
+    if request.method == 'POST':
+        producto_id = request.POST.get('producto')
+        try:
+            nueva = Decimal(str(request.POST.get('cantidad', '')))
+        except Exception:
+            nueva = None
+        motivo = (request.POST.get('motivo') or '').strip()
+        almacen_post, multi_post = _resolver_almacen(request)
+        if multi_post and not almacen_post:
+            messages.error(request, 'Seleccione el almacén del ajuste.')
+            return redirect('core:almacen_ajuste')
+        if not producto_id or nueva is None or nueva < 0:
+            messages.error(request, 'Seleccione un producto y una cantidad válida (0 o más).')
+            return redirect('core:almacen_ajuste')
+        if not motivo:
+            messages.error(request, 'Indique el motivo del ajuste.')
+            return redirect('core:almacen_ajuste')
+        producto = get_object_or_404(Producto, pk=producto_id)
+        with transaction.atomic():
+            stock, _ = _get_or_create_stock(producto, almacen_post)
+            anterior = stock.cantidad
+            stock.cantidad = nueva
+            stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+            _movimiento_almacen(producto, 'ajuste', nueva, anterior, nueva,
+                                request.user, None, f'Ajuste: {motivo}',
+                                almacen=almacen_post)
+        messages.success(
+            request, f'Existencia de {producto.nombre} ajustada a {"%g" % float(nueva)}.')
+        return redirect('core:almacen_stock')
+    return render(request, 'core/almacen_ajuste_form.html', {
+        'productos': productos, 'stock_map': stock_map,
+        'stock_json': json.dumps({str(k): str(v) for k, v in stock_map.items()}),
+        'preseleccionado': str(preseleccionado),
+        'almacenes': Almacen.activos(),
+        'almacen_actual': almacen_f,
+        'multi': multi,
+    })
+
+
+# ============================================================
+# CONFIGURACIÓN (tienda + almacenes + apariencia + regional, solo admin)
+# ============================================================
+def _tienda_context():
+    try:
+        cfg = ConfiguracionTienda.get_solo()
+    except Exception:
+        cfg = None
+    if cfg is None:
+        return {'TIENDA': {'nombre': 'Donde Clau', 'logo_url': None,
+                           'color_acento': '#6f53d9', 'tema': 'light'},
+                'MODO': 'pos_almacenes'}
+    try:
+        modo = cfg.modo_operacion
+    except Exception:
+        modo = 'pos_almacenes'
+    if modo not in MODOS_OPERACION:
+        modo = 'pos_almacenes'
+    return {'TIENDA': {'nombre': cfg.nombre_tienda, 'logo_url': cfg.logo_url,
+                       'color_acento': cfg.color_acento or '#6f53d9',
+                       'tema': cfg.tema_por_defecto or 'light',
+                       'moneda': cfg.moneda, 'simbolo': cfg.simbolo_moneda,
+                       'objeto': cfg, 'modo': modo},
+            'MODO': modo}
+
+
+def configuracion_tienda(request):
+    """Context processor: nombre/logo/acento disponibles en base.html."""
+    try:
+        return _tienda_context()
+    except Exception:
+        return {}
+
+
+def _resolver_almacen(request, campo='almacen'):
+    """Devuelve el almacén activo según GET→sesión→único.
+
+    Con 1 solo almacén devuelve ese sin exigir selector (compatibilidad).
+    Con 2+ exige selección explícita (GET o sesión) o None.
+    """
+    try:
+        activos = list(Almacen.activos())
+    except Exception:
+        return None, False
+    if len(activos) == 1:
+        return activos[0], False
+    if not activos:
+        return None, True
+    # GET manda: si el parámetro viene presente pero vacío ("Todos"),
+    # limpia la sesión para volver a ver todos los almacenes.
+    if campo in request.GET or 'origen' in request.GET or 'almacen' in request.GET:
+        raw = request.GET.get(campo, '')
+        if not raw and campo != 'origen':
+            raw = request.GET.get('origen', '')
+        if not raw and campo != 'almacen':
+            raw = request.GET.get('almacen', '')
+        if not raw:
+            request.session.pop('almacen_id', None)
+            return None, True
+        try:
+            elegido = next((a for a in activos if a.pk == int(raw)), None)
+        except (ValueError, TypeError):
+            elegido = None
+        if elegido:
+            request.session['almacen_id'] = elegido.pk
+        return elegido, True
+    aid = request.POST.get(campo) or request.session.get('almacen_id')
+    # Compat: el formulario de traslados usa campo 'origen'; acéptalo como alias.
+    if not aid and campo != 'origen':
+        aid = request.POST.get('origen')
+    if not aid and campo != 'almacen':
+        aid = request.POST.get('almacen')
+    try:
+        aid = int(aid) if aid else None
+    except (ValueError, TypeError):
+        aid = None
+    return next((a for a in activos if a.pk == aid), None), True
+
+
+def _stock_de(producto, almacen):
+    """Stock del (producto, almacén) con compat legacy (almacen NULL→origen)."""
+    if almacen is None:
+        return AlmacenStock.objects.select_for_update().filter(
+            producto=producto, almacen__isnull=True).first()
+    stock = AlmacenStock.objects.select_for_update().filter(
+        producto=producto, almacen=almacen).first()
+    if stock is None:
+        # Migra fila legacy sin almacén para no perder existencias previas.
+        legacy = AlmacenStock.objects.select_for_update().filter(
+            producto=producto, almacen__isnull=True).first()
+        if legacy is not None:
+            legacy.almacen = almacen
+            legacy.save(update_fields=['almacen'])
+            return legacy
+    return stock
+
+
+def _get_or_create_stock(producto, almacen):
+    """Get_or_create por (producto, almacén) reutilizando fila legacy NULL."""
+    if almacen is None:
+        s = AlmacenStock.objects.filter(
+            producto=producto, almacen__isnull=True).first()
+        if s is not None:
+            return s, False
+        return AlmacenStock.objects.create(
+            producto=producto, almacen=None, cantidad=Decimal('0')), True
+    try:
+        return AlmacenStock.objects.get(producto=producto, almacen=almacen), False
+    except AlmacenStock.DoesNotExist:
+        pass
+    legacy = AlmacenStock.objects.filter(
+        producto=producto, almacen__isnull=True).first()
+    if legacy is not None:
+        legacy.almacen = almacen
+        legacy.save(update_fields=['almacen'])
+        return legacy, False
+    return AlmacenStock.objects.create(
+        producto=producto, almacen=almacen, cantidad=Decimal('0')), True
+
+
+def _mapa_caducidad(almacen_f):
+    """Peor estado de caducidad por producto: vencido > por_vencer > ok."""
+    from .models import DIAS_AVISO_CADUCIDAD
+    hoy = ahora_servidor().date()
+    limite = hoy + timedelta(days=DIAS_AVISO_CADUCIDAD)
+    qs = AlmacenEntrada.objects.filter(fecha_caducidad__isnull=False)
+    if almacen_f:
+        qs = qs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
+    orden = {'ok': 0, 'por_vencer': 1, 'vencido': 2}
+    mapa = {}
+    for e in qs.values('producto_id', 'fecha_caducidad'):
+        if e['fecha_caducidad'] < hoy:
+            est = 'vencido'
+        elif e['fecha_caducidad'] <= limite:
+            est = 'por_vencer'
+        else:
+            est = 'ok'
+        if orden[est] > orden[mapa.get(e['producto_id'], 'ok')]:
+            mapa[e['producto_id']] = est
+    return mapa
+
+
+def _stock_map_para(almacen_f):
+    """Mapa producto_id→cantidad incluyendo filas legacy NULL si filtra."""
+    qs = AlmacenStock.objects.all()
+    rows = list(qs)
+    m = {}
+    for s in rows:
+        if almacen_f and s.almacen_id not in (almacen_f.pk, None):
+            continue
+        # El stock del almacén manda; el legacy solo si no hay propio.
+        if s.producto_id not in m or (s.almacen_id == (almacen_f.pk if almacen_f else None)):
+            m[s.producto_id] = s.cantidad
+    return m
+
+
+def _convertir_imagenes_a_webp(calidad=85):
+    """Convierte a WebP las imágenes de productos (JPG/PNG/...) .
+
+    Por cada producto con imagen no-WebP: guarda la versión .webp
+    (misma carpeta, mismo base), actualiza el producto y borra el
+    archivo original. Devuelve (convertidas, omitidas, errores).
+    Nunca rompe el lote: cada producto se procesa en su propio try.
+    """
+    import io as _io
+    import os as _os
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    from PIL import Image as _Img
+    try:
+        from pillow_heif import register_heif_opener as _reg_heif
+        _reg_heif()
+    except Exception:
+        pass
+    convertidas, omitidas, errores = 0, 0, []
+    qs = Producto.objects.exclude(imagen__isnull=True).exclude(imagen='')
+    for p in qs.iterator():
+        try:
+            nombre = p.imagen.name
+        except Exception:
+            omitidas += 1
+            continue
+        if not nombre or nombre.lower().endswith('.webp'):
+            omitidas += 1
+            continue
+        try:
+            if not default_storage.exists(nombre):
+                omitidas += 1
+                continue
+            with default_storage.open(nombre, 'rb') as f:
+                img = _Img.open(f)
+                img.load()
+            # WebP conserva alfa: solo se aplana si no hay transparencia.
+            if img.mode in ('RGBA', 'LA', 'PA'):
+                try:
+                    if img.getchannel('A').getextrema() == (255, 255):
+                        img = img.convert('RGB')
+                except Exception:
+                    img = img.convert('RGB')
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            base, _ext = _os.path.splitext(nombre)
+            nuevo = base + '.webp'
+            buf = _io.BytesIO()
+            img.save(buf, format='WEBP', quality=calidad, method=6)
+            buf.seek(0)
+            if default_storage.exists(nuevo):
+                default_storage.delete(nuevo)
+            default_storage.save(nuevo, ContentFile(buf.read()))
+            p.imagen = nuevo
+            p.save(update_fields=['imagen'])
+            if nuevo != nombre and default_storage.exists(nombre):
+                default_storage.delete(nombre)
+            convertidas += 1
+        except Exception as e:
+            errores.append(f"{nombre}: {e}")
+    return convertidas, omitidas, errores
+
+
+@requiere_admin
+def configuracion(request):
+    cfg = ConfiguracionTienda.get_solo()
+    tab = request.GET.get('tab', 'tienda')
+    if request.method == 'POST':
+        form_kind = request.POST.get('form_kind', 'tienda')
+        if form_kind == 'modo':
+            # Selector de modo de operación (solo admin: la vista ya lo exige).
+            # Cambiar de modo NUNCA borra datos: solo oculta/muestra secciones.
+            nuevo = (request.POST.get('modo_operacion') or '').strip()
+            validos = dict(ConfiguracionTienda.MODOS_OPERACION)
+            if nuevo in validos:
+                if cfg.modo_operacion != nuevo:
+                    cfg.modo_operacion = nuevo
+                    cfg.save(update_fields=['modo_operacion'])
+                    messages.success(
+                        request,
+                        f"Modo de operación cambiado a '{validos[nuevo]}'. "
+                        'Lo no aplicable se oculta sin borrar datos.')
+                else:
+                    messages.info(request, 'El modo de operación no cambió.')
+            else:
+                messages.error(request, 'Modo de operación inválido.')
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
+        if form_kind == 'pos_crear':
+            # CRUD de puntos de venta (spec §5, solo admin: la vista lo exige).
+            # Un POS ↔ un almacén (varios POS pueden compartir almacén).
+            nombre = (request.POST.get('nombre') or '').strip()
+            almacen = Almacen.objects.filter(pk=_pos_id(request, 'almacen')).first()
+            if not nombre:
+                messages.error(
+                    request, 'El nombre del punto de venta es obligatorio.')
+            elif almacen is None:
+                messages.error(
+                    request,
+                    'Seleccione el almacén que surte al punto de venta.')
+            elif PuntoVenta.objects.filter(nombre__iexact=nombre).exists():
+                messages.error(
+                    request, 'Ya existe un punto de venta con ese nombre.')
+            else:
+                PuntoVenta.objects.create(nombre=nombre, almacen=almacen)
+                messages.success(
+                    request, f"Punto de venta '{nombre}' creado.")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
+        if form_kind == 'pos_editar':
+            pos = PuntoVenta.objects.filter(
+                pk=_pos_id(request, 'pos_id')).first()
+            nombre = (request.POST.get('nombre') or '').strip()
+            almacen = Almacen.objects.filter(
+                pk=_pos_id(request, 'almacen')).first()
+            if pos is None:
+                messages.error(request, 'Punto de venta no encontrado.')
+            elif not nombre:
+                messages.error(
+                    request, 'El nombre del punto de venta es obligatorio.')
+            elif almacen is None:
+                messages.error(
+                    request,
+                    'Seleccione el almacén que surte al punto de venta.')
+            elif PuntoVenta.objects.filter(
+                    nombre__iexact=nombre).exclude(pk=pos.pk).exists():
+                messages.error(
+                    request, 'Ya existe un punto de venta con ese nombre.')
+            else:
+                pos.nombre = nombre
+                pos.almacen = almacen
+                pos.save(update_fields=['nombre', 'almacen'])
+                messages.success(
+                    request, f"Punto de venta '{nombre}' actualizado.")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
+        if form_kind == 'pos_toggle':
+            pos = PuntoVenta.objects.filter(
+                pk=_pos_id(request, 'pos_id')).first()
+            if pos is None:
+                messages.error(request, 'Punto de venta no encontrado.')
+            elif pos.activo:
+                if PuntoVenta.objects.filter(activo=True).count() <= 1:
+                    messages.error(
+                        request,
+                        'No se puede desactivar el único punto de venta activo.')
+                elif Turno.objects.filter(
+                        punto_venta=pos, abierto=True).exists():
+                    messages.error(
+                        request,
+                        f"No se puede desactivar '{pos.nombre}': "
+                        'tiene turnos abiertos. Ciérrelos primero.')
+                else:
+                    pos.activo = False
+                    pos.save(update_fields=['activo'])
+                    messages.success(
+                        request,
+                        f"Punto de venta '{pos.nombre}' desactivado.")
+            else:
+                pos.activo = True
+                pos.save(update_fields=['activo'])
+                messages.success(
+                    request, f"Punto de venta '{pos.nombre}' activado.")
+            return redirect(f"{reverse_configuracion()}?tab=almacenes")
+        if form_kind == 'convertir_webp':
+            # Convierte a WebP todas las imágenes de productos que aún
+            # estén en JPG/PNG/etc, borra el archivo original y apunta
+            # cada producto a su nueva imagen .webp.
+            convertidas, omitidas, errores = _convertir_imagenes_a_webp()
+            if convertidas:
+                messages.success(
+                    request,
+                    f"Imágenes convertidas a WebP: {convertidas} "
+                    f"(omitidas: {omitidas}).")
+            else:
+                messages.info(
+                    request,
+                    f"No había imágenes por convertir (omitidas: {omitidas}).")
+            for err in errores[:5]:
+                messages.warning(request, f"No se pudo convertir: {err}")
+            return redirect(f"{reverse_configuracion()}?tab=tienda")
+        if form_kind == 'tienda':
+            f = ConfigTiendaForm(request.POST, request.FILES, instance=cfg)
+        elif form_kind == 'apariencia':
+            f = ConfigAparienciaForm(request.POST, instance=cfg)
+        else:
+            f = ConfigRegionalForm(request.POST, instance=cfg)
+        if f.is_valid():
+            f.save()
+            messages.success(request, 'Configuración guardada.')
+        else:
+            messages.error(request, 'Revise los datos del formulario.')
+        return redirect(f"{reverse_configuracion()}?tab={form_kind}")
+    almacenes = list(Almacen.objects.all().order_by('nombre'))
+    # Enriquece con stock valorizado.
+    stocks = AlmacenStock.objects.select_related('producto', 'almacen')
+    por_alm = {}
+    for s in stocks:
+        d = por_alm.setdefault(s.almacen_id, {'productos': 0, 'valor': Decimal('0')})
+        d['productos'] += 1
+        try:
+            d['valor'] += s.cantidad * (s.producto.precio_compra or 0)
+        except Exception:
+            pass
+    for a in almacenes:
+        d = por_alm.get(a.pk, {'productos': 0, 'valor': Decimal('0')})
+        a.info_productos = d['productos']
+        a.info_valor = d['valor']
+    return render(request, 'core/configuracion.html', {
+        'cfg': cfg, 'tab': tab,
+        'modos_operacion': ConfiguracionTienda.MODOS_OPERACION,
+        'form_tienda': ConfigTiendaForm(instance=cfg),
+        'form_apariencia': ConfigAparienciaForm(instance=cfg),
+        'form_regional': ConfigRegionalForm(instance=cfg),
+        'form_almacen': AlmacenForm(),
+        'almacenes': almacenes, 'por_alm': por_alm,
+        'puntos_venta': list(
+            PuntoVenta.objects.select_related('almacen').order_by('nombre')),
+        'multi': Almacen.objects.filter(activo=True).count() > 1,
+    })
+
+
+def reverse_configuracion():
+    from django.urls import reverse
+    return reverse('core:configuracion')
+
+
+def _pos_id(request, campo):
+    """PK entera desde POST sin 500 ante basura (None si inválida)."""
+    try:
+        return int(request.POST.get(campo) or 0)
+    except (ValueError, TypeError):
+        return 0
+
+
+@requiere_admin
+def config_almacen_crear(request):
+    if request.method != 'POST':
+        return redirect('core:configuracion')
+    form = AlmacenForm(request.POST)
+    if form.is_valid():
+        form.save()
+        messages.success(request, f"Almacén '{form.instance.nombre}' creado.")
+    else:
+        messages.error(request, 'No se pudo crear: ' + '; '.join(
+            f"{k}: {', '.join(v)}" for k, v in form.errors.items()))
+    return redirect('/configuracion/?tab=almacenes')
+
+
+@requiere_admin
+def config_almacen_editar(request, pk):
+    alm = get_object_or_404(Almacen, pk=pk)
+    if request.method == 'POST':
+        form = AlmacenForm(request.POST, instance=alm)
+        if form.is_valid():
+            # No permitir desactivar aquí si viola reglas (lo valida el toggle).
+            if not form.cleaned_data.get('activo') and alm.activo:
+                return config_almacen_toggle(request, pk)
+            form.save()
+            messages.success(request, f"Almacén '{alm.nombre}' actualizado.")
+        else:
+            messages.error(request, 'No se pudo guardar: nombre duplicado o inválido.')
+        return redirect('/configuracion/?tab=almacenes')
+    return render(request, 'core/configuracion.html', {
+        'cfg': ConfiguracionTienda.get_solo(), 'tab': 'almacenes',
+        'form_tienda': ConfigTiendaForm(instance=ConfiguracionTienda.get_solo()),
+        'form_apariencia': ConfigAparienciaForm(instance=ConfiguracionTienda.get_solo()),
+        'form_regional': ConfigRegionalForm(instance=ConfiguracionTienda.get_solo()),
+        'form_almacen': AlmacenForm(instance=alm),
+        'almacenes': Almacen.objects.all().order_by('nombre'),
+        'por_alm': {}, 'multi': Almacen.objects.filter(activo=True).count() > 1,
+        'editando': alm,
+        'puntos_venta': list(
+            PuntoVenta.objects.select_related('almacen').order_by('nombre')),
+    })
+
+
+@requiere_admin
+
+
+@require_POST
+def config_almacen_toggle(request, pk):
+    alm = get_object_or_404(Almacen, pk=pk)
+    if alm.activo:
+        # Bloqueos: único activo o con stock.
+        if Almacen.objects.filter(activo=True).count() <= 1:
+            messages.error(request, 'No se puede desactivar el único almacén activo.')
+            return redirect('/configuracion/?tab=almacenes')
+        tiene = AlmacenStock.objects.filter(almacen=alm, cantidad__gt=0).exists()
+        if tiene:
+            messages.error(
+                request,
+                f"No se puede desactivar '{alm.nombre}': aún tiene existencias. Trasládelas primero.")
+            return redirect('/configuracion/?tab=almacenes')
+        alm.activo = False
+        alm.save(update_fields=['activo'])
+        messages.success(request, f"Almacén '{alm.nombre}' desactivado.")
+    else:
+        alm.activo = True
+        alm.save(update_fields=['activo'])
+        messages.success(request, f"Almacén '{alm.nombre}' activado.")
+    return redirect('/configuracion/?tab=almacenes')
 
 
 # ============================================================
 # RETIROS POR DONACIÓN
 # ============================================================
-
 @requiere_admin
 def retiro_donacion_lista(request):
     hoy = ahora_servidor().date()
@@ -2479,7 +4487,7 @@ def retiro_donacion_lista(request):
 
 @requiere_admin
 def retiro_donacion_crear(request):
-    productos = Producto.objects.filter(activo=True, stock__gt=0).select_related('categoria').order_by('categoria__nombre', 'nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).select_related('categoria').order_by('categoria__nombre', 'nombre')
 
     if request.method == 'POST':
         beneficiario_nombre = request.POST.get('beneficiario_nombre', '').strip()
@@ -2631,10 +4639,16 @@ def submayor_detalle(request, producto_id):
         fecha__date__gte=fecha_inicio,
         fecha__date__lte=fecha_fin
     ).order_by('-fecha')
-    
+
+    historial = producto.historial_precios.filter(
+        fecha__date__gte=fecha_inicio,
+        fecha__date__lte=fecha_fin
+    ).order_by('-fecha')
+
     context = {
         'producto': producto,
         'movimientos': movimientos,
+        'historial': historial,
         'fecha_inicio': fecha_inicio,
         'fecha_fin': fecha_fin,
     }
@@ -2644,7 +4658,6 @@ def submayor_detalle(request, producto_id):
 # ============================================================
 # DEUDORES Y DEUDAS
 # ============================================================
-
 def _resumen_deuda(deuda):
     """Calcula abonado/saldo de una deuda (aprovecha abonos prefetcheados)."""
     abonado = sum((a.monto for a in deuda.abonos.all()), Decimal('0'))
@@ -2781,37 +4794,80 @@ def _parse_fecha_pago(valor):
 
 
 @login_required
-def deuda_lista(request):
+def deudor_lista(request):
     q = request.GET.get('q', '').strip()
-    pendientes_only = request.GET.get('pendientes') == '1'
-
     deudores = Deudor.objects.prefetch_related('deudas__abonos').order_by('nombre', 'apellido')
     if q:
         deudores = deudores.filter(
-            Q(nombre__icontains=q) | Q(apellido__icontains=q) | Q(ci__icontains=q)
+            Q(nombre__icontains=q) | Q(apellido__icontains=q)
+            | Q(alias__icontains=q) | Q(ci__icontains=q) | Q(telefono__icontains=q)
         )
-    deudores = list(deudores)
+    saldo_total = Decimal('0')
+    lista = []
     for d in deudores:
         d.calc_saldo = saldo_deudor(d)
-        d.calc_pendientes = sum(1 for deuda in d.deudas.all() if _resumen_deuda(deuda).calc_saldo > 0)
+        d.calc_pendientes = sum(1 for de in d.deudas.all() if _resumen_deuda(de).calc_saldo > 0)
+        saldo_total += d.calc_saldo
+        lista.append(d)
+    context = {
+        'deudores': lista,
+        'q': q,
+        'total_deudores': Deudor.objects.filter(activo=True).count(),
+        'num_pendientes': sum(1 for d in lista if d.calc_saldo > 0),
+        'saldo_total': saldo_total,
+    }
+    return render(request, 'core/deudor_lista.html', context)
 
-    deudas = Deuda.objects.select_related('deudor', 'producto', 'presentacion').prefetch_related('abonos').order_by('-fecha_registro')
+
+@login_required
+def deuda_lista(request):
+    q = request.GET.get('q', '').strip()
+    f_desde = (request.GET.get('desde') or '').strip()
+    f_hasta = (request.GET.get('hasta') or '').strip()
+    f_deudor = (request.GET.get('deudor') or '').strip()
+    f_tipo = (request.GET.get('tipo') or '').strip()
+    pendientes_only = request.GET.get('pendientes') == '1'
+
+    deudas = (Deuda.objects.select_related('deudor', 'producto', 'presentacion')
+              .prefetch_related('abonos').order_by('-fecha_registro'))
+    desde = _parse_fecha_pago(f_desde)
+    hasta = _parse_fecha_pago(f_hasta)
+    if desde:
+        deudas = deudas.filter(fecha_registro__date__gte=desde)
+    if hasta:
+        deudas = deudas.filter(fecha_registro__date__lte=hasta)
+    if f_deudor:
+        try:
+            deudas = deudas.filter(deudor_id=int(f_deudor))
+        except ValueError:
+            pass
+    if f_tipo in ('dinero', 'producto'):
+        deudas = deudas.filter(tipo=f_tipo)
+    if q:
+        deudas = deudas.filter(
+            Q(motivo__icontains=q) | Q(numero_deuda__icontains=q)
+            | Q(deudor__nombre__icontains=q) | Q(deudor__apellido__icontains=q)
+            | Q(deudor__alias__icontains=q) | Q(deudor__ci__icontains=q)
+        )
+    deudas_l = [_resumen_deuda(d) for d in list(deudas)]
     if pendientes_only:
-        deudas = [d for d in deudas if _resumen_deuda(d).calc_saldo > 0]
-    else:
-        deudas = [_resumen_deuda(d) for d in deudas]
+        deudas_l = [d for d in deudas_l if d.calc_saldo > 0]
 
-    total_por_cobrar = sum((d.calc_saldo for d in Deuda.objects.prefetch_related('abonos').all() if _resumen_deuda(d).calc_saldo > 0), Decimal('0'))
+    total_por_cobrar = sum((d.calc_saldo for d in Deuda.objects.prefetch_related('abonos') if _resumen_deuda(d).calc_saldo > 0), Decimal('0'))
     total_cobrado = AbonoDeuda.objects.aggregate(total=Sum('monto'))['total'] or Decimal('0')
+    total_filtrado = sum((d.calc_saldo for d in deudas_l if d.calc_saldo > 0), Decimal('0'))
 
     context = {
-        'deudores': deudores,
-        'deudas': deudas,
+        'deudas': deudas_l,
+        'deudores_filtro': list(Deudor.objects.filter(activo=True).order_by('nombre', 'apellido')),
         'total_por_cobrar': total_por_cobrar,
         'total_cobrado': total_cobrado,
+        'total_filtrado': total_filtrado,
         'total_deudores': Deudor.objects.filter(activo=True).count(),
+        'num_filtradas': len(deudas_l),
         'q': q,
-        'pendientes_only': pendientes_only,
+        'f_desde': f_desde, 'f_hasta': f_hasta, 'f_deudor': f_deudor,
+        'f_tipo': f_tipo, 'pendientes_only': pendientes_only,
     }
     return render(request, 'core/deuda_lista.html', context)
 
@@ -2820,6 +4876,7 @@ def deuda_lista(request):
 def deudor_crear(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
+        alias = request.POST.get('alias', '').strip()
         apellido = request.POST.get('apellido', '').strip()
         ci = request.POST.get('ci', '').strip() or None
         telefono = request.POST.get('telefono', '').strip()
@@ -2827,15 +4884,15 @@ def deudor_crear(request):
         if not nombre:
             messages.error(request, 'El nombre es requerido.')
             return redirect('core:deudor_crear')
-        if not ci:
-            messages.error(request, 'La CI es requerida.')
+        if not alias:
+            messages.error(request, 'El alias es requerido.')
             return redirect('core:deudor_crear')
-        if Deudor.objects.filter(ci=ci).exists():
+        if ci is not None and Deudor.objects.filter(ci=ci).exists():
             messages.error(request, 'Ya existe un deudor con esa CI.')
             return redirect('core:deudor_crear')
 
-        deudor = Deudor.objects.create(nombre=nombre, apellido=apellido, ci=ci, telefono=telefono)
-        messages.success(request, f'Deudor {deudor.nombre_completo} registrado.')
+        deudor = Deudor.objects.create(nombre=nombre, alias=alias, apellido=apellido, ci=ci, telefono=telefono)
+        messages.success(request, f'Deudor {deudor.nombre_display} registrado.')
         return redirect('core:deudor_detalle', pk=deudor.pk)
 
     return render(request, 'core/deudor_form.html', {'titulo': 'Registrar Deudor'})
@@ -2847,6 +4904,7 @@ def deudor_editar(request, pk):
 
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
+        alias = request.POST.get('alias', '').strip()
         apellido = request.POST.get('apellido', '').strip()
         ci = request.POST.get('ci', '').strip() or None
         telefono = request.POST.get('telefono', '').strip()
@@ -2854,14 +4912,15 @@ def deudor_editar(request, pk):
         if not nombre:
             messages.error(request, 'El nombre es requerido.')
             return redirect('core:deudor_editar', pk=pk)
-        if not ci:
-            messages.error(request, 'La CI es requerida.')
+        if not alias:
+            messages.error(request, 'El alias es requerido.')
             return redirect('core:deudor_editar', pk=pk)
-        if Deudor.objects.filter(ci=ci).exclude(pk=pk).exists():
+        if ci is not None and Deudor.objects.filter(ci=ci).exclude(pk=pk).exists():
             messages.error(request, 'Ya existe otro deudor con esa CI.')
             return redirect('core:deudor_editar', pk=pk)
 
         deudor.nombre = nombre
+        deudor.alias = alias
         deudor.apellido = apellido
         deudor.ci = ci
         deudor.telefono = telefono
@@ -2875,18 +4934,83 @@ def deudor_editar(request, pk):
 @login_required
 def deudor_detalle(request, pk):
     deudor = get_object_or_404(Deudor.objects.prefetch_related('deudas__abonos', 'deudas__producto', 'deudas__presentacion'), pk=pk)
+    mostrar_todas = request.GET.get('todas') == '1'
     deudas = sorted(deudor.deudas.all(), key=lambda d: d.fecha_registro, reverse=True)
     for d in deudas:
         _resumen_deuda(d)
+    deudas_mostrar = list(deudas) if mostrar_todas else [d for d in deudas if d.calc_saldo > 0]
     abonos = AbonoDeuda.objects.filter(deuda__deudor=deudor).select_related('deuda').order_by('-fecha')
     saldo = sum((d.calc_saldo for d in deudas), Decimal('0'))
     context = {
         'deudor': deudor,
         'deudas': deudas,
+        'deudas_mostrar': deudas_mostrar,
+        'mostrar_todas': mostrar_todas,
+        'num_pendientes': sum(1 for d in deudas if d.calc_saldo > 0),
         'abonos': abonos,
         'saldo': saldo,
     }
     return render(request, 'core/deudor_detalle.html', context)
+
+
+@login_required
+def deudor_impresion(request, pk):
+    """Página imprimible del historial de deudas de un deudor."""
+    deudor = get_object_or_404(Deudor.objects.prefetch_related('deudas__abonos', 'deudas__producto', 'deudas__presentacion'), pk=pk)
+    mostrar_todas = request.GET.get('todas') == '1'
+    deudas = sorted(deudor.deudas.all(), key=lambda d: d.fecha_registro, reverse=True)
+    for d in deudas:
+        _resumen_deuda(d)
+    deudas_mostrar = list(deudas) if mostrar_todas else [d for d in deudas if d.calc_saldo > 0]
+    abonos = AbonoDeuda.objects.filter(deuda__deudor=deudor).select_related('deuda').order_by('-fecha')
+    saldo = sum((d.calc_saldo for d in deudas), Decimal('0'))
+    total_monto = sum((d.monto for d in deudas), Decimal('0'))
+    total_abonado = sum((d.calc_abonado for d in deudas), Decimal('0'))
+    context = {
+        'deudor': deudor,
+        'deudas': deudas,
+        'deudas_mostrar': deudas_mostrar,
+        'mostrar_todas': mostrar_todas,
+        'num_pendientes': sum(1 for d in deudas if d.calc_saldo > 0),
+        'abonos': abonos,
+        'saldo': saldo,
+        'total_monto': total_monto,
+        'total_abonado': total_abonado,
+        'ahora': timezone.now(),
+    }
+    return render(request, 'core/deudor_impresion.html', context)
+
+
+@login_required
+def deudores_totales_impresion(request):
+    """Página imprimible con la lista de deudores y cuanto deben."""
+    q = request.GET.get('q', '').strip()
+    deudores = Deudor.objects.all()
+    if q:
+        deudores = deudores.filter(
+            Q(nombre__icontains=q) | Q(apellido__icontains=q) |
+            Q(alias__icontains=q) | Q(ci__icontains=q) | Q(telefono__icontains=q)
+        )
+    deudores = list(deudores.order_by('nombre', 'apellido'))
+    for d in deudores:
+        ds = sorted(d.deudas.all(), key=lambda x: x.fecha_registro, reverse=True)
+        for dd in ds:
+            _resumen_deuda(dd)
+        d.calc_pendientes = sum(1 for dd in ds if dd.calc_saldo > 0)
+        d.calc_saldo = sum((dd.calc_saldo for dd in ds), Decimal('0'))
+        d.calc_total = sum((dd.monto for dd in ds), Decimal('0'))
+    saldo_total = sum((d.calc_saldo for d in deudores), Decimal('0'))
+    total_deudores = len(deudores)
+    num_pendientes = sum(1 for d in deudores if d.calc_saldo > 0)
+    context = {
+        'deudores': deudores,
+        'saldo_total': saldo_total,
+        'total_deudores': total_deudores,
+        'num_pendientes': num_pendientes,
+        'q': q,
+        'ahora': timezone.now(),
+    }
+    return render(request, 'core/deudores_totales_impresion.html', context)
 
 
 @login_required
@@ -2896,7 +5020,7 @@ def deudor_toggle(request, pk):
     deudor.save()
     estado = 'activado' if deudor.activo else 'desactivado'
     messages.success(request, f'Deudor {estado}.')
-    return redirect('core:deuda_lista')
+    return redirect('core:deudor_lista')
 
 
 @login_required
@@ -2929,7 +5053,7 @@ def deudor_eliminar(request, pk):
         nombre = deudor.nombre_completo
         deudor.delete()
         messages.success(request, f'Deudor {nombre} eliminado.')
-        return redirect('core:deuda_lista')
+        return redirect('core:deudor_lista')
     return render(request, 'core/deudor_confirmar_eliminar.html', {'deudor': deudor})
 
 
@@ -2977,7 +5101,7 @@ def deuda_crear(request):
                     nums += f' y {len(creadas) - 3} más'
                 messages.success(
                     request,
-                    f'{len(creadas)} deuda(s) de productos para {deudor.nombre_completo} '
+                    f'{len(creadas)} deuda(s) de productos para {deudor.nombre_display} '
                     f'(total ${total:.2f}): {nums}.'
                 )
             else:
@@ -2989,14 +5113,14 @@ def deuda_crear(request):
                     motivo=motivo_base,
                     fecha_pago=fecha_pago,
                 )
-                messages.success(request, f'Deuda {deuda.numero_deuda} registrada para {deudor.nombre_completo} (${deuda.monto}).')
+                messages.success(request, f'Deuda {deuda.numero_deuda} registrada para {deudor.nombre_display} (${deuda.monto}).')
             return redirect('core:deudor_detalle', pk=deudor.pk)
         except ValueError as e:
             messages.error(request, str(e))
             return redirect('core:deuda_crear')
 
     deudores = Deudor.objects.filter(activo=True).order_by('nombre', 'apellido')
-    productos = Producto.objects.filter(activo=True, stock__gt=0).prefetch_related('presentaciones').order_by('nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True, stock__gt=0).prefetch_related('presentaciones').order_by('nombre')
     preselect = request.GET.get('deudor', '')
     return render(request, 'core/deuda_form.html', {
         'titulo': 'Registrar Deuda',
@@ -3078,7 +5202,6 @@ def deuda_eliminar(request, pk):
 # ============================================================
 # POS - DEUDORES Y DEUDAS (solo online)
 # ============================================================
-
 @login_required
 def pos_deudores(request):
     q = request.GET.get('q', '').strip()
@@ -3095,7 +5218,9 @@ def pos_deudores(request):
             'id': d.id,
             'nombre': d.nombre,
             'apellido': d.apellido,
+            'alias': d.alias,
             'nombre_completo': d.nombre_completo,
+            'nombre_display': d.nombre_display,
             'ci': d.ci or '',
             'telefono': d.telefono or '',
             'saldo': str(saldo_deudor(d)),
@@ -3130,6 +5255,8 @@ def pos_deudor_detalle(request, pk):
     return JsonResponse({
         'id': deudor.id,
         'nombre_completo': deudor.nombre_completo,
+        'alias': deudor.alias,
+        'nombre_display': deudor.nombre_display,
         'ci': deudor.ci or '',
         'saldo': str(sum((Decimal(i['saldo']) for i in items), Decimal('0'))),
         'deudas': items,
@@ -3137,25 +5264,30 @@ def pos_deudor_detalle(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def pos_deudor_crear(request):
     try:
         data = json.loads(request.body)
         nombre = (data.get('nombre') or '').strip()
+        alias = (data.get('alias') or '').strip()
         apellido = (data.get('apellido') or '').strip()
         ci = (data.get('ci') or '').strip()
         telefono = (data.get('telefono') or '').strip()
         if not nombre:
             return JsonResponse({'error': 'El nombre es requerido.'}, status=400)
-        if not ci:
-            return JsonResponse({'error': 'La CI es requerida.'}, status=400)
-        if Deudor.objects.filter(ci=ci).exists():
+        if not alias:
+            return JsonResponse({'error': 'El alias es requerido.'}, status=400)
+        if ci and Deudor.objects.filter(ci=ci).exists():
             return JsonResponse({'error': 'Ya existe un deudor con esa CI.'}, status=400)
-        deudor = Deudor.objects.create(nombre=nombre, apellido=apellido, ci=ci, telefono=telefono)
+        deudor = Deudor.objects.create(nombre=nombre, alias=alias, apellido=apellido, ci=ci or None, telefono=telefono)
         return JsonResponse({
             'success': True,
             'id': deudor.id,
             'nombre_completo': deudor.nombre_completo,
+            'alias': deudor.alias,
+            'nombre_display': deudor.nombre_display,
             'ci': deudor.ci,
             'saldo': '0',
         })
@@ -3164,17 +5296,81 @@ def pos_deudor_crear(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_deuda_crear(request):
     try:
         data = json.loads(request.body)
         deudor = get_object_or_404(Deudor, pk=data.get('deudor_id'))
-        tipo = data.get('tipo', 'dinero')
-        if tipo not in ('dinero', 'producto'):
-            return JsonResponse({'error': 'Tipo de deuda inválido.'}, status=400)
         from .models import PresentacionProducto
         motivo_base = data.get('motivo', '')
         fecha_pago = _parse_fecha_pago(data.get('fecha_pago', ''))
+        tipo = data.get('tipo', None)
+
+        # Modo mixto: sin 'tipo', procesa 'dinero' (lista) y/o 'items' (lista).
+        if tipo is None:
+            dinero_list = data.get('dinero') or []
+            items_list = data.get('items') or []
+            if not dinero_list and not items_list:
+                return JsonResponse({'error': 'Agregue dinero o al menos un producto.'}, status=400)
+            # Pre-validación de presentaciones.
+            for it in items_list:
+                producto = get_object_or_404(Producto, pk=it.get('producto_id'))
+                pres_id = it.get('presentacion_id') or None
+                if pres_id and not PresentacionProducto.objects.filter(
+                        pk=pres_id, producto=producto, activo=True).exists():
+                    return JsonResponse(
+                        {'error': f'Presentación inválida para {producto.nombre}.'}, status=400)
+            creadas = []
+            dinero_count = 0
+            producto_count = 0
+            with transaction.atomic():
+                try:
+                    for entrada in dinero_list:
+                        m = entrada.get('monto', 0) if isinstance(entrada, dict) else entrada
+                        mot = (entrada.get('motivo') if isinstance(entrada, dict) else None) or motivo_base
+                        creadas.append(_crear_deuda(
+                            deudor=deudor,
+                            tipo='dinero',
+                            usuario=request.user,
+                            monto=m,
+                            motivo=mot,
+                            fecha_pago=fecha_pago,
+                        ))
+                        dinero_count += 1
+                    for it in items_list:
+                        producto = get_object_or_404(Producto, pk=it.get('producto_id'))
+                        creadas.append(_crear_deuda(
+                            deudor=deudor,
+                            tipo='producto',
+                            usuario=request.user,
+                            producto=producto,
+                            cantidad=it.get('cantidad', 1),
+                            motivo=motivo_base,
+                            fecha_pago=fecha_pago,
+                            presentacion_id=it.get('presentacion_id') or None,
+                        ))
+                        producto_count += 1
+                except ValueError as e:
+                    transaction.set_rollback(True)
+                    return JsonResponse({'error': str(e)}, status=400)
+            total = sum((d.monto for d in creadas), Decimal('0'))
+            deuda = creadas[0]
+            return JsonResponse({
+                'success': True,
+                'numeros': [d.numero_deuda for d in creadas],
+                'count': len(creadas),
+                'monto': str(total),
+                'numero': deuda.numero_deuda,
+                'motivo': deuda.motivo_display,
+                'saldo_deudor': str(saldo_deudor(deudor)),
+                'dinero_count': dinero_count,
+                'producto_count': producto_count,
+            })
+
+        if tipo not in ('dinero', 'producto'):
+            return JsonResponse({'error': 'Tipo de deuda inválido.'}, status=400)
         if tipo == 'producto':
             # Multiproducto: lista de líneas; compat con línea única anterior.
             raw_items = data.get('items')
@@ -3232,6 +5428,7 @@ def pos_deuda_crear(request):
             except ValueError as e:
                 return JsonResponse({'error': str(e)}, status=400)
             extra_resp = {}
+            total = deuda.monto
         resp = {
             'success': True,
             'numero': deuda.numero_deuda,
@@ -3246,6 +5443,8 @@ def pos_deuda_crear(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_deuda_abonar(request):
     """Liquida: selecciona al deudor y reduce su saldo (reparte en las más antiguas)."""
@@ -3381,9 +5580,9 @@ def catalogo(request):
     from .models import Categoria
 
     categorias = list(
-        Categoria.objects.filter(productos__activo=True).distinct().order_by('nombre'))
+        Categoria.objects.filter(productos__activo=True, productos__visible_pos=True).distinct().order_by('nombre'))
     productos = list(
-        Producto.objects.filter(activo=True).select_related('categoria')
+        Producto.objects.filter(activo=True, visible_pos=True).select_related('categoria')
         .prefetch_related('presentaciones').order_by('nombre'))
     sin_cat = [p for p in productos if p.categoria_id is None]
 
@@ -3418,6 +5617,425 @@ def catalogo(request):
     })
 
 
+def _store_stock_map_suma():
+    """Suma de `AlmacenStock.cantidad` por producto (vitrina /store).
+
+    Solo almacenes activos. Si un producto tiene filas propias por
+    almacén, solo esas suman; la fila legacy (`almacen=NULL`) cuenta
+    únicamente cuando no hay ninguna propia (evita doble conteo tras
+    migrar a multi-almacén).
+    """
+    filas = (AlmacenStock.objects
+             .filter(Q(almacen__isnull=True) | Q(almacen__activo=True))
+             .values('producto_id', 'almacen_id')
+             .annotate(total=Sum('cantidad')))
+    por_prod = {}
+    for f in filas:
+        por_prod.setdefault(f['producto_id'], []).append(f)
+    m = {}
+    for pid, entries in por_prod.items():
+        propias = [e for e in entries if e['almacen_id'] is not None]
+        base = propias if propias else entries
+        m[pid] = sum((e['total'] for e in base), Decimal('0'))
+    return m
+
+
+def _store_items():
+    """Items de la vitrina /store desde la misma fuente que el POS.
+
+    En `multi_pos` el stock es la suma de `AlmacenStock` (se ignora
+    `visible_pos`, igual que el POS); en el resto de modos es
+    `Producto.stock` con `activo + visible_pos`. Se listan también los
+    agotados. Límite 2000, ordenados por nombre.
+    """
+    if modo_actual() == 'multi_pos':
+        mapa = _store_stock_map_suma()
+        productos = list(Producto.objects.filter(
+            activo=True).select_related('categoria')
+            .prefetch_related('presentaciones').order_by('nombre')[:2000])
+        for p in productos:
+            # Solo memoria (NO guardar): el stock vive en AlmacenStock.
+            p.stock = mapa.get(p.id, Decimal('0'))
+    else:
+        productos = list(Producto.objects.filter(
+            activo=True, visible_pos=True).select_related('categoria')
+            .prefetch_related('presentaciones').order_by('nombre')[:2000])
+    items = []
+    for p in productos:
+        # En memoria sobre el prefetch (sin N+1): equivale a
+        # presentacion_default() = activas ordenadas por -es_default, factor.
+        candidatas = [pr for pr in p.presentaciones.all() if pr.activo]
+        candidatas.sort(key=lambda pr: (not pr.es_default, pr.factor))
+        pres = candidatas[0] if candidatas else None
+        if pres is not None:
+            precio = pres.precio
+            etiqueta = pres.nombre
+        else:
+            precio = p.precio_venta
+            etiqueta = dict(getattr(p, 'UNIDADES_MEDIDA', [])).get(
+                p.unidad_medida, '') or 'Unidad'
+        stock = p.stock if p.stock is not None else Decimal('0')
+        items.append({
+            'id': p.id,
+            'codigo': p.codigo,
+            'nombre': p.nombre,
+            'categoria': p.categoria.nombre if p.categoria else '',
+            'categoria_id': p.categoria_id,
+            'imagen': p.imagen_url,
+            'precio': precio,
+            'etiqueta': etiqueta,
+            'stock': stock,
+            'stock_fmt': fmt_cantidad_unidad(stock, p.unidad_medida),
+        'disponible': stock > 0,
+        'pocas': Decimal('0') < stock <= (p.stock_minimo or Decimal('0')),
+        'es_nuevo': p.es_nuevo,
+        })
+    # Visibilidad de tienda por rama: una categoría oculta oculta a sus hijas.
+    cats = {c.id: c for c in Categoria.objects.all()}
+
+    def _rama_visible(cid):
+        """(visible, top_id) siguiendo padres; top_id None = sin categoría."""
+        if cid is None:
+            return True, None
+        top = None
+        actual = cats.get(cid)
+        while actual is not None:
+            if not actual.visible_store:
+                return False, None
+            top = actual.id
+            actual = cats.get(actual.padre_id)
+        if top is None:
+            return False, None
+        return True, top
+
+    visibles = []
+    for it in items:
+        ok, top = _rama_visible(it['categoria_id'])
+        if not ok:
+            continue
+        it['padre_top'] = top
+        visibles.append(it)
+    return visibles
+
+
+def _store_nombres_categoria():
+    """Mapa id→nombre de categorías (para el árbol padre/hijas)."""
+    return dict(Categoria.objects.values_list('id', 'nombre'))
+
+
+def store(request):
+    """Portada pública /store: hero, tendencias y categorías destacadas.
+
+    Sin login ni compra. Los productos por categoría viven en sus
+    propias páginas (`store_categoria`) y en el buscador
+    (`store_buscar`): el landing no lista el catálogo completo.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    if request.GET.get('solo') == '1':
+        from django.urls import reverse as _reverse
+        return redirect(f"{_reverse('core:store_buscar')}?solo=1")
+    items = _store_items()
+    # Árbol para destacadas: padres visibles con sus hijas.
+    nombres = _store_nombres_categoria()
+    arbol = _store_arbol(_store_grupos(items), nombres)
+    # Vitrina estilo Algomio: tendencias (4 primeros disponibles) y
+    # destacadas (4 padres con más productos) para el hero/secciones.
+    disponibles = [it for it in items if it.get('disponible')]
+    tendencias = (disponibles or items)[:4]
+    for it in tendencias:
+        # Página de la categoría que agrupa al producto (padre o la hoja).
+        it['pagina_id'] = it.get('padre_top') or it.get('categoria_id')
+    destacadas = sorted(arbol, key=lambda a: a['total'], reverse=True)[:4]
+    return render(request, 'core/store.html', {
+        'arbol': arbol,
+        'nav': _nav_categorias(),
+        'total': len(items),
+        'disponibles': len(disponibles),
+        'tendencias': tendencias,
+        'destacadas': destacadas,
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def store_buscar(request):
+    """Buscador público /store/buscar/: resultados por texto y/o solo disponibles."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    q = (request.GET.get('q') or '').strip()
+    solo = request.GET.get('solo') == '1'
+    items = _store_items()
+    if solo:
+        items = [it for it in items if it.get('disponible')]
+    if q:
+        qn = _norm_sin_tildes(q.lower())
+        items = [it for it in items
+                 if qn in _norm_sin_tildes((it['nombre'] or '').lower())
+                 or qn in _norm_sin_tildes((it['codigo'] or '').lower())]
+    return render(request, 'core/store_buscar.html', {
+        'q': q,
+        'solo': solo,
+        'grupos': _store_grupos(items),
+        'nav': _nav_categorias(),
+        'total': len(items),
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def _store_grupos(items):
+    """Agrupa items de vitrina por categoría hoja (con id y clave del padre)."""
+    grupos = []
+    por_hoja = {}
+    for it in items:
+        key = it['categoria_id'] or 'otros'
+        if key not in por_hoja:
+            por_hoja[key] = {
+                'categoria': it['categoria'] or 'Otros',
+                'items': [],
+                'padre_top': it['padre_top'],
+                'hoja_id': it['categoria_id'],
+            }
+            grupos.append(por_hoja[key])
+        por_hoja[key]['items'].append(it)
+    grupos.sort(key=lambda g: (g['categoria'] == 'Otros', g['categoria'].lower()))
+    for g in grupos:
+        top = g['padre_top']
+        g['padre_key'] = ('p%d' % top) if top is not None else 'otros'
+    return grupos
+
+
+def _nav_categorias():
+    """Árbol recursivo de padres visibles para el menú en cascada.
+
+    Cada nodo: id, nombre, icono e hijas (mismo formato). Incluye
+    categorías aunque estén vacías (su página muestra el aviso).
+    Una hija de padre oculto no se lista.
+    """
+    cats = list(Categoria.objects.select_related('padre').order_by('nombre'))
+    visibles = set()
+    for c in cats:
+        actual = c
+        ok = True
+        while actual is not None:
+            if not actual.visible_store:
+                ok = False
+                break
+            actual = actual.padre
+        if ok:
+            visibles.add(c.id)
+    hijos_map = {}
+    for c in cats:
+        if c.id in visibles and c.padre_id is not None:
+            hijos_map.setdefault(c.padre_id, []).append(c)
+
+    def _nodo(c):
+        return {
+            'id': c.id, 'nombre': c.nombre,
+            'icono': (c.icono or '').strip(),
+            'hijas': [_nodo(h) for h in hijos_map.get(c.id, [])
+                      if h.id in visibles],
+        }
+
+    return [_nodo(c) for c in cats
+            if c.id in visibles and c.padre_id is None]
+
+
+def _store_arbol(grupos, nombres):
+    """Árbol padre→hijas con ids para navegar a páginas por categoría."""
+    arbol = []
+    por_top = {}
+    for g in grupos:
+        top = g['padre_top']
+        if top is None:
+            clave, nombre, tid = 'otros', 'Otros', None
+        else:
+            clave, nombre, tid = ('p%d' % top), nombres.get(top, ''), top
+        if clave not in por_top:
+            por_top[clave] = {'key': clave, 'id': tid, 'nombre': nombre, 'total': 0, 'hijas': []}
+            arbol.append(por_top[clave])
+        por_top[clave]['total'] += len(g['items'])
+        if top is not None and g['categoria'] != nombre:
+            por_top[clave]['hijas'].append({
+                'id': g.get('hoja_id'), 'nombre': g['categoria'], 'total': len(g['items'])})
+    arbol.sort(key=lambda a: (a['key'] == 'otros', a['nombre'].lower()))
+    return arbol
+
+
+def store_categoria(request, pk):
+    """Página pública de una categoría con selector lateral de hijas.
+
+    - Con hijas: lista las hijas (cards) + sus productos directos; los
+      productos se ven al elegir una hija en el lateral.
+    - Hoja: sus productos + lateral con las hermanas.
+    Sin login ni compra. Rama oculta → 404.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    cat = get_object_or_404(Categoria, pk=pk)
+    # Rama visible + migas de pan subiendo por los padres.
+    migas = []
+    actual = cat
+    while actual is not None:
+        if not actual.visible_store:
+            from django.http import Http404
+            raise Http404('Categoría no disponible en la tienda.')
+        migas.append(actual)
+        actual = actual.padre
+    migas.reverse()
+    # Subárbol: la categoría + todos sus descendientes.
+    ids = {cat.id}
+    pendientes = list(cat.hijas.all())
+    while pendientes:
+        h = pendientes.pop()
+        if h.id not in ids:
+            ids.add(h.id)
+            pendientes.extend(list(h.hijas.all()))
+    todos = _store_items()
+    hijas = sorted(
+        [h for h in cat.hijas.all() if h.visible_store],
+        key=lambda h: h.nombre.lower())
+    es_padre = bool(hijas)
+    if es_padre:
+        # Cards de hijas + productos del subárbol agrupados por hija.
+        items = [it for it in todos if it['categoria_id'] in ids]
+        # Conteo del subárbol por hija (para sus cards).
+        conteo = {}
+        for it in todos:
+            cid = it['categoria_id']
+            if cid in ids:
+                conteo[cid] = conteo.get(cid, 0) + 1
+
+        def _cuenta_sub(hoja):
+            total = conteo.get(hoja.id, 0)
+            for n in hoja.hijas.all():
+                total += _cuenta_sub(n)
+            return total
+
+        hijas_info = [{
+            'id': h.id, 'nombre': h.nombre,
+            'icono': (h.icono or '').strip(),
+            'descripcion': h.descripcion or '',
+            'total': _cuenta_sub(h),
+        } for h in hijas]
+        lateral = [{
+            'id': h.id, 'nombre': h.nombre,
+            'icono': (h.icono or '').strip(), 'actual': False,
+        } for h in hijas]
+    else:
+        items = [it for it in todos if it['categoria_id'] in ids]
+        hijas_info = []
+        if cat.padre_id:
+            hermanas = sorted(
+                [h for h in cat.padre.hijas.all() if h.visible_store],
+                key=lambda h: h.nombre.lower())
+            lateral = [{
+                'id': h.id, 'nombre': h.nombre,
+                'icono': (h.icono or '').strip(),
+                'actual': h.id == cat.id,
+            } for h in hermanas]
+        else:
+            lateral = [{
+                'id': a['id'], 'nombre': a['nombre'], 'icono': a['icono'],
+                'actual': a['id'] == cat.id,
+            } for a in _nav_categorias()]
+    grupos = _store_grupos(items)
+    # Selector del header: mismo árbol global de /store/.
+    nombres = _store_nombres_categoria()
+    arbol_global = _store_arbol(_store_grupos(todos), nombres)
+    return render(request, 'core/store_categoria.html', {
+        'categoria': cat,
+        'migas': migas,
+        'hijas': hijas,
+        'hijas_info': hijas_info,
+        'es_padre': es_padre,
+        'lateral': lateral,
+        'grupos': grupos,
+        'arbol': arbol_global,
+        'nav': _nav_categorias(),
+        'total': len(items),
+        'solo': request.GET.get('solo') == '1',
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def store_api_estado(request):
+    """JSON público con precios y existencias para el polling de /store/.
+
+    Solo GET, sin login. Nunca expone costos ni mínimos de stock.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    items = _store_items()
+    return JsonResponse({
+        'productos': [{
+            'id': it['id'],
+            'precio': str(it['precio']),
+            'stock': str(it['stock']),
+            'stock_fmt': it['stock_fmt'],
+            'disponible': it['disponible'],
+            'pocas': it['pocas'],
+        } for it in items],
+        'actualizado': timezone.now().strftime('%H:%M:%S'),
+    })
+
+
+def _store_detalle(pk):
+    """Detalle público de un producto para el modal de /store.
+
+    Reutiliza `_store_items` (misma visibilidad y stock que la
+    vitrina). Devuelve None si no existe o está oculto de la tienda.
+    Nunca expone costos ni mínimos.
+    """
+    try:
+        pid = int(pk)
+    except (TypeError, ValueError):
+        return None
+    base = next((it for it in _store_items() if it['id'] == pid), None)
+    if base is None:
+        return None
+    p = Producto.objects.filter(pk=pid).select_related(
+        'categoria__padre').prefetch_related('presentaciones').first()
+    if p is None:
+        return None
+    pres = [{
+        'nombre': pr.nombre,
+        'precio': str(pr.precio),
+    } for pr in p.presentaciones.all() if pr.activo]
+    cat = p.categoria
+    from django.urls import reverse as _reverse
+    return {
+        'id': base['id'],
+        'codigo': base['codigo'],
+        'nombre': base['nombre'],
+        'descripcion': p.descripcion or '',
+        'categoria': base['categoria'],
+        'categoria_id': base['categoria_id'],
+        'categoria_padre': cat.padre.nombre if cat and cat.padre else '',
+        'categoria_url': _reverse('core:store_categoria', args=[base['categoria_id']]) if base['categoria_id'] else _reverse('core:store'),
+        'imagen': base['imagen'],
+        'precio': str(base['precio']),
+        'etiqueta': base['etiqueta'],
+        'presentaciones': pres,
+        'stock_fmt': base['stock_fmt'],
+        'disponible': base['disponible'],
+        'pocas': base['pocas'],
+        'es_nuevo': base['es_nuevo'],
+    }
+
+
+def store_producto_detalle(request, pk):
+    """JSON público con el detalle de un producto para el modal.
+
+    Solo GET, sin login. Nunca expone costos ni mínimos de stock.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Solo GET.'}, status=405)
+    det = _store_detalle(pk)
+    if det is None:
+        return JsonResponse({'error': 'No encontrado.'}, status=404)
+    return JsonResponse(det)
+
+
 def mostrador_estado(request):
     """JSON que el mostrador consulta por polling. Público."""
     pantalla = _mostrador_pantalla(request)
@@ -3438,6 +6056,8 @@ def mostrador_estado(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_mostrador_empujar(request):
     """El POS empuja el carrito actual para una pantalla (llamado en cada renderCart)."""
@@ -3485,6 +6105,8 @@ def pos_mostrador_empujar(request):
 
 
 @login_required
+
+
 @require_POST
 def pos_mostrador_limpiar(request):
     """Avisa al mostrador: venta completada (muestra gracias) o carrito cancelado."""
@@ -3512,7 +6134,6 @@ def pos_mostrador_limpiar(request):
 # ============================================================
 # PANEL DEL VENDEDOR + ARQUEO DE TURNO + CONTEO CIEGO
 # ============================================================
-
 def _empleado_de(request):
     """Empleado del usuario actual o None."""
     try:
@@ -3589,11 +6210,15 @@ def mi_panel(request):
 
 @login_required
 def arqueo(request):
-    """Arqueo del turno abierto en 2 pasos.
+    """Arqueo del turno abierto en 2 pasos (CONTEO CIEGO).
 
-    Paso 1: fondo inicial + foto del esperado por método.
-    Paso 2: el cajero declara lo contado (ayudante por denominaciones);
-        se muestra faltante/sobrante en grande y se exige motivo si descuadra.
+    Paso 1: fondo inicial con el que abrió la caja.
+    Paso 2: el cajero declara lo contado (ayudante por denominaciones)
+        SIN ver cuánto espera el sistema ni si le falta o sobra, para
+        que declare el dinero real sin tentación de maquillar.
+    Las diferencias solo se ven del lado del admin (arqueos_admin /
+    revisar_turno): aquí intencionalmente no se pasa `resumen` a la
+    plantilla ni se exigen motivos por descuadre.
     """
     empleado = _empleado_de(request)
     if empleado is None:
@@ -3605,17 +6230,24 @@ def arqueo(request):
         return redirect('core:mi_panel')
     resumen = _resumen_turno(turno)
     arqueo, _ = ArqueoTurno.objects.get_or_create(turno=turno)
+    def denominaciones_form():
+        detalle = arqueo.detalle()
+        return [
+            (key, lbl, detalle.get(key, 0))
+            for key, lbl in DENOMINACIONES_CUP
+        ]
     if arqueo.estado == 'confirmado':
         messages.info(request, 'Este arqueo ya fue confirmado.')
         return redirect('core:mi_panel')
 
     paso = request.GET.get('paso', '1')
     if arqueo.estado == 'declarado':
-        # Ya declarado: mostrar resumen en espera de confirmación.
+        # Ya declarado: pantalla ciega a la espera de confirmación
+        # (solo lo que el cajero declaró, nunca el esperado).
         return render(request, 'core/arqueo.html', {
-            'empleado': empleado, 'turno': turno, 'resumen': resumen,
+            'empleado': empleado, 'turno': turno,
             'arqueo': arqueo, 'paso': 'espera',
-            'denominaciones': DENOMINACIONES_CUP,
+            'denominaciones': denominaciones_form(),
         })
 
     if request.method == 'POST':
@@ -3674,29 +6306,19 @@ def arqueo(request):
             except Exception:
                 messages.error(request, 'Transferencia contada inválida.')
                 return render(request, 'core/arqueo.html', {
-                    'empleado': empleado, 'turno': turno, 'resumen': resumen,
+                    'empleado': empleado, 'turno': turno,
                     'arqueo': arqueo, 'paso': '2',
-                    'denominaciones': DENOMINACIONES_CUP,
+                    'denominaciones': denominaciones_form(),
                 })
             observacion = (request.POST.get('observacion', '') or '').strip()
-            # Foto fresca del esperado al declarar.
+            # Foto fresca del esperado al declarar: la calcula el servidor y
+            # solo la verá el admin al confirmar (el cajero nunca la ve).
             arqueo.esperado_efectivo = resumen['esperado_efectivo'] + arqueo.fondo_inicial
             arqueo.esperado_transferencia = resumen['esperado_transferencia']
             arqueo.contado_efectivo = total_ef
             arqueo.contado_transferencia = cont_tr
             arqueo.detalle_json = _json.dumps(detalle)
             arqueo.observacion = observacion
-            if arqueo.diferencia_total != 0 and not observacion:
-                arqueo.save()
-                messages.error(
-                    request,
-                    'Hay diferencia de $%.2f: escribe el motivo para poder declarar.'
-                    % arqueo.diferencia_total)
-                return render(request, 'core/arqueo.html', {
-                    'empleado': empleado, 'turno': turno, 'resumen': resumen,
-                    'arqueo': arqueo, 'paso': '2',
-                    'denominaciones': DENOMINACIONES_CUP,
-                })
             arqueo.estado = 'declarado'
             arqueo.declarado_por = request.user
             arqueo.declarado_at = timezone.now()
@@ -3709,13 +6331,15 @@ def arqueo(request):
             messages.warning(request, 'Primero completa el paso 1 (fondo inicial).')
             paso = '1'
     return render(request, 'core/arqueo.html', {
-        'empleado': empleado, 'turno': turno, 'resumen': resumen,
+        'empleado': empleado, 'turno': turno,
         'arqueo': arqueo, 'paso': paso,
-        'denominaciones': DENOMINACIONES_CUP,
+        'denominaciones': denominaciones_form(),
     })
 
 
 @requiere_admin
+
+
 @require_POST
 def arqueo_confirmar(request, pk):
     """El admin confirma el arqueo declarado ELIGIENDO qué hacer con la
@@ -3778,6 +6402,8 @@ def arqueo_confirmar(request, pk):
 
 
 @requiere_admin
+
+
 @require_POST
 def arqueo_recontar(request, pk):
     """El admin pide reconteo de dinero: anula la declaración del arqueo
@@ -3829,6 +6455,8 @@ def _bloqueos_cierre_turno(turno, incluir_arqueo=True):
 
 
 @requiere_admin
+
+
 @require_POST
 def turno_cerrar(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk)
@@ -3910,8 +6538,8 @@ def conteo_contar(request, pk):
         return redirect('core:mi_panel')
     if conteo.estado != 'abierto':
         return redirect('core:conteo_comparar', pk=conteo.pk)
-    productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('categoria__nombre', 'nombre')
-    categorias = Categoria.objects.filter(productos__activo=True).distinct().order_by('nombre')
+    productos = Producto.objects.filter(activo=True, visible_pos=True).select_related('categoria').order_by('categoria__nombre', 'nombre')
+    categorias = Categoria.objects.filter(productos__activo=True, productos__visible_pos=True).distinct().order_by('nombre')
     actuales = {l.producto_id: l.cantidad for l in conteo.lineas.all()}
     if request.method == 'POST':
         for p in productos:
@@ -3944,6 +6572,8 @@ def conteo_contar(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def conteo_autosave(request, pk):
     """Autoguardado incremental del conteo ciego (opción C: cola offline).
@@ -3984,7 +6614,7 @@ def conteo_autosave(request, pk):
         pids = [int(pid) for pid in lineas.keys()]
     except Exception:
         return JsonResponse({'ok': False, 'error': 'IDs de producto inválidos.'}, status=400)
-    productos = {p.pk: p for p in Producto.objects.filter(pk__in=pids, activo=True)}
+    productos = {p.pk: p for p in Producto.objects.filter(pk__in=pids, activo=True, visible_pos=True)}
     guardados = 0
     eliminados = 0
     errores = {}
@@ -4025,6 +6655,8 @@ def conteo_autosave(request, pk):
 
 
 @login_required
+
+
 @require_POST
 def conteo_cerrar(request, pk):
     """Cierra el conteo y congela el stock del sistema por producto."""
@@ -4036,7 +6668,7 @@ def conteo_cerrar(request, pk):
         return redirect('core:conteo_comparar', pk=conteo.pk)
     # Productos sin línea quedan en 0 contado.
     vistos = set(conteo.lineas.values_list('producto_id', flat=True))
-    for p in Producto.objects.filter(activo=True):
+    for p in Producto.objects.filter(activo=True, visible_pos=True):
         linea, _ = ConteoCiegoLinea.objects.get_or_create(
             conteo=conteo, producto=p, defaults={'cantidad': Decimal('0')})
         linea.stock_sistema = p.stock
@@ -4080,13 +6712,22 @@ def conteo_comparar(request, pk):
 # ============================================================
 # REVISIÓN ADMIN: ARQUEOS + CONTEOS (qué hacer con las diferencias)
 # ============================================================
-
 @requiere_admin
 def arqueos_admin(request):
     """Sección del admin: turnos abiertos con su arqueo/conteos (pendientes)
     e historial de turnos ya cerrados con su decisión."""
+    # Spec §5 multi-POS: filtro ?pos= por punto_venta del turno (cada POS
+    # opera su caja, turnos y cierres independientes). Fuera de multi-POS
+    # se ignora. Sin cambios de template (filtro por URL).
+    pos_actual, puntos_venta = _resolver_pos_filtro(request)
     abiertos = Turno.objects.filter(abierto=True).select_related(
-        'empleado__user').prefetch_related('conteos', 'ventas').order_by('-fecha_apertura')
+        'empleado__user', 'punto_venta').prefetch_related(
+        'conteos', 'ventas').order_by('-fecha_apertura')
+    historial_qs = Turno.objects.filter(abierto=False).select_related(
+        'empleado__user', 'punto_venta').order_by('-fecha_cierre')
+    if pos_actual is not None:
+        abiertos = abiertos.filter(punto_venta=pos_actual)
+        historial_qs = historial_qs.filter(punto_venta=pos_actual)
     pendientes = []
     for t in abiertos:
         pendientes.append({
@@ -4096,11 +6737,13 @@ def arqueos_admin(request):
             'conteos_abiertos': t.conteos.filter(estado='abierto').count(),
             'conteos_cerrados': t.conteos.filter(estado='cerrado'),
         })
-    historial = Turno.objects.filter(abierto=False).select_related(
-        'empleado__user').order_by('-fecha_cierre')[:20]
+    historial = historial_qs[:20]
     return render(request, 'core/arqueos_admin.html', {
         'pendientes': pendientes,
         'historial': historial,
+        'es_multi_pos': modo_actual() == 'multi_pos',
+        'puntos_venta': puntos_venta,
+        'pos_actual': pos_actual,
     })
 
 
@@ -4165,6 +6808,8 @@ def _aplicar_ajuste_producto(producto, nuevo_stock, descripcion, usuario):
 
 
 @requiere_admin
+
+
 @require_POST
 def conteo_decidir(request, pk):
     """Decisión del admin sobre un conteo cerrado:

@@ -52,6 +52,27 @@
 
             <hr class="form-divider">
 
+            <!-- Sección: rol en el sistema -->
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="section-icon"><i class="bi bi-shield-check"></i></span>
+                <div>
+                    <div class="section-title">Rol en el sistema</div>
+                    <div class="section-sub">Define a qué parte del sistema accede</div>
+                </div>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.rol.id_for_label }}">Rol *</label>
+                    {{ form.rol }}
+                    <div class="form-text">Almacenero: solo gestiona el almacén (sin POS ni turnos).</div>
+                    {% if form.rol.errors %}
+                        <div class="text-danger small mt-1">{{ form.rol.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
             <!-- Sección: datos del empleado -->
             <div class="d-flex align-items-center gap-2 mb-3">
                 <span class="section-icon"><i class="bi bi-person-badge"></i></span>

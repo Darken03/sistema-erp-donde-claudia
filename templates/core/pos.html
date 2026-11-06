@@ -131,8 +131,8 @@
 .product-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:10px; cursor:pointer; position:relative; transition:all 120ms; text-align:left; font-family:var(--font-sans); width:100%; }
 .product-card:hover { border-color:var(--accent); box-shadow:0 4px 12px rgba(20,20,40,.06); transform:translateY(-1px); }
 .product-card.out { opacity:.55; cursor:not-allowed; }
-.product-img { margin:-10px -10px 8px; height:110px; border-radius:12px 12px 0 0; background:var(--soft); border-bottom:1px solid var(--line); display:grid; place-items:center; overflow:hidden; position:relative; }
-.product-img img { width:100%; height:100%; object-fit:cover; object-position:center center; padding:0; background:transparent; display:block; }
+.product-img { margin:-10px -10px 8px; aspect-ratio:1/1; height:auto; min-height:110px; border-radius:12px 12px 0 0; background:#fff; border-bottom:1px solid var(--line); display:grid; place-items:center; overflow:hidden; position:relative; }
+.product-img img { width:100%; height:100%; object-fit:contain; object-position:center center; padding:0; background:#fff; display:block; }
 .product-img .initials { font-family:var(--font-mono); font-weight:700; font-size:18px; color:rgba(31,31,44,.5); }
 .product-img .dbadge { position:absolute; top:6px; left:6px; background:rgba(255,255,255,.92); border-radius:6px; padding:2px 6px; color:var(--danger); font-family:var(--font-mono); font-size:10px; font-weight:700; }
 .product-name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -171,6 +171,18 @@
 .cat-item:hover { background:var(--bg); border-color:var(--line); }
 .cat-item.active { background:var(--accent-tint); border-color:var(--accent); color:var(--accent); font-weight:700; }
 .cat-item .cicon { width:36px; height:36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:#fff; background:linear-gradient(135deg,#6f53d9,#8a6cf0); flex:0 0 36px; }
+.cat-item .cicon.no-bg { background:transparent; font-size:22px; }
+.cat-item .cname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cat-node { position:relative; }
+.cat-caret { margin-left:auto; width:26px; height:26px; flex:0 0 26px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:12px; }
+.cat-caret:hover { background:var(--accent-tint); color:var(--accent); }
+.cat-node.open > .cat-item .cat-caret i { transform:rotate(90deg); }
+.cat-caret i { transition:transform 120ms; }
+/* Submenú en cascada estilo Windows: al lado del padre, con sombra */
+.cat-sub { display:none; position:fixed; z-index:1200; min-width:230px; max-width:78vw; max-height:60vh; overflow-y:auto; background:var(--surface, #fff); border:1px solid var(--line); border-radius:12px; box-shadow:0 18px 44px -12px rgba(20,20,40,.35); padding:6px; }
+.cat-sub.show { display:block; }
+.cat-sub .cat-item { font-size:13px; padding:8px 10px; }
+.cat-sub .cat-item .cicon { width:30px; height:30px; flex-basis:30px; font-size:12px; }
 .cat-search { padding:12px 16px 8px; position:relative; }
 .cat-search input { width:100%; height:38px; padding:0 12px 0 36px; border-radius:10px; border:1px solid var(--line); background:var(--bg); font-size:13px; outline:none; }
 .cat-search input:focus { border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px var(--accent-tint); }
@@ -224,7 +236,7 @@
   .pos-products-scroll { padding:4px 12px 10px; }
   .pos-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
   .product-card { padding:10px; border-radius:12px; }
-  .product-img { margin:-10px -10px 8px; height:92px; border-radius:12px 12px 0 0; }
+  .product-img { margin:-10px -10px 8px; aspect-ratio:1/1; height:auto; min-height:92px; border-radius:12px 12px 0 0; }
   .product-img .initials { font-size:17px; }
   .product-name { font-size:13px; }
   .product-sku { font-size:10px; margin-bottom:5px; }
@@ -270,7 +282,7 @@
   .pos-search-row { padding:6px 12px; }
   .pos-search-input { height:36px; }
   .pos-products-scroll { padding:2px 12px 8px; }
-  .product-img { height:72px; }
+  .product-img { aspect-ratio:1/1; height:auto; min-height:72px; }
   .pos-empty { padding:20px 12px; }
   .pos-paybar { min-height:52px; padding:6px 12px; }
   .pos-paybar-total .tv { font-size:18px; }
@@ -293,7 +305,7 @@
   .pay-resumen { display:none; }
   .pay-cambio { padding:4px 8px; margin:4px 0; font-size:11px; }
   .pos-pay-block .btn-pay { height:36px; font-size:13px; }
-  .product-img { height:54px; }
+  .product-img { aspect-ratio:1/1; height:auto; min-height:54px; }
   .pos-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
   .pos-paybar { min-height:46px; padding:4px 10px; }
   .pos-paybar-total .tv { font-size:16px; }
@@ -332,7 +344,9 @@
 #userModal .modal-dialog, #ticketModal .modal-dialog { max-width:min(380px,calc(100% - 2rem)); }
 #detalleVentaModal .modal-dialog, #registrarGastoModal .modal-dialog,
 #registrarDonacionModal .modal-dialog { max-width:min(560px,calc(100% - 2rem)); }
-#registrarDeudaModal .modal-dialog { max-width:min(640px,calc(100% - 2rem)); }
+#registrarDeudaModal .modal-dialog { max-width:min(1000px,calc(100% - 2rem)); }
+#deudaDineroModal .modal-dialog, #deudaAbonarModal .modal-dialog { max-width:min(440px,calc(100% - 2rem)); }
+#deudaDineroModal .modal-dialog { max-width:min(420px,calc(100% - 2rem)); }
 #misVentasModal .modal-dialog, #misEntradasModal .modal-dialog { max-width:min(820px,calc(100% - 2rem)); }
 
 /* ===== Modal Detalle de Venta ===== */
@@ -373,6 +387,7 @@ html[data-theme="dark"] .pill-trans { background:rgba(14,165,233,.18); color:#7d
 .deu-item { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:transparent; border:0; border-bottom:1px solid var(--soft); padding:8px 10px; font-size:13px; cursor:pointer; color:var(--ink); }
 .deu-item:last-child { border-bottom:0; }
 .deu-item:hover { background:var(--accent-tint); }
+.deu-item.active { background:var(--accent-tint); box-shadow:inset 3px 0 0 var(--accent); }
 .deu-item .saldo { margin-left:auto; font-family:var(--font-mono); font-weight:700; white-space:nowrap; }
 .deu-selected { display:flex; align-items:center; gap:10px; background:var(--success-soft); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:8px; }
 .deu-newbox { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:8px; }
@@ -408,6 +423,28 @@ html[data-theme="dark"] .pill-trans { background:rgba(14,165,233,.18); color:#7d
 .qty-step input { text-align:center; font-family:var(--font-mono); font-weight:700; }
 .stock-hint { font-size:11px; color:var(--ink-3); margin-top:4px; font-family:var(--font-mono); }
 .stock-hint.over { color:var(--danger-dark); font-weight:700; }
+/* ===== Deudas POS — mini-POS paso 2 ===== */
+.deu-step2-content { height:min(640px, calc(100vh - 3rem)); display:flex; flex-direction:column; }
+.deu-step2-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); flex-shrink:0; flex-wrap:wrap; }
+.deu-step2-grid { display:grid; grid-template-columns:340px 1fr; gap:10px; overflow:hidden; flex:1; min-height:0; }
+.deu-cart { background:var(--surface); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.deu-cart-head { padding:8px 12px; font-weight:700; font-size:13px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--soft); }
+.deu-cart-scroll { flex:1; overflow-y:auto; padding:8px; min-height:0; }
+.deu-prodpanel { background:var(--surface); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.deu-prodpanel .deu-prod-search { flex-shrink:0; padding:8px 10px 4px; margin:0; }
+.deu-prodpanel .deu-prod-results { flex:1; min-height:0; max-height:none; margin:0 10px 8px; }
+.deu-lin { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:6px; background:var(--surface); }
+.deu-lin .nm { font-size:13px; font-weight:600; }
+.deu-lin .sub { font-family:var(--font-mono); font-weight:700; color:var(--accent); }
+.deu-lin .ctrl { display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap; }
+.deu-confirm-bar { display:flex; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid var(--line); flex-shrink:0; flex-wrap:wrap; background:var(--soft); }
+.deu-confirm-bar .total { font-family:var(--font-mono); font-size:20px; font-weight:800; color:var(--danger); }
+.deu-chip-deudor { display:flex; align-items:center; gap:10px; padding:4px 10px; background:var(--accent-tint); border:1px solid var(--accent-soft); border-radius:8px; }
+.deu-chip-deudor .saldo { font-family:var(--font-mono); font-weight:700; }
+.deu-step2-btn { height:34px; padding:0 12px; border-radius:8px; font-size:12.5px; font-weight:600; display:inline-flex; align-items:center; gap:6px; cursor:pointer; border:1.5px solid var(--line); background:var(--surface); color:var(--ink-2); }
+.deu-step2-btn.active { border-color:var(--accent); background:var(--accent-tint); color:var(--accent); }
+.deu-dinero-entry { border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; background:var(--surface); }
+@media (max-width: 900px){ .deu-step2-grid { grid-template-columns: 1fr; } }
 
 /* ===== MODO OSCURO POS (sigue a <html data-theme>) ===== */
 html[data-theme="dark"] .pos-shell {
@@ -433,8 +470,8 @@ html[data-theme="dark"] .pos-trigger,
 html[data-theme="dark"] .icon-btn,
 html[data-theme="dark"] .cat-search input { background:#23232f; border-color:var(--line); color:var(--ink); }
 html[data-theme="dark"] .pos-search-input::placeholder { color:var(--ink-3); }
-html[data-theme="dark"] .cart-thumb,
-html[data-theme="dark"] .product-img { background:var(--soft); }
+html[data-theme="dark"] .cart-thumb { background:var(--soft); }
+html[data-theme="dark"] .product-img { background:#fff; }
 html[data-theme="dark"] .cart-thumb { color:rgba(241,241,246,.6); }
 html[data-theme="dark"] .product-img .initials { color:rgba(241,241,246,.55); }
 html[data-theme="dark"] .product-add { background:rgba(111,83,217,.25); }
@@ -444,6 +481,8 @@ html[data-theme="dark"] .qty-stepper input { color:var(--ink); }
 html[data-theme="dark"] .cat-drawer { background:#1e1e2a; color:var(--ink); }
 html[data-theme="dark"] .cat-item:hover { background:var(--soft); }
 html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
+html[data-theme="dark"] .deu-cart, html[data-theme="dark"] .deu-prodpanel, html[data-theme="dark"] .deu-lin, html[data-theme="dark"] .deu-dinero-entry, html[data-theme="dark"] .deu-confirm-bar { background:var(--surface); border-color:var(--line); }
+html[data-theme="dark"] .deu-cart-head { background:var(--soft); }
 </style>
 {# Tema temporal de Halloween (solo POS): quitar estas líneas al retirarlo #}
 <link href="{% static 'css/halloween-pos.css' %}" rel="stylesheet">
@@ -455,8 +494,9 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
   <!-- ===== Toolbar ===== -->
   <nav class="pos-toolbar">
     <div class="pos-brand">
-      <img src="{% static 'img/logo-donde-clau.webp' %}" alt="Donde Clau" class="pos-brand-logo-img">
-      <div><div class="pos-brand-name">Donde Clau</div><div class="pos-brand-sub">Punto de Venta</div></div>
+      {% if TIENDA.logo_url %}<img src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}" class="pos-brand-logo-img">
+      {% else %}<img src="{% static 'img/logo-donde-clau.webp' %}" alt="Donde Clau" class="pos-brand-logo-img" onerror="this.onerror=null;this.src='{% static 'img/logo-donde-clau.png' %}';">{% endif %}
+      <div><div class="pos-brand-name">{{ TIENDA.nombre|default:"Donde Clau" }}</div><div class="pos-brand-sub">Punto de Venta</div></div>
     </div>
     <div class="hwn-garland" aria-hidden="true"><span>🎃</span><span>🦇</span><span>👻</span><span>🍬</span></div>
     <span class="pos-pill open" id="turnoPill" title="Turno"><span class="dot"></span><span id="turnoPillTxt">EN TURNO</span></span>
@@ -495,7 +535,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
           <div><div class="htitle">Orden Actual</div><div class="hsub" id="cartCount">0 productos</div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <div><span class="htotal-label">Total</span><span class="htotal-value" id="totalDisplay">$0</span></div>
+          <div><span class="htotal-label">Total</span><span class="htotal-value" id="totalDisplay">{{ TIENDA.simbolo|default:"$" }}0</span></div>
           <button type="button" class="pos-clear" id="btnClear" title="Cancelar venta" onclick="limpiarCarrito()" disabled><i class="bi bi-trash"></i></button>
         </div>
       </div>
@@ -503,11 +543,11 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
       <div class="pos-pay-block">
         <button class="monto-btn active" id="btnEfectivo" onclick="setTarget('efectivo')">
           <span class="monto-label"><i class="bi bi-cash-stack me-1"></i>Efectivo</span>
-          <span class="monto-valor" id="montoEfectivoDisplay" tabindex="0">$0</span>
+          <span class="monto-valor" id="montoEfectivoDisplay" tabindex="0">{{ TIENDA.simbolo|default:"$" }}0</span>
         </button>
         <button class="monto-btn" id="btnTransferencia" onclick="setTarget('transferencia')">
           <span class="monto-label"><i class="bi bi-bank me-1"></i>Transferencia</span>
-          <span class="monto-valor" id="montoTransferenciaDisplay" tabindex="0">$0</span>
+          <span class="monto-valor" id="montoTransferenciaDisplay" tabindex="0">{{ TIENDA.simbolo|default:"$" }}0</span>
         </button>
         <div class="numpad-target" id="numpadTarget">Editando: <strong>Efectivo</strong></div>
         <div class="numpad">
@@ -517,18 +557,33 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
           <button type="button" class="action" onclick="numpadClear()">C</button><button type="button" onclick="numpadInput('0')">0</button><button type="button" class="action" onclick="numpadBackspace()"><i class="bi bi-backspace"></i></button>
         </div>
         <div class="pay-resumen">
-          <div class="rowline"><span>Efectivo</span><span class="mono" id="resEfectivo">$0</span></div>
-          <div class="rowline"><span>Transferencia</span><span class="mono" id="resTransferencia">$0</span></div>
-          <div class="rowline"><span>Total pagado</span><span class="mono" id="resTotalPagado">$0</span></div>
+          <div class="rowline"><span>Efectivo</span><span class="mono" id="resEfectivo">{{ TIENDA.simbolo|default:"$" }}0</span></div>
+          <div class="rowline"><span>Transferencia</span><span class="mono" id="resTransferencia">{{ TIENDA.simbolo|default:"$" }}0</span></div>
+          <div class="rowline"><span>Total pagado</span><span class="mono" id="resTotalPagado">{{ TIENDA.simbolo|default:"$" }}0</span></div>
         </div>
-        <div class="pay-cambio"><span>Cambio</span><span id="resCambio" class="sobr">$0</span></div>
+        <div class="pay-cambio"><span>Cambio</span><span id="resCambio" class="sobr">{{ TIENDA.simbolo|default:"$" }}0</span></div>
         <button class="btn-pay d-none d-md-inline-flex" onclick="procesarVenta()" id="btnPagar" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span></button>
-        <button class="pos-mobile-pay d-md-none" onclick="procesarVenta()" id="btnPagarM" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span><span class="amt" id="totalDisplayM">$0</span></button>
+        <button class="pos-mobile-pay d-md-none" onclick="procesarVenta()" id="btnPagarM" disabled><i class="bi bi-check-circle"></i><span>Cobrar</span><span class="amt" id="totalDisplayM">{{ TIENDA.simbolo|default:"$" }}0</span></button>
       </div>
     </aside>
 
     <!-- Productos -->
     <section class="pos-products-sec">
+      {% if es_multi_pos %}
+      {# Task 4 (multi-POS): origen visible del stock. El POS no tiene stock
+         propio: vende y descuenta del almacén asignado. La cola offline
+         (bizm_offline_queue_v1) no cambia: el payload lleva los mismos
+         items (id/presentación/cantidad) y el servidor lo atribuye al POS
+         del turno al sincronizar. #}
+      <div style="margin:8px 14px 0;padding:8px 12px;border-radius:10px;font-size:12.5px;display:flex;align-items:center;gap:8px;{% if bloqueo_pos %}background:var(--danger-soft-2);border:1px solid #fecaca;color:var(--danger-dark);{% else %}background:var(--accent-tint);border:1px solid var(--accent-soft);color:var(--accent);{% endif %}">
+        <i class="bi {% if bloqueo_pos %}bi-exclamation-triangle{% else %}bi-shop{% endif %}"></i>
+        {% if bloqueo_pos %}
+        <span><strong>Sin punto de venta asignado.</strong> Abra el turno seleccionando el punto de venta para vender.</span>
+        {% else %}
+        <span>Vendiendo en <strong>{{ pos_actual.nombre }}</strong> · stock de <strong>{{ almacen_origen.nombre }}</strong></span>
+        {% endif %}
+      </div>
+      {% endif %}
       <div class="pos-search-row">
         <div class="pos-search-wrap">
           <i class="bi bi-search"></i>
@@ -542,7 +597,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
             <div class="product-img">{% if producto.imagen_url %}<img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" loading="lazy">{% else %}<span class="initials">{{ producto.nombre|slice:":2"|upper }}</span>{% endif %}</div>
             <div class="product-name">{{ producto.nombre }}</div>
             <div class="product-sku">SKU {{ producto.codigo }} · <span data-stock="{{ producto.id }}">{{ producto.stock|floatformat:3 }} {{ producto.unidad_medida }}</span></div>
-            <div class="product-foot"><span class="product-price">${{ producto.precio_para|floatformat:0 }}</span><span class="product-add"><i class="bi bi-plus-lg"></i></span></div>
+            <div class="product-foot"><span class="product-price">{{ TIENDA.simbolo|default:"$" }}{{ producto.precio_para|floatformat:0 }}</span><span class="product-add"><i class="bi bi-plus-lg"></i></span></div>
           </button>
           {% empty %}
           <div class="col-12 text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:2.5rem;"></i><p class="mt-2">No hay productos disponibles</p></div>
@@ -561,7 +616,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
     <button class="pos-action" onclick="limpiarCarrito()"><i class="bi bi-arrow-counterclockwise"></i><span class="txt">Cancelar</span></button>
     <button class="pos-action" data-bs-toggle="modal" data-bs-target="#misVentasModal"><i class="bi bi-receipt"></i><span class="txt">Mis ventas</span></button>
     <button class="pos-action" data-bs-toggle="modal" data-bs-target="#misEntradasModal"><i class="bi bi-box-arrow-in-down"></i><span class="txt">Entradas</span></button>
-    <div class="pos-paybar-total"><span class="tl">Total a pagar</span><span class="tv" id="totalDisplayBar">$0</span></div>
+    <div class="pos-paybar-total"><span class="tl">Total a pagar</span><span class="tv" id="totalDisplayBar">{{ TIENDA.simbolo|default:"$" }}0</span></div>
     <button class="btn-pay" onclick="procesarVenta()" id="btnPagarBar" disabled style="width:auto;"><i class="bi bi-check-circle"></i><span>Cobrar</span></button>
   </div>
 
@@ -586,8 +641,9 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
     </header>
     <div class="cat-search"><i class="bi bi-search"></i><input id="catSearch" placeholder="Buscar categorías..."></div>
     <div class="clist" id="catList">
-      <button type="button" class="cat-item active" data-categoria=""><span class="cicon"><i class="bi bi-list"></i></span><span>Todas las categorías</span></button>
-      {% for cat in categorias %}<button type="button" class="cat-item" data-categoria="{{ cat.pk }}"><span class="cicon">{{ cat.nombre|slice:":1"|upper }}</span><span>{{ cat.nombre }}</span></button>{% endfor %}
+      <button type="button" class="cat-item active" data-categoria=""><span class="cicon"><i class="bi bi-list"></i></span><span class="cname">Todas las categorías</span></button>
+      {% if arbol_pos %}{% for nodo in arbol_pos %}{% include "core/pos_cat_nodo.html" with nodo=nodo %}{% endfor %}
+      {% else %}{% for cat in categorias %}<button type="button" class="cat-item" data-categoria="{{ cat.pk }}"><span class="cicon">{{ cat.nombre|slice:":1"|upper }}</span><span class="cname">{{ cat.nombre }}</span></button>{% endfor %}{% endif %}
     </div>
   </aside>
 </div>
@@ -611,7 +667,7 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
 <!-- Modal Mis Ventas -->
 <div class="modal fade" id="misVentasModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2"></i>Mis Ventas del Día</h5>
-    <div><span class="badge bg-success me-1" id="resumenDiaTotal">$0</span><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
+    <div><span class="badge bg-success me-1" id="resumenDiaTotal">{{ TIENDA.simbolo|default:"$" }}0</span><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
     <button class="btn btn-sm btn-outline-secondary ms-2" onclick="cargarMisVentas()"><i class="bi bi-arrow-clockwise"></i></button></div>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body p-0"><div class="table-responsive" style="max-height:400px;overflow-y:auto;">
@@ -654,17 +710,17 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cash-stack me-2"></i>Gasto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <form id="gastoForm"><div class="modal-body">
     <div class="mb-3"><label class="form-label">Categoría</label><select name="categoria" class="form-select" required><option value="caja">Salida de Caja</option><option value="servicio">Servicio</option><option value="sueldo">Sueldo/Pago</option><option value="material">Materiales</option><option value="otro">Otro</option></select></div>
-    <div class="mb-3"><label class="form-label">Efectivo</label><input type="text" id="gastoEfectivo" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="$0"></div>
-    <div class="mb-3"><label class="form-label">Transferencia</label><input type="text" id="gastoTransferencia" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="$0"></div>
+    <div class="mb-3"><label class="form-label">Efectivo</label><input type="text" id="gastoEfectivo" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="{{ TIENDA.simbolo|default:"$" }}0"></div>
+    <div class="mb-3"><label class="form-label">Transferencia</label><input type="text" id="gastoTransferencia" class="form-control text-end fw-bold" style="font-size:1.2rem;font-family:var(--font-mono);" placeholder="{{ TIENDA.simbolo|default:"$" }}0"></div>
     <div class="mb-3"><label class="form-label">Descripción</label><textarea name="descripcion" class="form-control" rows="2" placeholder="Motivo del gasto..."></textarea></div>
   </div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-warning"><i class="bi bi-check-lg me-1"></i>Registrar</button></div></form>
 </div></div></div>
 
-<!-- Modal Deudas: seleccionar deudor, nueva deuda (dinero/producto con presentación) y liquidación -->
+<!-- Modal Deudas: PASO 1 selección de deudor / PASO 2 mini-POS -->
 <script id="posDeudaProductos" type="application/json">[{% for p in productos %}{"id":{{ p.id }},"codigo":"{{ p.codigo|escapejs }}","nombre":"{{ p.nombre|escapejs }}","precio":{{ p.precio_venta }},"stock":{{ p.stock }},"presentaciones":[{% for pr in p.presentaciones.all %}{% if pr.activo %}{"id":{{ pr.id }},"nombre":"{{ pr.nombre|escapejs }}","factor":"{{ pr.factor }}","precio":"{{ pr.precio }}","def":{% if pr.es_default %}1{% else %}0{% endif %}}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}]}{% if not forloop.last %},{% endif %}{% endfor %}]</script>
 <div class="modal fade" id="registrarDeudaModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Deudas</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body">
+  <div class="modal-body" id="deuStep1" style="max-height:70vh;overflow-y:auto;">
     <label class="form-label">Deudor *</label>
     <div class="search-hom mb-2">
       <i class="bi bi-search"></i>
@@ -680,81 +736,90 @@ html[data-theme="dark"] .text-muted { color:var(--ink-3) !important; }
     <div id="deudaNuevoBox" style="display:none;" class="deu-newbox">
       <div class="row g-2">
         <div class="col-6"><input type="text" class="form-control" id="deudaNewNombre" placeholder="Nombre *"></div>
+        <div class="col-6"><input type="text" class="form-control" id="deudaNewAlias" placeholder="Alias *"></div>
         <div class="col-6"><input type="text" class="form-control" id="deudaNewApellido" placeholder="Apellido"></div>
-        <div class="col-6"><input type="text" class="form-control mono" id="deudaNewCI" placeholder="CI *" autocomplete="off"></div>
-        <div class="col-6"><input type="text" class="form-control" id="deudaNewTel" placeholder="Teléfono"></div>
+        <div class="col-6"><input type="text" class="form-control mono" id="deudaNewCI" placeholder="CI (opcional)" autocomplete="off"></div>
+        <div class="col-12"><input type="text" class="form-control" id="deudaNewTel" placeholder="Teléfono"></div>
       </div>
       <button type="button" class="btn btn-primary btn-sm w-100 mt-2" id="deudaNewGuardar">Guardar y seleccionar</button>
     </div>
-    <ul class="nav nav-tabs mt-2" role="tablist">
-      <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#deuTabNueva" type="button">Nueva deuda</button></li>
-      <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#deuTabLiquidar" type="button">Liquidar</button></li>
-    </ul>
-    <div class="tab-content pt-3">
-      <div class="tab-pane fade show active" id="deuTabNueva">
-        <div class="d-flex gap-2 mb-3">
-          <button type="button" class="deu-tipo active" id="deuTipoDinero"><i class="bi bi-cash me-1"></i>Dinero</button>
-          <button type="button" class="deu-tipo" id="deuTipoProducto"><i class="bi bi-box-seam me-1"></i>Producto</button>
-        </div>
-        <div id="deuBloqueDinero">
-          <label class="form-label">Monto *</label>
-          <input type="number" id="deuMonto" class="form-control text-end fw-bold mono-big" step="1" min="1" placeholder="0">
-        </div>
-        <div id="deuBloqueProducto" style="display:none;">
-          <div class="row g-2">
-            <div class="col-12">
-              <label class="form-label">Producto * <small class="text-muted fw-normal" id="deuProdCountTxt"></small></label>
-              <div class="deu-prod-search" id="deuProdSearchBox">
-                <i class="bi bi-search"></i>
-                <input type="text" id="deuProdSearch" placeholder="Buscar por nombre o código..." autocomplete="off">
-                <span class="count-badge" id="deuProdCount">0</span>
-              </div>
-              <div class="deu-prod-picked" id="deuProdPicked" style="display:none;">
-                <span class="ini" id="deuPickedIni">–</span>
-                <div class="flex-grow-1 min-w-0">
-                  <div class="nm" id="deuPickedName">–</div>
-                  <div class="sb" id="deuPickedSub">–</div>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="deuPickedChange">Cambiar</button>
-              </div>
-              <div class="deu-prod-results" id="deuProdResults"></div>
-              <select id="deuProducto" class="form-select" style="display:none;"><option value="">Seleccione...</option></select>
-            </div>
-            <div class="col-7"><label class="form-label">Presentación *</label><select id="deuPresentacion" class="form-select"><option value="">Seleccione el producto...</option></select></div>
-            <div class="col-5"><label class="form-label">Cantidad *</label>
-              <div class="qty-step">
-                <button type="button" class="btn btn-outline-secondary" id="deuCantMenos" title="Restar">−</button>
-                <input type="number" id="deuCantidad" class="form-control" min="0" step="0.001" value="1">
-                <button type="button" class="btn btn-outline-secondary" id="deuCantMas" title="Sumar">+</button>
-              </div>
-              <div class="stock-hint" id="deuStockHint"></div>
-            </div>
-          </div>
-          <div class="deu-totalbox mt-2"><span class="lbl">Se suma a la deuda</span><span class="val" id="deuTotalPrev">$0</span></div>
-          <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2" id="deuAgregarLinea"><i class="bi bi-plus-lg me-1"></i>Agregar producto a la deuda</button>
-          <div id="deuLineasWrap" style="display:none;" class="mt-2">
-            <label class="form-label mb-1">Productos en esta deuda (<span id="deuLineasCount">0</span>)</label>
-            <div id="deuLineasBody"></div>
-            <div class="deu-totalbox mt-2"><span class="lbl">Total de la deuda</span><span class="val" id="deuGranTotal">$0</span></div>
-          </div>
-          <div class="form-text mt-1" id="deuPresHelp">El precio es el de la presentación (ej. cartón ≠ huevo suelto). Se descuenta del stock en unidades base.</div>
-        </div>
-        <div class="mt-3"><label class="form-label">Motivo <small class="text-muted">(en producto se genera solo: ej. "2 x Botella de Agua")</small></label>
-        <input type="text" id="deuMotivo" class="form-control" placeholder="Ej: préstamo en efectivo..."></div>
-        <div class="mt-3"><label class="form-label">Fecha de pago (opcional)</label><input type="date" id="deuFechaPago" class="form-control"></div>
-        <button type="button" class="btn btn-danger w-100 mt-3" id="deuRegistrarBtn"><i class="bi bi-check-lg me-1"></i>Registrar Deuda</button>
+    <div class="mt-3">
+      <button type="button" class="btn btn-primary w-100" id="deuContinuar" disabled>Continuar <i class="bi bi-arrow-right"></i></button>
+    </div>
+  </div>
+  <div class="modal-body p-0 deu-step2-content" id="deuStep2" style="display:none;">
+    <div class="deu-step2-bar">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="deuVolverBtn"><i class="bi bi-chevron-left"></i> Deudores</button>
+      <div class="deu-chip-deudor flex-grow-1">
+        <div class="min-w-0"><strong id="deuStep2Nombre" class="d-block text-truncate"></strong><small class="text-muted">SALDO: <span class="mono" id="deuStep2Saldo"></span></small></div>
       </div>
-      <div class="tab-pane fade" id="deuTabLiquidar">
-        <div id="deuPendBox"><small class="text-muted">Seleccione un deudor para ver sus deudas pendientes.</small></div>
-        <div class="row g-2 mt-1">
-          <div class="col-6"><label class="form-label">Monto a pagar *</label><input type="number" id="deuAbonoMonto" class="form-control text-end fw-bold mono-big" step="1" min="1" placeholder="0"></div>
-          <div class="col-6"><label class="form-label">Método</label><select id="deuAbonoMetodo" class="form-select"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></div>
+      <button type="button" class="deu-step2-btn" id="deuDineroBtn"><i class="bi bi-cash"></i> Dinero</button>
+      <button type="button" class="deu-step2-btn" id="deuProductosBtn"><i class="bi bi-box-seam"></i> Productos</button>
+      <button type="button" class="deu-step2-btn" id="deuCobrarBtn" style="border-color:var(--success);color:var(--success-dark);"><i class="bi bi-cash-coin"></i> Cobrar</button>
+    </div>
+    <div class="deu-step2-grid p-2">
+      <div class="deu-cart">
+        <div class="deu-cart-head">Carrito de la deuda</div>
+        <div class="deu-cart-scroll" id="deuCartScroll">
+          <div id="deuCartProductos"></div>
+          <div id="deuCartDinero" style="display:none;">
+            <div class="small fw-bold text-muted mb-1 mt-2">Dinero en esta deuda</div>
+            <div id="deuDineroLista"></div>
+          </div>
         </div>
-        <div class="mt-2"><label class="form-label">Nota (opcional)</label><input type="text" id="deuAbonoNota" class="form-control" placeholder="Ej: pago parcial..."></div>
-        <button type="button" class="btn btn-success w-100 mt-3" id="deuAbonarBtn"><i class="bi bi-cash-coin me-1"></i>Aplicar Pago</button>
-        <div class="form-text mt-1">Se reparte en las deudas más antiguas primero.</div>
+        <div class="deu-confirm-bar">
+          <div class="deu-totalbox flex-grow-1"><span class="lbl">GRAN TOTAL</span><span class="val" id="deuGranTotal">{{ TIENDA.simbolo|default:"$" }}0</span></div>
+        </div>
+      </div>
+      <div class="deu-prodpanel">
+        <div class="deu-prod-search">
+          <i class="bi bi-search"></i>
+          <input type="text" id="deuProdSearch" placeholder="Buscar por nombre o código..." autocomplete="off">
+          <span class="count-badge" id="deuProdCount">0</span>
+        </div>
+        <div class="deu-prod-results" id="deuProdResults"></div>
       </div>
     </div>
+    <div class="deu-confirm-bar">
+      <div class="flex-grow-1 d-flex align-items-center gap-2">
+        <label class="form-label mb-0 small">Fecha pago (opcional)</label>
+        <input type="date" id="deuFechaPago" class="form-control form-control-sm" style="max-width:160px;">
+      </div>
+      <div class="total" id="deuGranTotal2">{{ TIENDA.simbolo|default:"$" }}0</div>
+      <button type="button" class="btn btn-danger" id="deuRegistrarBtn" onclick="registrarDeudaPOS()"><i class="bi bi-check-lg me-1"></i>Confirmar Deuda</button>
+    </div>
+  </div>
+</div></div></div>
+
+<!-- Modal Dinero flotante (deuda) -->
+<div class="modal fade" id="deudaDineroModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cash me-2"></i>Agregar dinero</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <label class="form-label">Monto *</label>
+    <input type="number" id="deuDineroMonto" class="form-control text-end fw-bold mono-big" step="1" min="1" placeholder="0">
+    <label class="form-label mt-2">Motivo</label>
+    <input type="text" id="deuDineroMotivo" class="form-control" placeholder="Ej: préstamo en efectivo...">
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="button" class="btn btn-success" id="deuDineroAgregar"><i class="bi bi-plus-lg me-1"></i>Agregar dinero</button>
+  </div>
+</div></div></div>
+
+<!-- Modal Abonar flotante (deuda) -->
+<div class="modal fade" id="deudaAbonarModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Cobrar / Liquidar</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div id="deuPendBox"><small class="text-muted">Seleccione un deudor para ver sus deudas pendientes.</small></div>
+    <div class="row g-2 mt-1">
+      <div class="col-6"><label class="form-label">Monto a pagar *</label><input type="number" id="deuAbonoMonto" class="form-control text-end fw-bold mono-big" step="1" min="1" placeholder="0"></div>
+      <div class="col-6"><label class="form-label">Método</label><select id="deuAbonoMetodo" class="form-select"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></div>
+    </div>
+    <div class="mt-2"><label class="form-label">Nota (opcional)</label><input type="text" id="deuAbonoNota" class="form-control" placeholder="Ej: pago parcial..."></div>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="button" class="btn btn-success" id="deuAbonarBtn"><i class="bi bi-cash-coin me-1"></i>Aplicar Pago</button>
   </div>
 </div></div></div>
 
@@ -805,10 +870,25 @@ let montoEfectivoStr = '0', montoTransferenciaStr = '0', campoActivo = 'efectivo
 let isOnline = navigator.onLine !== false, syncing = false;
 
 const $ = id => document.getElementById(id);
+function deuLockBtn(btn, lock, text){
+  if (!btn) return true;
+  if (lock){
+    if (btn.dataset && btn.dataset.locked === '1') return false;
+    if (btn.dataset) btn.dataset.locked = '1';
+    btn.disabled = true;
+    if (text){ if (btn.dataset) btn.dataset.origHtml = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + text; }
+    return true;
+  }
+  if (btn.dataset) btn.dataset.locked = '';
+  btn.disabled = false;
+  if (btn.dataset && btn.dataset.origHtml){ btn.innerHTML = btn.dataset.origHtml; }
+  return true;
+}
 /* setTxt tolerante: si un total no existe en esta variante del DOM (móvil/escritorio,
    caché vieja) no debe ensuciar la consola ni romper la venta. */
 function setTxt(id, v){ const el = document.getElementById(id); if (!el){ return; } el.textContent = v; }
-const money = n => '$' + Math.round(Number(n) || 0);
+const SIMBOLO = '{{ TIENDA.simbolo|default:"$" }}';
+const money = n => SIMBOLO + Math.round(Number(n) || 0);
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const initials = n => (String(n||'P').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('') || 'P').toUpperCase();
 /* Búsqueda insensible a tildes: 'cafe' encuentra 'Café', 'jamon' -> 'Jamón', etc. */
@@ -981,7 +1061,7 @@ function renderCart(){
     box.innerHTML = EMPTY_CART_HTML;
     setTxt('cartCount', '0 productos');
     currentTotal = 0;
-    setTxt('totalDisplay', '$0'); setTxt('totalDisplayM', '$0'); setTxt('totalDisplayBar', '$0');
+    setTxt('totalDisplay', SIMBOLO + '0'); setTxt('totalDisplayM', SIMBOLO + '0'); setTxt('totalDisplayBar', SIMBOLO + '0');
     const bc0 = $('btnClear'); if (bc0) bc0.disabled = true;
     btns.forEach(b=>{ if(b) b.disabled = true; });
     calcularResumen(); empujarMostrador(); return;
@@ -1121,7 +1201,7 @@ function enqueueOffline(payload){
 }
 function resetAfterSale(){
   cart = []; montoEfectivoStr='0'; montoTransferenciaStr='0';
-  setTxt('montoEfectivoDisplay','$0'); setTxt('montoTransferenciaDisplay','$0');
+  setTxt('montoEfectivoDisplay',SIMBOLO + '0'); setTxt('montoTransferenciaDisplay',SIMBOLO + '0');
   setTarget('efectivo'); saveCart(); renderCart(); updateMontoDisplay();
 }
 function showTicket(o){
@@ -1184,6 +1264,10 @@ async function buscarProductos(){
     const fd = new FormData(); fd.append('q', q); fd.append('categoria', cat);
     const r = await fetch(URL_BUSCAR, {method:'POST', headers:{'X-CSRFToken':CSRF_TOKEN}, body:fd});
     const d = await r.json();
+    /* Task 4 (multi-POS): sin POS asignado el servidor bloquea con 400 +
+       mensaje (sin campo `productos`). Se muestra el aviso en vez de caer
+       al fallback offline con caché de otro POS/almacén. */
+    if (d.error){ toast(d.error, 'danger'); grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-exclamation-triangle" style="font-size:2.5rem;"></i><p class="mt-2">' + esc(d.error) + '</p></div>'; return; }
     if (!d.productos.length){ grid.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="bi bi-search" style="font-size:2.5rem;"></i><p class="mt-2">No se encontraron productos</p></div>'; return; }
     grid.innerHTML = d.productos.map(p=>{
       POS_CATALOG[p.id] = {
@@ -1201,7 +1285,7 @@ async function buscarProductos(){
       return '<button type="button" class="product-card'+(out?' out':'')+'" '+(out?'disabled':'')+' onclick="addToCart('+p.id+')">'
         + '<div class="product-img">'+img+'</div><div class="product-name">'+esc(p.nombre)+'</div>'
         + '<div class="product-sku">SKU '+esc(p.codigo)+' · '+esc(p.stock_display || p.stock)+' '+esc(p.unidad || '')+'</div>'
-        + '<div class="product-foot"><span class="product-price">$'+Math.round(dp.precio)+'</span>'+badge+frac+'<span class="product-add"><i class="bi bi-plus-lg"></i></span></div></button>';
+        + '<div class="product-foot"><span class="product-price">'+SIMBOLO+Math.round(dp.precio)+'</span>'+badge+frac+'<span class="product-add"><i class="bi bi-plus-lg"></i></span></div></button>';
     }).join('');
   } catch(e){
     /* offline: filtrar cache local (insensible a tildes) */
@@ -1209,7 +1293,8 @@ async function buscarProductos(){
       const c = JSON.parse(localStorage.getItem(LS_CATALOG)||'null');
       const list = (c && c.data && c.data.productos) || [];
       const ql = normSinTildes(q);
-      const f = list.filter(p => (!cat || String(p.categoria_id)===String(cat)) && (!ql || normSinTildes(p.nombre).includes(ql) || normSinTildes(p.codigo).includes(ql)));
+      const fam = familiaActiva();
+      const f = list.filter(p => (parseFloat(p.stock) || 0) > 0 && (!cat || fam.has(String(p.categoria_id))) && (!ql || normSinTildes(p.nombre).includes(ql) || normSinTildes(p.codigo).includes(ql)));
       grid.innerHTML = f.map(p=>{
         POS_CATALOG[p.id] = POS_CATALOG[p.id] || {
           id: p.id, nombre: p.nombre, precio: parseFloat(p.precio) || 0,
@@ -1224,24 +1309,107 @@ async function buscarProductos(){
   }
 }
 
-/* ---------- drawer categorías ---------- */
+/* ---------- drawer categorías en cascada (estilo Windows) ---------- */
 function toggleCatDrawer(open){
+  if (!open) cerrarCatSubs();
   $('catBackdrop').classList.toggle('show', !!open);
   if (open) setTimeout(()=>$('catSearch').focus(), 50);
 }
 $('catTrigger').addEventListener('click', ()=>toggleCatDrawer(true));
+/* Familia (categoría + descendientes) del botón activo, para filtrar. */
+function familiaActiva(){
+  const act = document.querySelector('#catList .cat-item.active');
+  if (!act) return new Set();
+  const nodo = act.closest('.cat-node');
+  if (!nodo) return new Set();
+  return new Set((nodo.dataset.familia || '').split(',').filter(Boolean));
+}
+function nombreBoton(b){
+  const n = b.querySelector('.cname');
+  return (n ? n.textContent : b.textContent).trim();
+}
+function seleccionarCategoria(b){
+  cerrarCatSubs();
+  document.querySelectorAll('#catList .cat-item').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  const id = b.dataset.categoria || '';
+  setTxt('catTriggerLabel', nombreBoton(b));
+  $('catTrigger').classList.toggle('is-active', !!id);
+  toggleCatDrawer(false); buscarProductos();
+}
+/* Submenú flotante al lado del padre (position:fixed, fuera de recortes). */
+function abrirCatSub(nodo){
+  cerrarCatSubs();
+  const sub = nodo.querySelector(':scope > .cat-sub'); if (!sub) return;
+  const r = nodo.querySelector(':scope > .cat-item').getBoundingClientRect();
+  const W = 250, maxH = Math.floor(window.innerHeight * 0.6);
+  let left = r.right + 8;
+  if (left + W > window.innerWidth - 8) left = Math.max(8, r.left - W - 8);
+  let top = r.top;
+  if (top + maxH > window.innerHeight - 8) top = Math.max(8, window.innerHeight - maxH - 8);
+  sub.style.left = left + 'px'; sub.style.top = top + 'px'; sub.style.minWidth = W + 'px';
+  sub.classList.add('show'); nodo.classList.add('open');
+}
+function cerrarCatSubs(){
+  document.querySelectorAll('#catList .cat-sub.show').forEach(s=>s.classList.remove('show'));
+  document.querySelectorAll('#catList .cat-node.open').forEach(n=>n.classList.remove('open'));
+}
+let catHoverTimer = null;
+const HAY_HOVER = window.matchMedia && window.matchMedia('(hover:hover)').matches;
+document.querySelectorAll('#catList .cat-node').forEach(nodo=>{
+  const btn = nodo.querySelector(':scope > .cat-item');
+  const tieneSub = !!nodo.querySelector(':scope > .cat-sub');
+  if (tieneSub && HAY_HOVER){
+    nodo.addEventListener('mouseenter', ()=>{ clearTimeout(catHoverTimer); abrirCatSub(nodo); });
+    nodo.addEventListener('mouseleave', ()=>{
+      clearTimeout(catHoverTimer);
+      catHoverTimer = setTimeout(()=>{
+        const sub = nodo.querySelector(':scope > .cat-sub');
+        if (!nodo.matches(':hover') && !(sub && sub.matches(':hover'))) {
+          sub.classList.remove('show'); nodo.classList.remove('open');
+        }
+      }, 250);
+    });
+    const sub = nodo.querySelector(':scope > .cat-sub');
+    sub.addEventListener('mouseleave', ()=>{
+      clearTimeout(catHoverTimer);
+      catHoverTimer = setTimeout(()=>{
+        if (!nodo.matches(':hover') && !sub.matches(':hover')) {
+          sub.classList.remove('show'); nodo.classList.remove('open');
+        }
+      }, 250);
+    });
+  }
+  btn.addEventListener('click', (e)=>{
+    if (tieneSub && e.target.closest('[data-caret]')){
+      e.stopPropagation();
+      const sub = nodo.querySelector(':scope > .cat-sub');
+      if (sub.classList.contains('show')) cerrarCatSubs();
+      else abrirCatSub(nodo);
+      return;
+    }
+    seleccionarCategoria(btn);
+  });
+});
+document.querySelector('#catList > .cat-item[data-categoria=""]')?.addEventListener('click', function(){ seleccionarCategoria(this); });
+/* Fallback: botones sueltos sin árbol (rama sin arbol_pos). */
+document.querySelectorAll('#catList > .cat-item[data-categoria]:not([data-categoria=""])').forEach(b=>b.addEventListener('click', ()=>seleccionarCategoria(b)));
+document.addEventListener('click', (e)=>{
+  if (!e.target.closest('#catList .cat-node') && !e.target.closest('#catTrigger')) cerrarCatSubs();
+});
+$('catList').addEventListener('scroll', cerrarCatSubs, {passive:true});
+function filtrarCatNodo(nodo, q){
+  const propio = normSinTildes(nodo.querySelector(':scope > .cat-item .cname').textContent).includes(q);
+  let hijoVisible = false;
+  nodo.querySelectorAll(':scope > .cat-sub > .cat-node').forEach(h=>{ if (filtrarCatNodo(h, q)) hijoVisible = true; });
+  const vis = !q || propio || hijoVisible;
+  nodo.style.display = vis ? '' : 'none';
+  return vis;
+}
 $('catSearch').addEventListener('input', function(){
   const q = normSinTildes(this.value);
-  document.querySelectorAll('#catList .cat-item').forEach(b=>{ b.style.display = normSinTildes(b.textContent).includes(q) ? '' : 'none'; });
-});
-document.querySelectorAll('#catList .cat-item').forEach(b=>{
-  b.onclick = ()=>{
-    document.querySelectorAll('#catList .cat-item').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-    const id = b.dataset.categoria || '';
-    setTxt('catTriggerLabel', b.textContent.trim());
-    $('catTrigger').classList.toggle('is-active', !!id);
-    toggleCatDrawer(false); buscarProductos();
-  };
+  document.querySelectorAll('#catList > .cat-node').forEach(n=>filtrarCatNodo(n, q));
+  const todas = document.querySelector('#catList > .cat-item[data-categoria=""]');
+  if (todas) todas.style.display = (!q || normSinTildes(todas.textContent).includes(q)) ? '' : 'none';
 });
 
 /* ---------- mis ventas ---------- */
@@ -1305,7 +1473,7 @@ $('detalleVentaModal').addEventListener('hidden.bs.modal', ()=>new bootstrap.Mod
 $('ticketModal').addEventListener('hide.bs.modal', ()=>{ try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch(e){} });
 
 /* ---------- gasto / deuda / donación (solo online) ---------- */
-$('gastoEfectivo').value = '$0'; $('gastoTransferencia').value = '$0';
+$('gastoEfectivo').value = SIMBOLO + '0'; $('gastoTransferencia').value = SIMBOLO + '0';
 $('gastoForm').addEventListener('submit', async function(e){
   e.preventDefault();
   if (!isOnline){ toast('Sin conexión: el gasto se registra solo online','warning'); return; }
@@ -1315,13 +1483,13 @@ $('gastoForm').addEventListener('submit', async function(e){
     descripcion:this.querySelector('[name="descripcion"]').value};
   if (data.cantidad_efectivo<=0 && data.cantidad_transferencia<=0){ toast('Ingrese al menos una cantidad','warning'); return; }
   const btn = this.querySelector('[type="submit"]');
-  if (!lockBtn(btn, true, 'Registrando...')) return;
+  if (!deuLockBtn(btn, true, 'Registrando...')) return;
   try {
     const r = await fetch('{% url "core:pos_registrar_gasto" %}', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF_TOKEN}, body:JSON.stringify(data)});
-    if (r.ok){ hidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value='$0'; $('gastoTransferencia').value='$0'; toast('Gasto registrado','success'); }
+    if (r.ok){ deuHidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); }
     else { const j = await r.json(); toast(j.error||'Error al registrar gasto','danger'); }
   } catch(err){ toast('Error al registrar gasto','danger'); }
-  finally { lockBtn(btn, false); }
+  finally { deuLockBtn(btn, false); }
 });
 /* ---------- deudas: deudores, nueva deuda (dinero/producto) y liquidación (solo online) ---------- */
 const URL_DEUDORES = '{% url "core:pos_deudores" %}';
@@ -1329,9 +1497,9 @@ const URL_DEUDOR_CREAR = '{% url "core:pos_deudor_crear" %}';
 const URL_DEUDA_CREAR = '{% url "core:pos_deuda_crear" %}';
 const URL_DEUDA_ABONAR = '{% url "core:pos_deuda_abonar" %}';
 const URL_DEUDOR_DET = '{% url "core:pos_deudor_detalle" 0 %}'.replace('/0/', '/DEUID/');
-let deuSel = null;
-let deuTipo = 'dinero';
-let deuLastAuto = '';
+let deuSelec = null;
+let deuCarrito = [];
+let deuDineros = [];
 let deuProductos = [];
 try { deuProductos = JSON.parse(document.getElementById('posDeudaProductos').textContent || '[]'); } catch(e){ deuProductos = []; }
 
@@ -1341,295 +1509,404 @@ async function deuFetch(url, data){
   if (!r.ok) throw new Error(j.error || 'Error en el servidor');
   return j;
 }
-/* Bloquea un botón mientras vuela la petición (evita doble clic / doble registro) */
-function lockBtn(btn, on, busyTxt){
-  if (!btn) return true;
-  if (on){
-    if (btn.disabled) return false;
-    btn.disabled = true;
-    btn.dataset.html = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (busyTxt || 'Procesando...');
-    return true;
-  }
-  btn.disabled = false;
-  if (btn.dataset.html){ btn.innerHTML = btn.dataset.html; delete btn.dataset.html; }
-  return true;
-}
-function hidePosModal(id){
-  const el = $(id);
-  if (!el) return;
-  (bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el)).hide();
-}
+
 async function cargarDeudores(){
-  const q = $('deudaBuscar').value.trim();
-  const r = await fetch(URL_DEUDORES + '?q=' + encodeURIComponent(q));
-  const j = await r.json();
-  $('deudaLista').innerHTML = (j.deudores||[]).map(d=>
-    '<button type="button" class="deu-item" data-id="'+d.id+'"><span><strong>'+esc(d.nombre_completo)+'</strong><br><small class="text-muted mono">'+esc(d.ci||'sin CI')+'</small></span><span class="saldo '+(Number(d.saldo)>0?'text-danger':'text-success')+'">$'+Math.round(Number(d.saldo))+'</span></button>'
-  ).join('') || '<div class="p-2 text-center text-muted small">Sin resultados</div>';
-  $('deudaLista').querySelectorAll('.deu-item').forEach(b=>b.onclick=()=>seleccionarDeudor(Number(b.dataset.id)));
+  const q = ($('deudaBuscar') && $('deudaBuscar').value || '').trim();
+  try {
+    const r = await fetch(URL_DEUDORES + '?q=' + encodeURIComponent(q));
+    const j = await r.json();
+    const list = (j.deudores || []);
+    $('deudaLista').innerHTML = list.map(d=>
+      '<button type="button" class="deu-item" data-id="'+d.id+'">'
+      + '<span><strong>'+esc(d.nombre_display || d.nombre_completo)+'</strong><br><small class="text-muted mono">'+esc(d.ci || 'sin CI')+'</small></span>'
+      + '<span class="saldo '+(Number(d.saldo)>0?'text-danger':'text-success')+'">$'+Math.round(Number(d.saldo))+'</span></button>'
+    ).join('') || '<div class="p-2 text-center text-muted small">Sin resultados</div>';
+    $('deudaLista').querySelectorAll('.deu-item').forEach(b=>{
+      b.onclick = ()=>seleccionarDeudor(Number(b.dataset.id));
+      if (deuSelec && Number(b.dataset.id) === Number(deuSelec.id)) b.classList.add('active');
+    });
+  } catch(e){}
 }
+
 async function seleccionarDeudor(id){
-  const r = await fetch(URL_DEUDOR_DET.replace('DEUID', id));
-  const d = await r.json();
-  if (!r.ok || d.id == null){ toast(d.error||'Deudor no encontrado','danger'); return; }
-  deuSel = d;
-  $('deudaSelBox').style.display = '';
-  setTxt('deudaSelNombre', d.nombre_completo);
-  setTxt('deudaSelCI', d.ci || 'sin CI');
-  setTxt('deudaSelSaldo', money(d.saldo));
-  $('deudaSelSaldo').className = 'mono ' + (Number(d.saldo) > 0 ? 'text-danger' : 'text-success');
-  renderPendientes();
+  try {
+    const r = await fetch(URL_DEUDOR_DET.replace('DEUID', id));
+    const d = await r.json();
+    if (!r.ok || d.id == null){ toast(d.error||'Deudor no encontrado','danger'); return; }
+    deuSelec = d;
+    $('deudaSelBox').style.display = '';
+    setTxt('deudaSelNombre', d.nombre_display || d.nombre_completo);
+    setTxt('deudaSelCI', d.ci || 'sin CI');
+    setTxt('deudaSelSaldo', money(d.saldo));
+    if ($('deudaSelSaldo')) $('deudaSelSaldo').className = 'mono ' + (Number(d.saldo) > 0 ? 'text-danger' : 'text-success');
+    $('deudaLista').querySelectorAll('.deu-item').forEach(b=>{
+      b.classList.toggle('active', Number(b.dataset.id) === Number(id));
+    });
+    if ($('deuContinuar')) $('deuContinuar').disabled = false;
+    renderPendientes();
+  } catch(e){ toast('Error al cargar deudor','danger'); }
 }
+
 function renderPendientes(){
-  if (!deuSel){ $('deuPendBox').innerHTML = '<small class="text-muted">Seleccione un deudor para ver sus deudas pendientes.</small>'; return; }
-  if (!deuSel.deudas.length){ $('deuPendBox').innerHTML = '<div class="alert alert-success py-2 mb-0">Sin deudas pendientes. ¡Al día!</div>'; return; }
-  $('deuPendBox').innerHTML = deuSel.deudas.map(x=>
+  const box = $('deuPendBox');
+  if (!box) return;
+  if (!deuSelec){ box.innerHTML = '<small class="text-muted">Seleccione un deudor para ver sus deudas pendientes.</small>'; return; }
+  if (!deuSelec.deudas || !deuSelec.deudas.length){ box.innerHTML = '<div class="alert alert-success py-2 mb-0">Sin deudas pendientes. ¡Al día!</div>'; return; }
+  box.innerHTML = deuSelec.deudas.map(x=>
     '<div class="deu-pend"><span><strong class="mono">'+esc(x.numero)+'</strong>'+(x.presentacion?' <small class="text-muted">· '+esc(x.presentacion)+'</small>':'')+'<br><small class="text-muted">'+esc(x.motivo)+'</small></span><span class="text-end"><strong class="mono text-danger">$'+Math.round(Number(x.saldo))+'</strong><br><small class="text-muted">'+esc(x.fecha)+'</small></span></div>'
   ).join('');
 }
-function deuSetTipo(t){
-  deuTipo = t;
-  $('deuTipoDinero').classList.toggle('active', t==='dinero');
-  $('deuTipoProducto').classList.toggle('active', t==='producto');
-  $('deuBloqueDinero').style.display = t==='dinero' ? '' : 'none';
-  $('deuBloqueProducto').style.display = t==='producto' ? '' : 'none';
-}
-function deuTotalPrev(){
-  const p = deuProductos.find(x=>String(x.id)===$('deuProducto').value);
-  const prId = $('deuPresentacion').value;
-  const pr = p && (p.presentaciones || []).find(x=>String(x.id)===String(prId));
-  const c = parseFloat($('deuCantidad').value) || 0;
-  const precio = pr ? parseFloat(pr.precio) : (p ? parseFloat(p.precio) : 0);
-  if (p && (pr || !(p.presentaciones || []).length || !prId)){ setTxt('deuTotalPrev', money(precio * c)); }
-  else setTxt('deuTotalPrev', money(0));
-  const prNombre = pr ? pr.nombre : ((p && (p.presentaciones || []).length) ? '' : 'Unidad');
-  const auto = (p && c > 0 && prNombre) ? c + ' x ' + prNombre + ' - ' + p.nombre : '';
-  if ($('deuMotivo').value === '' || $('deuMotivo').value === deuLastAuto){ $('deuMotivo').value = auto; }
-  deuLastAuto = auto;
-  const help = $('deuPresHelp');
-  if (help && p && pr){ help.textContent = '1 ' + pr.nombre + ' = ' + pr.factor + ' u. base · $' + Math.round(parseFloat(pr.precio)) + ' c/u.'; }
-}
-function deuFillPresentaciones(){
-  const p = deuProductos.find(x=>String(x.id)===$('deuProducto').value);
-  const sel = $('deuPresentacion');
-  const arr = (p && p.presentaciones) || [];
-  if (!p){ sel.innerHTML = '<option value="">Seleccione el producto...</option>'; }
-  else if (!arr.length){ sel.innerHTML = '<option value="">Unidad · $'+Math.round(Number(p.precio))+'</option>'; }
-  else {
-    sel.innerHTML = arr.map(x=>'<option value="'+x.id+'"'+(String(x.def)==='1'?' selected':'')+'>'+esc(x.nombre)+' · $'+Math.round(Number(x.precio))+'</option>').join('');
-  }
-  deuTotalPrev();
-}
+
 async function crearDeudorPOS(){
-  const nombre = $('deudaNewNombre').value.trim(), ci = $('deudaNewCI').value.trim();
-  if (!nombre || !ci){ toast('Nombre y CI son requeridos','warning'); return; }
+  const nombre = ($('deudaNewNombre').value || '').trim();
+  const alias = ($('deudaNewAlias').value || '').trim();
+  if (!nombre || !alias){ toast('Nombre y alias son requeridos','warning'); return; }
   if (!isOnline){ toast('Sin conexión','warning'); return; }
-  if (!lockBtn($('deudaNewGuardar'), true, 'Guardando...')) return;
+  if (!deuLockBtn($('deudaNewGuardar'), true, 'Guardando...')) return;
   try {
-    const j = await deuFetch(URL_DEUDOR_CREAR, {nombre:nombre, apellido:$('deudaNewApellido').value.trim(), ci:ci, telefono:$('deudaNewTel').value.trim()});
-    ['deudaNewNombre','deudaNewApellido','deudaNewCI','deudaNewTel'].forEach(id=>$(id).value='');
-    $('deudaNuevoBox').style.display = 'none';
-    $('deudaBuscar').value = '';
+    const j = await deuFetch(URL_DEUDOR_CREAR, {
+      nombre: nombre,
+      alias: alias,
+      apellido: ($('deudaNewApellido').value || '').trim(),
+      ci: ($('deudaNewCI').value || '').trim(),
+      telefono: ($('deudaNewTel').value || '').trim()
+    });
+    ['deudaNewNombre','deudaNewAlias','deudaNewApellido','deudaNewCI','deudaNewTel'].forEach(id=>{ if ($(id)) $(id).value=''; });
+    if ($('deudaNuevoBox')) $('deudaNuevoBox').style.display = 'none';
+    if ($('deudaBuscar')) $('deudaBuscar').value = '';
     await cargarDeudores();
     await seleccionarDeudor(j.id);
     toast('Deudor registrado','success');
   } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deudaNewGuardar'), false); }
+  finally { deuLockBtn($('deudaNewGuardar'), false); }
 }
-/* Carrito multilínea de deuda (varios productos en una misma operación) */
-let deuLineas = [];
-function deuCurPick(){
-  const p = (deuProductos || []).find(x=>String(x.id)===$('deuProducto').value);
-  if (!p) return {error:'Seleccione un producto.'};
-  const pr = (p.presentaciones || []).find(x=>String(x.id)===$('deuPresentacion').value);
-  const c = parseFloat($('deuCantidad').value) || 0;
-  if (c <= 0) return {error:'Indique una cantidad mayor a 0.'};
-  const factor = pr ? (parseFloat(pr.factor) || 1) : 1;
-  return {id:p.id, codigo:p.codigo, nombre:p.nombre,
-    presId: pr ? String(pr.id) : '', presNombre: pr ? pr.nombre : 'Unidad',
-    cantidad: Math.round(c * 1000) / 1000,
-    precio: pr ? parseFloat(pr.precio) : parseFloat(p.precio),
-    factor: factor, stock: parseFloat(p.stock) || 0};
+
+/* ===== mini-POS deuda: carrito + productos ===== */
+function deuDefaultPres(p){
+  const arr = (p && p.presentaciones) || [];
+  return (arr.find(x=>String(x.def)==='1') || arr[0] || {id:null, nombre:'Unidad', factor:1, precio: (p && p.precio) || 0, def:1});
 }
-function deuRenderLineas(){
-  $('deuLineasCount').textContent = deuLineas.length;
-  $('deuLineasWrap').style.display = deuLineas.length ? '' : 'none';
-  let t = 0;
-  $('deuLineasBody').innerHTML = deuLineas.map((l, i)=>{
-    const sub = l.precio * l.cantidad; t += sub;
-    return '<div class="deu-pend"><span><strong>' + esc(l.nombre) + '</strong><br><small class="text-muted">' + esc(l.codigo) + ' · ' + esc(l.presNombre) + ' x ' + l.cantidad + '</small></span><span class="text-end"><strong class="mono">$' + Math.round(sub) + '</strong><br><button type="button" class="btn btn-sm btn-link text-danger p-0" data-i="' + i + '">Quitar</button></span></div>';
-  }).join('');
-  setTxt('deuGranTotal', money(t));
+function deuMaxQty(stock, factor){
+  const f = parseFloat(factor) || 1;
+  return f > 0 ? Math.floor((parseFloat(stock)||0) / f * 1000) / 1000 : 0;
 }
-function deuResetPicker(){
-  $('deuProducto').value = '';
-  $('deuProducto').dispatchEvent(new Event('change'));
-  const chg = $('deuPickedChange');
-  if (chg) chg.click();
-  $('deuCantidad').value = 1;
-  $('deuCantidad').dispatchEvent(new Event('input'));
-}
-$('deuAgregarLinea').onclick = ()=>{
-  const p = deuCurPick();
-  if (p.error){ toast(p.error, 'warning'); return; }
-  const yaBase = deuLineas.reduce((a, l)=>a + (String(l.id) === String(p.id) ? l.cantidad * l.factor : 0), 0);
-  if (yaBase + p.cantidad * p.factor > p.stock + 1e-9){ toast('Stock insuficiente de ' + p.nombre + '. Disponible: ' + p.stock, 'warning'); return; }
-  const ex = deuLineas.find(l=>String(l.id) === String(p.id) && String(l.presId) === String(p.presId));
-  if (ex){ ex.cantidad = Math.round((ex.cantidad + p.cantidad) * 1000) / 1000; }
-  else { deuLineas.push(p); }
-  deuResetPicker();
-  deuRenderLineas();
-};
-$('deuLineasBody').addEventListener('click', ev=>{
-  const b = ev.target.closest ? ev.target.closest('button[data-i]') : null;
-  if (!b) return;
-  deuLineas.splice(parseInt(b.getAttribute('data-i'), 10), 1);
-  deuRenderLineas();
-});
-async function registrarDeudaPOS(){
-  if (!isOnline){ toast('Sin conexión: las deudas se registran solo online','warning'); return; }
-  if (!deuSel){ toast('Seleccione un deudor','warning'); return; }
-  if (!lockBtn($('deuRegistrarBtn'), true, 'Registrando...')) return;
-  const payload = {deudor_id:deuSel.id, tipo:deuTipo, motivo:$('deuMotivo').value, fecha_pago:$('deuFechaPago').value||''};
-  if (deuTipo === 'dinero'){ payload.monto = $('deuMonto').value; }
-  else {
-    if (!deuLineas.length){ lockBtn($('deuRegistrarBtn'), false); toast('Agregue al menos un producto a la deuda.','warning'); return; }
-    payload.items = deuLineas.map(l=>({producto_id:l.id, presentacion_id:l.presId, cantidad:l.cantidad}));
+function deuFindProd(id){ return (deuProductos || []).find(x=>String(x.id)===String(id)); }
+
+function deuAddProducto(pId){
+  const p = deuFindProd(pId);
+  if (!p) return;
+  const pr = deuDefaultPres(p);
+  const factor = parseFloat(pr.factor) || 1;
+  const stock = parseFloat(p.stock) || 0;
+  const presId = (pr.id == null ? null : pr.id);
+  const ex = deuCarrito.find(l => String(l.id)===String(p.id) && String(l.presId)===String(presId));
+  if (ex){
+    const nx = Math.round((ex.cantidad + 1) * 1000) / 1000;
+    if (nx * factor > stock + 1e-9){ toast('Stock insuficiente de ' + p.nombre, 'warning'); return; }
+    ex.cantidad = nx;
+  } else {
+    if (1 * factor > stock + 1e-9){ toast('Stock insuficiente de ' + p.nombre, 'warning'); return; }
+    deuCarrito.push({
+      id: p.id, codigo: p.codigo, nombre: p.nombre,
+      presId: presId, presNombre: pr.nombre,
+      cantidad: 1, precio: parseFloat(pr.precio) || 0,
+      factor: factor, stock: stock,
+      presentaciones: (p.presentaciones || []).slice()
+    });
+    // si no hay presentaciones, asegurar Unidad
+    const last = deuCarrito[deuCarrito.length-1];
+    if (!last.presentaciones || !last.presentaciones.length){
+      last.presentaciones = [{id:null, nombre:'Unidad', factor:1, precio: (p.precio || 0), def:1}];
+    }
   }
-  try {
-    const j = await deuFetch(URL_DEUDA_CREAR, payload);
-    if (deuTipo === 'producto' && j.count > 1){ toast(j.count + ' deudas registradas ($' + Math.round(Number(j.monto)) + '): ' + (j.numeros || []).join(', '),'success'); }
-    else { toast('Deuda ' + j.numero + ' registrada ($' + Math.round(Number(j.monto)) + ')','success'); }
-    $('deuMonto').value = ''; $('deuMotivo').value = ''; deuLastAuto = ''; $('deuFechaPago').value = '';
-    deuLineas = []; deuRenderLineas(); deuResetPicker();
-    hidePosModal('registrarDeudaModal');
-    try { await seleccionarDeudor(deuSel.id); } catch(e){}
-    if (typeof buscarProductos === 'function') buscarProductos();
-  } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deuRegistrarBtn'), false); }
+  if ($('deuProdSearch')) $('deuProdSearch').value = '';
+  deuRenderListaProductos('');
+  deuRenderCarrito();
 }
-async function liquidarDeudaPOS(){
-  if (!isOnline){ toast('Sin conexión','warning'); return; }
-  if (!deuSel){ toast('Seleccione un deudor','warning'); return; }
-  if (!lockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
-  try {
-    const j = await deuFetch(URL_DEUDA_ABONAR, {deudor_id:deuSel.id, monto:$('deuAbonoMonto').value, metodo:$('deuAbonoMetodo').value, nota:$('deuAbonoNota').value});
-    const det = j.aplicados.map(a=>a.numero+': $'+Math.round(Number(a.monto))).join(', ');
-    toast('Pago aplicado (' + det + ')','success');
-    $('deuAbonoMonto').value = ''; $('deuAbonoNota').value = '';
-    hidePosModal('registrarDeudaModal');
-  } catch(e){ toast(e.message,'danger'); }
-  finally { lockBtn($('deuAbonarBtn'), false); }
-}
-let deuTimer = null;
-$('deudaBuscar').addEventListener('input', ()=>{ clearTimeout(deuTimer); deuTimer = setTimeout(cargarDeudores, 250); });
-$('deudaSelX').onclick = ()=>{ deuSel = null; $('deudaSelBox').style.display = 'none'; renderPendientes(); };
-$('deudaNuevoBtn').onclick = ()=>{ const b = $('deudaNuevoBox'); b.style.display = (b.style.display === 'none') ? '' : 'none'; };
-$('deudaNewGuardar').onclick = crearDeudorPOS;
-$('deuTipoDinero').onclick = ()=>deuSetTipo('dinero');
-$('deuTipoProducto').onclick = ()=>deuSetTipo('producto');
-$('deuProducto').addEventListener('change', deuFillPresentaciones);
-$('deuPresentacion').addEventListener('change', deuTotalPrev);
-$('deuCantidad').addEventListener('input', deuTotalPrev);
-$('deuRegistrarBtn').onclick = registrarDeudaPOS;
-$('deuAbonarBtn').onclick = liquidarDeudaPOS;
-$('registrarDeudaModal').addEventListener('show.bs.modal', ()=>{ cargarDeudores(); });
-$('deuProducto').innerHTML = '<option value="">Seleccione...</option>' + deuProductos.map(p=>'<option value="'+p.id+'">'+esc(p.codigo+' - '+p.nombre)+' ($'+Math.round(Number(p.precio))+' · Stock: '+p.stock+')</option>').join('');
-/* ===== Selector de producto mejorado (buscador + lista rica + ficha) ===== */
-(function(){
-  const box = $('deuProdSearchBox'), search = $('deuProdSearch'), resBox = $('deuProdResults'),
-        pickedBox = $('deuProdPicked'), cnt = $('deuProdCount'), cntTxt = $('deuProdCountTxt'),
-        hint = $('deuStockHint');
-  if (!box || !search || !resBox) return;
+
+function deuRenderListaProductos(q){
+  const search = ($('deuProdSearch') && $('deuProdSearch').value) || q || '';
+  const ql = normSinTildes(search).trim();
+  const vis = (deuProductos || []).filter(p => !ql || normSinTildes(p.nombre).includes(ql) || normSinTildes(p.codigo).includes(ql));
+  if ($('deuProdCount')) $('deuProdCount').textContent = vis.length;
+  const box = $('deuProdResults');
+  if (!box) return;
+  if (!vis.length){ box.innerHTML = '<div class="p-3 text-center text-muted small">Sin resultados para esa búsqueda.</div>'; return; }
   const ini = s => (String(s || '?').trim().charAt(0) || '?').toUpperCase();
   const fmtS = v => { const r = Math.round((parseFloat(v) || 0) * 1000) / 1000; return (r % 1 === 0) ? String(Math.round(r)) : String(r); };
-  function render(q){
-    q = normSinTildes(q || '').trim();
-    const vis = (deuProductos || []).filter(p => !q || normSinTildes(p.nombre).includes(q) || normSinTildes(p.codigo).includes(q));
-    if (cnt) cnt.textContent = vis.length;
-    if (cntTxt) cntTxt.textContent = vis.length + ' de ' + (deuProductos || []).length;
-    if (!vis.length){ resBox.innerHTML = '<div class="p-3 text-center text-muted small">Sin resultados para esa búsqueda.</div>'; return; }
-    resBox.innerHTML = vis.map(p => {
-      const np = (p.presentaciones || []).length ? p.presentaciones.length + ' pres.' : 'unidad';
-      const act = String($('deuProducto').value) === String(p.id) ? ' active' : '';
-      return '<button type="button" class="deu-prod-opt' + act + '" data-id="' + p.id + '">'
-        + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
-        + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
-        + '<span class="cd">' + esc(p.codigo) + ' · Stock ' + esc(fmtS(p.stock)) + ' · ' + esc(np) + '</span></span>'
-        + '<span class="pr">$' + Math.round(Number(p.precio)) + '</span></button>';
+  box.innerHTML = vis.map(p => {
+    const np = (p.presentaciones && p.presentaciones.length) ? p.presentaciones.length + ' pres.' : 'unidad';
+    return '<button type="button" class="deu-prod-opt" data-id="' + p.id + '">'
+      + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
+      + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
+      + '<span class="cd">' + esc(p.codigo) + ' · Stock ' + esc(fmtS(p.stock)) + ' · ' + esc(np) + '</span></span>'
+      + '<span class="pr">' + SIMBOLO + Math.round(Number(p.precio)) + '</span></button>';
+  }).join('');
+  box.querySelectorAll('.deu-prod-opt').forEach(b=>{
+    b.onclick = ()=> deuAddProducto(b.getAttribute('data-id'));
+  });
+}
+
+function deuRenderCarrito(){
+  const box = $('deuCartProductos');
+  if (!box) return;
+  if (!deuCarrito.length){
+    box.innerHTML = '<div class="text-center text-muted small py-2">Sin productos</div>';
+  } else {
+    box.innerHTML = deuCarrito.map((l, idx) => {
+      const sub = l.precio * l.cantidad;
+      const presOpts = (l.presentaciones || []).map(pr=>
+        '<option value="'+(pr.id == null ? '' : pr.id)+'"'+(String(pr.id)===String(l.presId)?' selected':'')+'>'+esc(pr.nombre)+' · '+SIMBOLO+Math.round(pr.precio)+'</option>'
+      ).join('');
+      const presSel = (l.presentaciones && l.presentaciones.length > 1)
+        ? '<select class="cart-pres" onchange="deuChangePres('+idx+', this.value)">'+presOpts+'</select>'
+        : '<span class="cart-pres-name">'+esc(l.presNombre || '')+'</span>';
+      const maxU = deuMaxQty(l.stock, l.factor);
+      return '<div class="deu-lin">'
+        + '<div class="d-flex justify-content-between align-items-start gap-2">'
+        + '<div class="min-w-0"><div class="nm text-truncate">'+esc(l.nombre)+'</div><div class="cd small text-muted mono">'+esc(l.codigo)+'</div></div>'
+        + '<div class="sub">'+SIMBOLO+Math.round(sub)+'</div></div>'
+        + '<div class="ctrl">'
+        + presSel
+        + '<span class="qty-step"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="deuStepQty('+idx+',-1)">−</button>'
+        + '<input type="number" id="deuQty-'+idx+'" class="form-control form-control-sm" style="width:64px;" step="0.001" value="'+l.cantidad+'" onblur="deuSetQty('+idx+')">'
+        + '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="deuStepQty('+idx+',1)">+</button></span>'
+        + '<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="deuRemoveLinea('+idx+')"><i class="bi bi-x-lg"></i></button>'
+        + '</div>'
+        + '<div class="stock-hint">Máx: '+maxU+' ('+l.stock+' base / '+l.factor+')</div>'
+        + '</div>';
     }).join('');
   }
-  function showPicked(){
-    const p = (deuProductos || []).find(x => String(x.id) === String($('deuProducto').value));
-    const has = !!p;
-    if (pickedBox) pickedBox.style.display = has ? '' : 'none';
-    if (box) box.style.display = has ? 'none' : '';
-    if (resBox) resBox.style.display = has ? 'none' : '';
-    if (has){
-      $('deuPickedIni').textContent = ini(p.nombre);
-      $('deuPickedName').textContent = p.codigo + ' - ' + p.nombre;
-      $('deuPickedSub').textContent = 'Stock ' + fmtS(p.stock) + ' · $' + Math.round(Number(p.precio));
-      search.value = '';
+  // dinero
+  const dineroBox = $('deuCartDinero');
+  const dineroLista = $('deuDineroLista');
+  if (deuDineros.length){
+    if (dineroBox) dineroBox.style.display = '';
+    if (dineroLista) dineroLista.innerHTML = deuDineros.map((d, i)=>
+      '<div class="deu-dinero-entry"><span><strong class="mono">'+SIMBOLO+Math.round(Number(d.monto))+'</strong><br><small class="text-muted">'+esc(d.motivo || 'Sin motivo')+'</small></span>'
+      + '<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="deuRemoveDinero('+i+')"><i class="bi bi-x-lg"></i></button></div>'
+    ).join('');
+  } else {
+    if (dineroBox) dineroBox.style.display = 'none';
+    if (dineroLista) dineroLista.innerHTML = '';
+  }
+  // total
+  let total = deuDineros.reduce((s,d)=>s+(parseFloat(d.monto)||0),0);
+  deuCarrito.forEach(l=>{ total += l.precio * l.cantidad; });
+  const t = Math.round(total);
+  if ($('deuGranTotal')) $('deuGranTotal').textContent = SIMBOLO + t;
+  if ($('deuGranTotal2')) $('deuGranTotal2').textContent = SIMBOLO + t;
+}
+
+function deuChangePres(idx, presId){
+  const l = deuCarrito[idx]; if (!l) return;
+  const p = deuFindProd(l.id);
+  const arr = (p && p.presentaciones && p.presentaciones.length) ? p.presentaciones : [{id:null, nombre:'Unidad', factor:1, precio: (p && p.precio) || l.precio}];
+  const pr = arr.find(x=>String(x.id)===String(presId));
+  if (!pr) return;
+  l.presId = (pr.id == null ? null : pr.id);
+  l.presNombre = pr.nombre;
+  l.factor = parseFloat(pr.factor) || 1;
+  l.precio = parseFloat(pr.precio) || 0;
+  if (l.cantidad * l.factor > l.stock + 1e-9){
+    l.cantidad = deuMaxQty(l.stock, l.factor);
+    toast('Cantidad ajustada al stock disponible','warning');
+  }
+  // fusionar si colisiona
+  const key = l.id + '|' + (l.presId == null ? 'd' : l.presId);
+  const dup = deuCarrito.findIndex((x, j)=> j !== idx && String(x.id)===String(l.id) && String(x.presId)===String(l.presId));
+  if (dup >= 0){
+    deuCarrito[dup].cantidad = Math.round((parseFloat(deuCarrito[dup].cantidad)+parseFloat(l.cantidad))*1000)/1000;
+    if (deuCarrito[dup].cantidad * deuCarrito[dup].factor > deuCarrito[dup].stock + 1e-9) deuCarrito[dup].cantidad = deuMaxQty(deuCarrito[dup].stock, deuCarrito[dup].factor);
+    deuCarrito.splice(idx, 1);
+  }
+  deuRenderCarrito();
+}
+
+function deuStepQty(idx, delta){
+  const l = deuCarrito[idx]; if (!l) return;
+  const step = 1;
+  let nx = Math.round((parseFloat(l.cantidad) + delta * step) * 1000) / 1000;
+  if (nx <= 0){ deuCarrito.splice(idx,1); deuRenderCarrito(); return; }
+  if (nx * l.factor > l.stock + 1e-9){ nx = deuMaxQty(l.stock, l.factor); toast('Stock máximo: ' + l.stock, 'warning'); }
+  if (nx <= 0){ deuCarrito.splice(idx,1); }
+  else l.cantidad = nx;
+  deuRenderCarrito();
+}
+function deuSetQty(idx){
+  const l = deuCarrito[idx]; if (!l) return;
+  const el = $('deuQty-'+idx); if (!el) return;
+  try { el.blur(); } catch(e){}
+  let v = parseFloat(String(el.value).replace(',', '.'));
+  if (isNaN(v) || v <= 0) v = 1;
+  v = Math.round(v * 1000) / 1000;
+  if (v * l.factor > l.stock + 1e-9){ v = deuMaxQty(l.stock, l.factor); toast('Stock máximo: ' + l.stock, 'warning'); }
+  if (v <= 0){ deuCarrito.splice(idx,1); }
+  else l.cantidad = v;
+  deuRenderCarrito();
+}
+function deuRemoveLinea(idx){ deuCarrito.splice(idx,1); deuRenderCarrito(); }
+
+function deuRemoveDinero(i){ deuDineros.splice(i,1); deuRenderCarrito(); }
+
+function abrirWorkspace(){
+  if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
+  if ($('deuStep1')) $('deuStep1').style.display = 'none';
+  if ($('deuStep2')) $('deuStep2').style.display = '';
+  setTxt('deuStep2Nombre', deuSelec.nombre_display || deuSelec.nombre_completo);
+  if ($('deuStep2Saldo')){
+    $('deuStep2Saldo').textContent = money(deuSelec.saldo);
+    $('deuStep2Saldo').className = 'mono ' + (Number(deuSelec.saldo) > 0 ? 'text-danger' : 'text-success');
+  }
+  if ($('deuProdSearch')) $('deuProdSearch').value = '';
+  deuRenderListaProductos('');
+  deuRenderCarrito();
+}
+function volverAPaso1(){
+  if ($('deuStep2')) $('deuStep2').style.display = 'none';
+  if ($('deuStep1')) $('deuStep1').style.display = '';
+  if (deuSelec){ cargarDeudores(); }
+  else { cargarDeudores(); }
+}
+
+function deuLockBtn(btn, lock, text){
+  if (!btn) return true;
+  if (lock){
+    if (btn.dataset && btn.dataset.locked === '1') return false;
+    btn.dataset.locked = '1';
+    btn.disabled = true;
+    if (text) btn.textContent = text;
+  } else {
+    delete (btn.dataset || {}).locked;
+    btn.disabled = false;
+  }
+  return true;
+}
+function deuHidePosModal(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  const inst = (typeof bootstrap !== 'undefined' && bootstrap.Modal) ? bootstrap.Modal.getInstance(el) : null;
+  if (inst) inst.hide(); else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) new bootstrap.Modal(el).hide();
+}
+async function registrarDeudaPOS(){
+  if (!isOnline){ toast('Sin conexión: las deudas se registran solo online','warning'); return; }
+  if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
+  if (!deuCarrito.length && !deuDineros.length){ toast('Agregue al menos un producto o dinero','warning'); return; }
+  // validar stock
+  for (const l of deuCarrito){
+    if (l.cantidad * l.factor > l.stock + 1e-9){ toast('Stock insuficiente de ' + l.nombre, 'warning'); return; }
+  }
+  const btn = $('deuRegistrarBtn');
+  if (btn) btn.disabled = true;
+  const payload = {
+    deudor_id: deuSelec.id,
+    fecha_pago: ($('deuFechaPago') && $('deuFechaPago').value) || '',
+    dinero: deuDineros.map(x=>({monto: String(x.monto), motivo: x.motivo})),
+    items: deuCarrito.map(l=>({producto_id: l.id, presentacion_id: l.presId, cantidad: l.cantidad}))
+  };
+  try {
+    const j = await deuFetch(URL_DEUDA_CREAR, payload);
+    toast((j.count || 1) + ' deuda(s) registradas — ' + SIMBOLO + Math.round(Number(j.monto)), 'success');
+    deuCarrito = []; deuDineros = [];
+    if ($('deuFechaPago')) $('deuFechaPago').value = '';
+    deuRenderCarrito();
+    deuHidePosModal('registrarDeudaModal');
+    if (typeof buscarProductos === 'function') buscarProductos();
+  } catch(e){ toast(e.message,'danger'); }
+  finally { const b = $('deuRegistrarBtn'); if (b) b.disabled = false; }
+}
+
+async function liquidarDeudaPOS(){
+  if (!isOnline){ toast('Sin conexión','warning'); return; }
+  if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
+  if (!deuLockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
+  try {
+    const j = await deuFetch(URL_DEUDA_ABONAR, {
+      deudor_id: deuSelec.id,
+      monto: ($('deuAbonoMonto') && $('deuAbonoMonto').value) || '',
+      metodo: ($('deuAbonoMetodo') && $('deuAbonoMetodo').value) || 'efectivo',
+      nota: ($('deuAbonoNota') && $('deuAbonoNota').value) || ''
+    });
+    const det = (j.aplicados || []).map(a=>a.numero+': '+SIMBOLO+Math.round(Number(a.monto))).join(', ');
+    toast('Pago aplicado (' + det + ')','success');
+    if ($('deuAbonoMonto')) $('deuAbonoMonto').value = '';
+    if ($('deuAbonoNota')) $('deuAbonoNota').value = '';
+    if (j.saldo_deudor != null){
+      deuSelec.saldo = j.saldo_deudor;
+      if ($('deuStep2Saldo')){
+        $('deuStep2Saldo').textContent = money(j.saldo_deudor);
+        $('deuStep2Saldo').className = 'mono ' + (Number(j.saldo_deudor) > 0 ? 'text-danger' : 'text-success');
+      }
     }
-    render('');
-    updateHint();
-  }
-  function updateHint(){
-    if (!hint) return;
-    const selP = $('deuPresentacion'), sel = $('deuProducto'), cEl = $('deuCantidad');
-    const p = (deuProductos || []).find(x => String(x.id) === String(sel.value));
-    if (!p){ hint.textContent = ''; hint.classList.remove('over'); return; }
-    let f = 1;
-    try {
-      const pr = (p.presentaciones || []).find(y => String(y.id) === String(selP.value));
-      if (pr) f = parseFloat(pr.factor) || 1;
-    } catch(e){ f = 1; }
-    const stock = parseFloat(p.stock) || 0;
-    const c = parseFloat(cEl.value) || 0;
-    const max = f > 0 ? Math.floor(stock / f * 1000) / 1000 : 0;
-    hint.textContent = 'Máx: ' + fmtS(max) + ' (' + fmtS(stock) + ' base / ' + f + ')';
-    hint.classList.toggle('over', c * f > stock + 1e-9);
-  }
-  resBox.addEventListener('click', ev => {
-    const b = ev.target.closest ? ev.target.closest('.deu-prod-opt') : null;
-    if (!b) return;
-    $('deuProducto').value = b.getAttribute('data-id');
-    $('deuProducto').dispatchEvent(new Event('change'));
-    showPicked();
-  });
-  $('deuPickedChange').addEventListener('click', () => {
-    $('deuProducto').value = '';
-    $('deuProducto').dispatchEvent(new Event('change'));
-    if (pickedBox) pickedBox.style.display = 'none';
-    if (box) box.style.display = '';
-    if (resBox) resBox.style.display = '';
-    render(search.value); updateHint(); search.focus();
-  });
-  search.addEventListener('input', () => render(search.value));
-  $('deuProducto').addEventListener('change', showPicked);
-  $('deuPresentacion').addEventListener('change', updateHint);
-  $('deuCantidad').addEventListener('input', updateHint);
-  const step = d => { const c = $('deuCantidad'); c.value = Math.round(((parseFloat(c.value) || 0) + d) * 1000) / 1000; c.dispatchEvent(new Event('input')); updateHint(); };
-  $('deuCantMenos').addEventListener('click', () => step(-1));
-  $('deuCantMas').addEventListener('click', () => step(1));
-  $('registrarDeudaModal').addEventListener('show.bs.modal', () => {
-    // Sincroniza la ficha con el valor actual al abrir
-    const has = !!$('deuProducto').value;
-    if (has) showPicked(); else { render(''); updateHint(); }
-  });
-  $('registrarDeudaModal').addEventListener('hidden.bs.modal', () => {
-    // Limpia el selector y el carrito para la próxima deuda
-    $('deuProducto').value = '';
-    $('deuProducto').dispatchEvent(new Event('change'));
-    if (pickedBox) pickedBox.style.display = 'none';
-    if (box) box.style.display = '';
-    if (resBox) resBox.style.display = '';
-    render('');
-    deuLineas = []; deuRenderLineas();
-  });
-  render('');
-})();
+    // refrescar deudas
+    try { await seleccionarDeudor(deuSelec.id); } catch(e){}
+    deuHidePosModal('deudaAbonarModal');
+  } catch(e){ toast(e.message,'danger'); }
+  finally { deuLockBtn($('deuAbonarBtn'), false); }
+}
+
+function deuResetAll(){
+  deuSelec = null;
+  deuCarrito = [];
+  deuDineros = [];
+  if ($('deudaSelBox')) $('deudaSelBox').style.display = 'none';
+  if ($('deuContinuar')) $('deuContinuar').disabled = true;
+  if ($('deuFechaPago')) $('deuFechaPago').value = '';
+  if ($('deudaBuscar')) $('deudaBuscar').value = '';
+  if ($('deuStep1')) $('deuStep1').style.display = '';
+  if ($('deuStep2')) $('deuStep2').style.display = 'none';
+  if ($('deuDineroMonto')) $('deuDineroMonto').value = '';
+  if ($('deuDineroMotivo')) $('deuDineroMotivo').value = '';
+  if ($('deuAbonoMonto')) $('deuAbonoMonto').value = '';
+  if ($('deuAbonoNota')) $('deuAbonoNota').value = '';
+  if ($('deuProdSearch')) $('deuProdSearch').value = '';
+  deuRenderCarrito();
+}
+
+/* listeners */
+let deuTimer = null;
+if ($('deudaBuscar')) $('deudaBuscar').addEventListener('input', ()=>{ clearTimeout(deuTimer); deuTimer = setTimeout(cargarDeudores, 250); });
+
+if ($('deudaSelX')) $('deudaSelX').onclick = ()=>{ deuSelec = null; if ($('deudaSelBox')) $('deudaSelBox').style.display = 'none'; if ($('deuContinuar')) $('deuContinuar').disabled = true; renderPendientes(); };
+
+if ($('deudaNuevoBtn')) $('deudaNuevoBtn').onclick = ()=>{ const b = $('deudaNuevoBox'); if (!b) return; b.style.display = (b.style.display === 'none' || b.style.display === '') ? '' : 'none'; };
+if ($('deudaNewGuardar')) $('deudaNewGuardar').onclick = crearDeudorPOS;
+
+if ($('deuContinuar')) $('deuContinuar').onclick = abrirWorkspace;
+if ($('deuVolverBtn')) $('deuVolverBtn').onclick = volverAPaso1;
+
+if ($('deuDineroBtn')) $('deuDineroBtn').onclick = ()=>{ if ($('deuDineroMonto')) $('deuDineroMonto').value=''; if ($('deuDineroMotivo')) $('deuDineroMotivo').value=''; const m = new bootstrap.Modal($('deudaDineroModal')); m.show(); };
+if ($('deuProductosBtn')) $('deuProductosBtn').onclick = ()=>{ if ($('deuProdSearch')) $('deuProdSearch').focus(); };
+if ($('deuCobrarBtn')) $('deuCobrarBtn').onclick = ()=>{ renderPendientes(); const m = new bootstrap.Modal($('deudaAbonarModal')); m.show(); };
+
+if ($('deuDineroAgregar')) $('deuDineroAgregar').onclick = ()=>{
+  const m = parseFloat(($('deuDineroMonto').value || '').replace(',', '.')) || 0;
+  if (m <= 0){ toast('Ingrese un monto mayor a 0','warning'); return; }
+  const motivo = ($('deuDineroMotivo').value || '').trim();
+  deuDineros.push({monto: m, motivo: motivo});
+  deuHidePosModal('deudaDineroModal');
+  deuRenderCarrito();
+};
+if ($('deuRegistrarBtn')) $('deuRegistrarBtn').onclick = registrarDeudaPOS;
+if ($('deuAbonarBtn')) $('deuAbonarBtn').onclick = liquidarDeudaPOS;
+
+if ($('deuProdSearch')) $('deuProdSearch').addEventListener('input', ()=>deuRenderListaProductos($('deuProdSearch').value));
+
+/* modal show/hide */
+if ($('registrarDeudaModal')){
+  $('registrarDeudaModal').addEventListener('show.bs.modal', ()=>{ deuResetAll(); cargarDeudores(); });
+  $('registrarDeudaModal').addEventListener('hidden.bs.modal', ()=>{ deuResetAll(); });
+}
+if ($('deudaDineroModal')){
+  $('deudaDineroModal').addEventListener('show.bs.modal', ()=>{ if ($('deuDineroMonto')) $('deuDineroMonto').value=''; if ($('deuDineroMotivo')) $('deuDineroMotivo').value=''; });
+}
+if ($('deudaAbonarModal')){
+  $('deudaAbonarModal').addEventListener('show.bs.modal', ()=>{ if ($('deuAbonoMonto')) $('deuAbonoMonto').value=''; if ($('deuAbonoMetodo')) $('deuAbonoMetodo').value='efectivo'; if ($('deuAbonoNota')) $('deuAbonoNota').value=''; renderPendientes(); });
+}
+
+/* render inicial de la lista de productos del panel */
+deuRenderListaProductos('');
+
 /* Donación POS: buscador + varios productos (el endpoint espera productos_data JSON) */
 const URL_DONACION_CREAR = '{% url "core:retiro_donacion_crear" %}';
 let donLineas = [];
@@ -1649,7 +1926,7 @@ function donRenderSearch(q){
     + '<span class="ini">' + esc(ini(p.nombre)) + '</span>'
     + '<span class="flex-grow-1 min-w-0"><span class="nm d-block text-truncate">' + esc(p.nombre) + '</span>'
     + '<span class="cd">' + esc(p.codigo) + ' · Stock ' + esc(String(p.stock)) + '</span></span>'
-    + '<span class="pr">$' + Math.round(Number(p.precio)) + '</span></button>'
+    + '<span class="pr">' + SIMBOLO + Math.round(Number(p.precio)) + '</span></button>'
   ).join('');
 }
 function donRenderLineas(){
@@ -1704,7 +1981,7 @@ $('donacionForm').addEventListener('submit', async function(e){
   const ben = $('donBeneficiario').value.trim();
   if (!ben){ toast('Indique el beneficiario.','warning'); $('donBeneficiario').focus(); return; }
   const btn = this.querySelector('[type="submit"]');
-  if (!lockBtn(btn, true, 'Registrando...')) return;
+  if (!deuLockBtn(btn, true, 'Registrando...')) return;
   const fd = new FormData();
   fd.append('productos_data', JSON.stringify(donLineas.map(l=>({producto_id:l.id, cantidad:l.cantidad}))));
   fd.append('beneficiario_nombre', ben);
@@ -1713,13 +1990,13 @@ $('donacionForm').addEventListener('submit', async function(e){
     const r = await fetch(URL_DONACION_CREAR, {method:'POST', headers:{'X-CSRFToken':CSRF_TOKEN, 'X-Requested-With':'XMLHttpRequest'}, body:fd});
     const j = await r.json().catch(()=>({}));
     if (!r.ok || !j.ok) throw new Error((j && j.error) || 'Error al registrar donación');
-    hidePosModal('registrarDonacionModal');
+    deuHidePosModal('registrarDonacionModal');
     donLineas = []; donRenderLineas();
     $('donProdSearch').value = ''; $('donBeneficiario').value = ''; $('donMotivo').value = '';
     toast(j.message || 'Donación registrada','success');
     if (typeof buscarProductos === 'function') buscarProductos();
   } catch(err){ toast(err.message || 'Error al registrar donación','danger'); }
-  finally { lockBtn(btn, false); }
+  finally { deuLockBtn(btn, false); }
 });
 
 /* ---------- teclado ---------- */

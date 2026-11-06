@@ -1,5 +1,8 @@
 """
-WSGI entry point for Phusion Passenger
+WSGI entry point for Phusion Passenger.
+
+Si se ejecuta directo (python3 passenger_wsgi.py, como hace Enzonic),
+levanta la app con waitress en 0.0.0.0:$PORT.
 """
 
 import os
@@ -16,3 +19,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'system_erp.settings')
 # Import and create WSGI application
 from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
+
+
+if __name__ == '__main__':
+    from waitress import serve
+    port = int(os.environ.get('PORT', '8000'))
+    serve(application, host='0.0.0.0', port=port)

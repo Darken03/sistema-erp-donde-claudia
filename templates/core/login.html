@@ -151,8 +151,9 @@
 <body>
     <div class="login-card">
         <div class="login-head">
-            <img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau" class="login-store-logo">
-            <h1>Donde Clau</h1>
+            {% if TIENDA.logo_url %}<img src="{{ TIENDA.logo_url }}" alt="{{ TIENDA.nombre }}" class="login-store-logo">
+            {% else %}<img src="{% static 'img/logo-donde-clau.png' %}" alt="Donde Clau" class="login-store-logo">{% endif %}
+            <h1>{{ TIENDA.nombre|default:"Donde Clau" }}</h1>
             <p>Bizz Master · Sistema de Gestión Empresarial</p>
         </div>
         <div class="login-body">

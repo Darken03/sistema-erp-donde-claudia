@@ -25,6 +25,13 @@ def inicializar_stock_inicial(fecha=None):
     """Inicializa el stock_inicial en InventarioDiario con el stock actual de cada producto."""
     if fecha is None:
         fecha = timezone.now().date()
+
+    # PROTECCIÓN HISTORIA: este script solo inicializa HOY. Para fechas
+    # pasadas usar reparar_ipb_22_24.py. Sobrescribir el pasado con el
+    # stock vivo fue la causa de las rupturas 22-24 (auditoría 24/09/2026).
+    if fecha != timezone.now().date():
+        print(f"BLOQUEADO: no se inicializa fecha pasada {fecha}. Usa reparar_ipb_22_24.py --apply.")
+        return
     
     print(f"Inicializando IPB para la fecha: {fecha}")
     print("=" * 70)

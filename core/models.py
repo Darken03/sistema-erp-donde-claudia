@@ -58,6 +58,7 @@ class PerfilUsuario(models.Model):
     ROLES = [
         ('admin', 'Administrador'),
         ('cajero', 'Cajero'),
+        ('almacenero', 'Almacenero'),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil')
     rol = models.CharField(max_length=10, choices=ROLES, default='cajero')
@@ -79,6 +80,10 @@ class PerfilUsuario(models.Model):
     def es_cajero(self):
         return self.rol == 'cajero'
 
+    @property
+    def es_almacenero(self):
+        return self.rol == 'almacenero'
+
 
 @receiver(post_save, sender=User)
 def crear_perfil_usuario(sender, instance, created, **kwargs):
@@ -97,6 +102,11 @@ class Empleado(models.Model):
     salario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_contratacion = models.DateField(auto_now_add=True)
     activo = models.BooleanField(default=True)
+    # Spec multi-POS §5: POS al que trabaja. Nullable (historia previa).
+    # Se fija al abrir turno (puede cambiar entre turnos).
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='empleados')
 
     class Meta:
         verbose_name = 'Empleado'
@@ -117,6 +127,10 @@ class Empleado(models.Model):
 
 class Turno(models.Model):
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='turnos')
+    # Spec multi-POS §5: un POS por turno. Nullable (historia previa).
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='turnos')
     fecha_apertura = models.DateTimeField(auto_now_add=True)
     fecha_cierre = models.DateTimeField(null=True, blank=True)
     abierto = models.BooleanField(default=True)
@@ -148,6 +162,18 @@ class Turno(models.Model):
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
+    # Icono: emoji (🎃) o clase Bootstrap Icons (bi-basket). Vacío = inicial.
+    icono = models.CharField(max_length=30, blank=True, default='')
+    # Jerarquía para la tienda: una categoría padre agrupa varias hijas.
+    padre = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hijas',
+    )
+    # El admin decide qué categorías se muestran en /store.
+    visible_store = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -157,6 +183,22 @@ class Categoria(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if self.padre_id is None:
+            return
+        if self.padre_id == self.pk:
+            raise ValidationError({'padre': 'Una categoría no puede ser su propia padre.'})
+        # Sin ciclos: ningún ancestro puede ser uno mismo.
+        visto = {self.pk}
+        actual = self.padre
+        while actual is not None:
+            if actual.pk in visto:
+                raise ValidationError({'padre': 'Esa padre crea un ciclo en la jerarquía.'})
+            visto.add(actual.pk)
+            actual = actual.padre
 
 
 class Producto(models.Model):
@@ -187,6 +229,8 @@ class Producto(models.Model):
     permite_decimal = models.BooleanField(default=False)
     imagen = models.ImageField(upload_to='productos/', blank=True, null=True)
     activo = models.BooleanField(default=True)
+    # False = solo existe en almacén hasta su primer traslado al POS.
+    visible_pos = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -256,6 +300,36 @@ class Producto(models.Model):
     @property
     def stock_bajo(self):
         return self.stock <= self.stock_minimo
+
+    @property
+    def es_nuevo(self):
+        """True si el producto se creó hace menos de 30 días (sello NUEVO)."""
+        try:
+            from django.utils import timezone
+            creado = self.fecha_creacion
+            if creado is None:
+                return False
+            if timezone.is_naive(creado):
+                creado = timezone.make_aware(
+                    creado, timezone.get_current_timezone())
+            return (timezone.now() - creado).days < 30
+        except Exception:
+            return False
+
+    @property
+    def es_nuevo(self):
+        """True si el producto se creó en los últimos 30 días (sello NUEVO)."""
+        try:
+            from django.utils import timezone
+            creado = self.fecha_creacion
+            if not creado:
+                return False
+            ahora = timezone.now()
+            if timezone.is_naive(creado):
+                creado = timezone.make_aware(creado)
+            return (ahora - creado).days < 30
+        except Exception:
+            return False
 
     @property
     def stock_fmt(self):
@@ -346,6 +420,11 @@ class Venta(models.Model):
     numero_venta = models.CharField(max_length=20, unique=True)
     cajero = models.ForeignKey(User, on_delete=models.PROTECT, related_name='ventas')
     turno = models.ForeignKey(Turno, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
+    # Spec multi-POS §5 (trazabilidad): POS donde se vendió. Nullable
+    # (historia previa y modos sin POS). Task 5 filtra IPB/ventas por aquí.
+    punto_venta = models.ForeignKey(
+        'PuntoVenta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='ventas')
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     descuento = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -725,6 +804,7 @@ class InventarioDiario(models.Model):
 class Deudor(models.Model):
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100, blank=True, default='')
+    alias = models.CharField('Alias', max_length=100, blank=True, default='')
     ci = models.CharField(max_length=20, unique=True, null=True, blank=True)
     telefono = models.CharField(max_length=30, blank=True, default='')
     activo = models.BooleanField(default=True)
@@ -737,8 +817,7 @@ class Deudor(models.Model):
         ordering = ['nombre', 'apellido']
 
     def __str__(self):
-        nombre = f"{self.nombre} {self.apellido}".strip()
-        return f"{nombre} ({self.ci})" if self.ci else nombre
+        return self.nombre_display
 
     def save(self, *args, **kwargs):
         if not self.ci:
@@ -748,6 +827,12 @@ class Deudor(models.Model):
     @property
     def nombre_completo(self):
         return f"{self.nombre} {self.apellido}".strip()
+
+    @property
+    def nombre_display(self):
+        """Nombre con alias entre paréntesis: 'Jose Manuel (Pepito)'."""
+        base = self.nombre_completo
+        return f"{base} ({self.alias})" if (self.alias or '').strip() else base
 
     @property
     def saldo_total(self):
@@ -940,7 +1025,7 @@ class ArqueoTurno(models.Model):
     Paso 1 (sistema): fondo inicial + esperado por método
         (ventas del turno − gastos del turno).
     Paso 2 (cajero): declara lo contado (con ayudante por
-        denominaciones) → diferencia + motivo si descuadra.
+        denominaciones) → diferencia y motivo opcional.
     Después un admin lo confirma y el turno se cierra.
     """
     ESTADOS = [
@@ -1091,3 +1176,327 @@ class ConteoCiegoLinea(models.Model):
         if self.stock_sistema is None:
             return None
         return self.cantidad - self.stock_sistema
+
+
+# ============================================================
+# ALMACÉN (ajeno al IPB, ventas y entradas directas al POS).
+# Flujo: AlmacenEntrada -> AlmacenStock -> AlmacenTraslado -> POS.
+# Solo el traslado cruza al sistema actual generando una
+# EntradaProducto con proveedor 'Almacén' (visible en el IPB).
+# ============================================================
+
+# Proveedor que identifica en el IPB las entradas venidas del almacén.
+ALMACEN_PROVEEDOR = 'Almacén'
+
+# Días antes del vencimiento para marcar un lote como próximo a vencer.
+DIAS_AVISO_CADUCIDAD = 30
+
+
+def almacen_proveedor_nombre(nombre_almacen):
+    """Proveedor trazable por almacén (IPB).
+
+    Compat histórico: el Principal keeps 'Almacén' exacto (tests + IPB
+    previo); el resto usa 'Almacén: <nombre>'.
+    """
+    base = (nombre_almacen or '').strip()
+    if not base or base == 'Almacén Principal':
+        return ALMACEN_PROVEEDOR
+    return f"{ALMACEN_PROVEEDOR}: {base}"
+
+
+class Almacen(models.Model):
+    """Almacén físico/lógico con nombre propio, creado por el cliente."""
+    nombre = models.CharField(max_length=100, unique=True)
+    descripcion = models.TextField(blank=True, default='')
+    activo = models.BooleanField(default=True)
+    es_principal = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Almacén'
+        verbose_name_plural = 'Almacenes'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def activos(cls):
+        return cls.objects.filter(activo=True).order_by('nombre')
+
+    @classmethod
+    def get_unico(cls):
+        """Devuelve el único almacén activo o None si hay 0 o 2+."""
+        qs = list(cls.objects.filter(activo=True).order_by('id')[:2])
+        return qs[0] if len(qs) == 1 else None
+
+
+def get_almacen_unico():
+    return Almacen.get_unico()
+
+
+class PuntoVenta(models.Model):
+    """Punto de venta físico (spec multi-POS §5).
+
+    Un POS ↔ un almacén (varios POS pueden compartir almacén): el POS
+    vende y descuenta directo del `AlmacenStock` del almacén asignado
+    (sin stock propio). Nombre único, estilo `Almacen`.
+    """
+    nombre = models.CharField(max_length=100, unique=True)
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='puntos_venta')
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Punto de Venta'
+        verbose_name_plural = 'Puntos de Venta'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def activos(cls):
+        return cls.objects.filter(activo=True).order_by('nombre')
+
+
+class ConfiguracionTienda(models.Model):
+    """Singleton (pk=1) con datos de tienda, apariencia y regional."""
+    MODOS_OPERACION = [
+        ('solo_pos', 'Solo POS (sin almacén)'),
+        ('pos_almacenes', 'POS + almacenes'),
+        ('multi_pos', 'Multi-POS (varios puntos de venta)'),
+    ]
+    nombre_tienda = models.CharField(max_length=150, default='Donde Clau')
+    logo = models.ImageField(upload_to='tienda/', blank=True, null=True)
+    telefono = models.CharField(max_length=30, blank=True, default='')
+    direccion = models.CharField(max_length=255, blank=True, default='')
+    moneda = models.CharField(max_length=10, default='CUP')
+    simbolo_moneda = models.CharField(max_length=5, default='$')
+    impuesto_defecto = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    color_acento = models.CharField(max_length=7, default='#6f53d9')
+    tema_por_defecto = models.CharField(
+        max_length=5, choices=[('light', 'Claro'), ('dark', 'Oscuro')],
+        default='light')
+    idioma = models.CharField(max_length=5, default='es')
+    # Modo de operación (spec 2026-10-10-modos-operacion, §1-2).
+    # Cambiar de modo NUNCA borra datos: lo no aplicable solo se oculta.
+    modo_operacion = models.CharField(
+        max_length=15, choices=MODOS_OPERACION, default='pos_almacenes')
+
+    class Meta:
+        verbose_name = 'Configuración de Tienda'
+        verbose_name_plural = 'Configuración de Tienda'
+
+    def __str__(self):
+        return f"Configuración: {self.nombre_tienda}"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'nombre_tienda': 'Donde Clau', 'moneda': 'CUP',
+                'simbolo_moneda': '$', 'color_acento': '#6f53d9',
+                'tema_por_defecto': 'light', 'idioma': 'es',
+            })
+        return obj
+
+    @property
+    def logo_url(self):
+        try:
+            if self.logo and self.logo.storage.exists(self.logo.name):
+                return self.logo.url
+        except Exception:
+            pass
+        return None
+
+
+class AlmacenStock(models.Model):
+    """Existencia de un producto en un almacén (unidad base, 3 decimales)."""
+    producto = models.ForeignKey(
+        Producto, on_delete=models.CASCADE, related_name='almacen_stock')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.CASCADE, related_name='stocks',
+        null=True, blank=True)
+    # Compat: acceso legacy producto.almacen_stock (primer stock si existe).
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Existencia de Almacén'
+        verbose_name_plural = 'Existencias de Almacén'
+        unique_together = ['producto', 'almacen']
+
+    def __str__(self):
+        return f"{self.producto.nombre}: {self.cantidad}"
+
+    @property
+    def cantidad_fmt(self):
+        unidad = self.producto.unidad_medida if self.producto_id else 'unidades'
+        return fmt_cantidad_unidad(self.cantidad, unidad)
+
+    @property
+    def valor(self):
+        try:
+            return self.cantidad * (self.producto.precio_compra or 0)
+        except Exception:
+            return Decimal('0')
+
+
+class AlmacenEntrada(models.Model):
+    """Entrada de mercancía al almacén (no toca el stock del POS)."""
+    numero_entrada = models.CharField(max_length=20, unique=True)
+    producto = models.ForeignKey(
+        Producto, on_delete=models.PROTECT, related_name='almacen_entradas')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='entradas',
+        null=True, blank=True)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    costo_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    proveedor = models.CharField(max_length=200, blank=True, null=True)
+    descripcion = models.TextField(blank=True, null=True)
+    # Fecha de caducidad del lote (opcional). Sin fecha no se marca.
+    fecha_caducidad = models.DateField(blank=True, null=True)
+    registrado_por = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='almacen_entradas_registradas')
+    fecha_entrada = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Entrada de Almacén'
+        verbose_name_plural = 'Entradas de Almacén'
+        ordering = ['-fecha_entrada']
+
+    def __str__(self):
+        return f"Entrada almacén #{self.numero_entrada} - {self.producto.nombre}"
+
+    @property
+    def cantidad_fmt(self):
+        unidad = self.producto.unidad_medida if self.producto_id else 'unidades'
+        return fmt_cantidad_unidad(self.cantidad, unidad)
+
+    @property
+    def dias_para_vencer(self):
+        """Días restantes hasta la caducidad (negativo = vencido, None = sin fecha)."""
+        if not self.fecha_caducidad:
+            return None
+        from django.utils import timezone
+        return (self.fecha_caducidad - timezone.localdate()).days
+
+    @property
+    def estado_caducidad(self):
+        """'vencido' | 'por_vencer' (<=30 días) | 'ok' (sin fecha o lejana)."""
+        dias = self.dias_para_vencer
+        if dias is None or dias > DIAS_AVISO_CADUCIDAD:
+            return 'ok'
+        if dias < 0:
+            return 'vencido'
+        return 'por_vencer'
+
+    def save(self, *args, **kwargs):
+        self.costo_total = self.cantidad * self.costo_unitario
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def generar_numero(cls):
+        ultimo = cls.objects.order_by('-id').first()
+        if ultimo:
+            try:
+                ultimo_num = int(ultimo.numero_entrada.split('-')[-1])
+                return f"AENT-{ultimo_num + 1:06d}"
+            except (ValueError, IndexError):
+                pass
+        return "AENT-000001"
+
+
+class AlmacenTraslado(models.Model):
+    """Movimiento de mercancía del almacén al punto de venta.
+
+    Al confirmarse genera una EntradaProducto (proveedor 'Almacén') con el
+    costo vigente: eso es lo que el IPB muestra como entrada del día.
+    Solo el admin puede cancelarlo (revierte stocks y elimina la entrada
+    generada); si no, los errores se corrigen con ajuste.
+    """
+    numero_traslado = models.CharField(max_length=20, unique=True)
+    producto = models.ForeignKey(
+        Producto, on_delete=models.PROTECT, related_name='almacen_traslados')
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    # Foto del costo vigente al trasladar (sin costo de transporte: mismo local).
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    origen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='traslados_origen',
+        null=True, blank=True)
+    DESTINOS = [('POS', 'Punto de venta'), ('ALMACEN', 'Otro almacén')]
+    destino_tipo = models.CharField(max_length=10, choices=DESTINOS, default='POS')
+    destino_almacen = models.ForeignKey(
+        Almacen, on_delete=models.PROTECT, related_name='traslados_destino',
+        null=True, blank=True)
+    registrado_por = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='almacen_traslados_registrados')
+    entrada_generada = models.ForeignKey(
+        'EntradaProducto', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='traslados_almacen')
+    fecha_traslado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Traslado al Punto de Venta'
+        verbose_name_plural = 'Traslados al Punto de Venta'
+        ordering = ['-fecha_traslado']
+
+    def __str__(self):
+        return f"Traslado #{self.numero_traslado} - {self.producto.nombre}"
+
+    @property
+    def cantidad_fmt(self):
+        unidad = self.producto.unidad_medida if self.producto_id else 'unidades'
+        return fmt_cantidad_unidad(self.cantidad, unidad)
+
+    @classmethod
+    def generar_numero(cls):
+        ultimo = cls.objects.order_by('-id').first()
+        if ultimo:
+            try:
+                ultimo_num = int(ultimo.numero_traslado.split('-')[-1])
+                return f"ATRS-{ultimo_num + 1:06d}"
+            except (ValueError, IndexError):
+                pass
+        return "ATRS-000001"
+
+
+class AlmacenMovimiento(models.Model):
+    """Auditoría propia del almacén (ajena al IPB y a MovimientoInventario)."""
+    TIPO_CHOICES = [
+        ('entrada', 'Entrada'),
+        ('traslado', 'Traslado al POS'),
+        ('venta', 'Venta POS multi-POS'),
+        ('ajuste', 'Ajuste'),
+    ]
+
+    fecha = models.DateTimeField(auto_now_add=True)
+    producto = models.ForeignKey(
+        Producto, on_delete=models.CASCADE, related_name='almacen_movimientos')
+    almacen = models.ForeignKey(
+        Almacen, on_delete=models.CASCADE, related_name='movimientos',
+        null=True, blank=True)
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    stock_anterior = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    stock_nuevo = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    referencia_id = models.IntegerField(null=True, blank=True)
+    descripcion = models.CharField(max_length=255, blank=True)
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Movimiento de Almacén'
+        verbose_name_plural = 'Movimientos de Almacén'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m/%Y %H:%M')} - {self.producto.nombre} - {self.tipo}: {self.cantidad}"
+
+    @property
+    def cantidad_fmt(self):
+        unidad = self.producto.unidad_medida if self.producto_id else 'unidades'
+        return fmt_cantidad_unidad(self.cantidad, unidad)

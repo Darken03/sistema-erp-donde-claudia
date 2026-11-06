@@ -79,7 +79,7 @@
             <td valign="middle">
                 <div class="brand-name">BizMaster ERP</div>
                 <div class="brand-sub">SISTEMA DE GESTION EMPRESARIAL</div>
-                <div class="report-title">Inventario Parcial del Dia</div>
+                <div class="report-title">Inventario Parcial del Dia{% if punto_venta %} · {{ punto_venta.nombre }}{% endif %}</div>
             </td>
             <td width="220" valign="middle">
                 <div class="date-big">{{ fecha|date:"d/m/Y" }}</div>
@@ -93,7 +93,7 @@
 
     <table width="100%" cellpadding="6" cellspacing="0">
         <tr>
-            <td class="bar" width="60%">INVENTARIO PARCIAL DEL DIA &nbsp;·&nbsp; {{ fecha|date:"l, d F Y" }}</td>
+            <td class="bar" width="60%">INVENTARIO PARCIAL DEL DIA &nbsp;·&nbsp; {{ fecha|date:"l, d F Y" }}{% if punto_venta %} &nbsp;·&nbsp; POS {{ punto_venta.nombre }}{% endif %}</td>
             <td class="bar" align="right">Stock Final: {{ resumen.total_stock_final }} u. &nbsp;·&nbsp; Ganancia: ${{ resumen.total_ganancia|floatformat:2 }}</td>
         </tr>
     </table>

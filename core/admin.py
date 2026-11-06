@@ -1,10 +1,11 @@
 from django.contrib import admin
-from .models import Producto, Categoria, PerfilUsuario, Venta, DetalleVenta, Empleado, Turno, Deudor, Deuda, AbonoDeuda, PresentacionProducto, MostradorEstado, ArqueoTurno, ConteoCiego, ConteoCiegoLinea
+from .models import Producto, Categoria, PerfilUsuario, Venta, DetalleVenta, Empleado, Turno, Deudor, Deuda, AbonoDeuda, PresentacionProducto, MostradorEstado, ArqueoTurno, ConteoCiego, ConteoCiegoLinea, Almacen, ConfiguracionTienda, AlmacenStock, AlmacenEntrada, AlmacenTraslado, AlmacenMovimiento, PuntoVenta
 
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ['nombre', 'descripcion', 'fecha_creacion']
+    list_display = ['nombre', 'icono', 'padre', 'visible_store', 'descripcion', 'fecha_creacion']
+    list_filter = ['visible_store', 'padre']
     search_fields = ['nombre']
     ordering = ['nombre']
 
@@ -43,14 +44,14 @@ class PerfilUsuarioAdmin(admin.ModelAdmin):
 
 @admin.register(Empleado)
 class EmpleadoAdmin(admin.ModelAdmin):
-    list_display = ['user', 'salario', 'activo', 'en_turno', 'fecha_contratacion']
+    list_display = ['user', 'salario', 'punto_venta', 'activo', 'en_turno', 'fecha_contratacion']
     list_filter = ['activo']
     search_fields = ['user__username', 'user__first_name', 'user__last_name']
 
 
 @admin.register(Turno)
 class TurnoAdmin(admin.ModelAdmin):
-    list_display = ['empleado', 'fecha_apertura', 'fecha_cierre', 'abierto', 'total_ventas', 'num_ventas']
+    list_display = ['empleado', 'punto_venta', 'fecha_apertura', 'fecha_cierre', 'abierto', 'total_ventas', 'num_ventas']
     list_filter = ['abierto', 'fecha_apertura']
     search_fields = ['empleado__user__first_name']
 
@@ -120,3 +121,46 @@ class ConteoCiegoAdmin(admin.ModelAdmin):
     list_display = ['id', 'turno', 'estado', 'creado_por', 'fecha_creacion', 'fecha_cierre']
     list_filter = ['estado']
     inlines = [ConteoCiegoLineaInline]
+
+
+@admin.register(Almacen)
+class AlmacenAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'activo', 'es_principal', 'fecha_creacion']
+    list_filter = ['activo', 'es_principal']
+    search_fields = ['nombre']
+
+
+@admin.register(PuntoVenta)
+class PuntoVentaAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'almacen', 'activo', 'fecha_creacion']
+    list_filter = ['activo', 'almacen']
+    search_fields = ['nombre']
+
+
+@admin.register(ConfiguracionTienda)
+class ConfiguracionTiendaAdmin(admin.ModelAdmin):
+    list_display = ['nombre_tienda', 'moneda', 'color_acento', 'tema_por_defecto']
+
+
+@admin.register(AlmacenStock)
+class AlmacenStockAdmin(admin.ModelAdmin):
+    list_display = ['producto', 'almacen', 'cantidad', 'fecha_actualizacion']
+    list_filter = ['almacen']
+
+
+@admin.register(AlmacenEntrada)
+class AlmacenEntradaAdmin(admin.ModelAdmin):
+    list_display = ['numero_entrada', 'producto', 'almacen', 'cantidad', 'fecha_caducidad', 'fecha_entrada']
+    list_filter = ['almacen']
+
+
+@admin.register(AlmacenTraslado)
+class AlmacenTrasladoAdmin(admin.ModelAdmin):
+    list_display = ['numero_traslado', 'producto', 'origen', 'destino_tipo', 'destino_almacen', 'cantidad', 'fecha_traslado']
+    list_filter = ['destino_tipo', 'origen']
+
+
+@admin.register(AlmacenMovimiento)
+class AlmacenMovimientoAdmin(admin.ModelAdmin):
+    list_display = ['fecha', 'producto', 'almacen', 'tipo', 'cantidad']
+    list_filter = ['tipo', 'almacen']

@@ -1,4 +1,3 @@
-
 """
 WSGI para PythonAnywhere (dondeclaudia.pythonanywhere.com).
 
@@ -14,8 +13,6 @@ import os
 import sys
 
 # Carpeta del proyecto en PythonAnywhere (ajústala si cambia el nombre).
-os.environ['DJANGO_DEBUG'] = 'False'
-os.environ['DJANGO_SECRET_KEY'] = 'rz&nbhq$iw83apno1d_i@m%1o1v1c!()yvfb+$tvm@_m1mj+i0'
 PROJECT_DIR = '/home/dondeclaudia/sistema-erp'
 
 if PROJECT_DIR not in sys.path:
