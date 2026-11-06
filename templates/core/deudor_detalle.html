@@ -46,6 +46,9 @@
                     <a href="{% url 'core:deuda_crear' %}?deudor={{ deudor.pk }}" class="btn btn-success btn-sm">
                         <i class="bi bi-plus-lg me-1"></i> Nueva Deuda
                     </a>
+                    <a href="{% url 'core:deudor_impresion' deudor.pk %}" target="_blank" class="btn btn-outline-dark btn-sm">
+                        <i class="bi bi-printer me-1"></i> Imprimir historial
+                    </a>
                     <a href="{% url 'core:deudor_editar' deudor.pk %}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-pencil me-1"></i> Editar
                     </a>

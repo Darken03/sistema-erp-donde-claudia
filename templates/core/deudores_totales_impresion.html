@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Totales de Deudas por Deudor</title>
+    <style>
+        @media print { @page { size: A4; margin: 1.2cm; } .no-print { display: none !important; } }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1f1f2c; margin: 0; padding: 16px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #6f53d9; padding-bottom: 6px; margin-bottom: 10px; }
+        .title { font-size: 16pt; font-weight: bold; color: #6f53d9; }
+        .sub { font-size: 9pt; color: #8d8da0; }
+        .card { border: 1px solid #e6e6ec; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+        .kv { display: inline-block; margin-right: 18px; }
+        .kv small { color: #8d8da0; font-size: 8pt; display: block; }
+        .kv strong { font-size: 11pt; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        th { background: #6f53d9; color: #fff; font-size: 8.5pt; padding: 6px 4px; text-align: left; }
+        th.r { text-align: right; } th.c { text-align: center; }
+        td { font-size: 8.5pt; padding: 5px 4px; border-bottom: 1px solid #f0f0f5; }
+        td.r { text-align: right; } td.c { text-align: center; }
+        tr.alt td { background: #f7f5ff; }
+        .total-row td { font-weight: bold; background: #f0f0f5; }
+        .right { text-align: right; }
+        .btn-print { position: fixed; top: 10px; right: 10px; }
+    </style>
+</head>
+<body>
+    <button class="btn-print no-print" onclick="window.print()">Imprimir</button>
+    <div class="header">
+        <div>
+            <div class="title">Totales de Deudas por Deudor</div>
+            <div class="sub">{% if q %}Filtro: "{{ q }}"{% else %}Todos los deudores{% endif %}</div>
+        </div>
+        <div class="right">
+            <div class="sub">Impreso: {{ ahora|date:"d/m/Y H:i" }}</div>
+            <div class="sub">{{ total_deudores }} deudor(es)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="kv"><small>Deudores</small><strong>{{ total_deudores }}</strong></div>
+        <div class="kv"><small>Con deudas</small><strong>{{ num_pendientes }}</strong></div>
+        <div class="kv"><small>Total por cobrar</small><strong style="color:#dc3545;">${{ saldo_total|floatformat:2 }}</strong></div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Deudor</th><th>Alias</th><th>CI</th><th>Teléfono</th><th class="c">Deudas pend.</th><th class="r">Total registrado</th><th class="r">Saldo (deben)</th><th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in deudores %}
+            <tr class="{% cycle '' 'alt' %}">
+                <td><strong>{{ d.nombre_display }}</strong></td>
+                <td>{{ d.alias|default:'-' }}</td>
+                <td class="mono">{{ d.ci|default:'-' }}</td>
+                <td>{{ d.telefono|default:'-' }}</td>
+                <td class="c">{% if d.calc_pendientes > 0 %}<span style="color:#dc3545; font-weight:bold;">{{ d.calc_pendientes }}</span>{% else %}0{% endif %}</td>
+                <td class="r">${{ d.calc_total|floatformat:2 }}</td>
+                <td class="r" style="font-weight:bold; color:{% if d.calc_saldo > 0 %}#dc3545{% else %}#198754{% endif %};">${{ d.calc_saldo|floatformat:2 }}</td>
+                <td>{% if d.activo %}Activo{% else %}Inactivo{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" style="text-align:center; color:#8d8da0;">Sin deudores registrados</td></tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="6" class="r">Total por cobrar</td>
+                <td class="r">${{ saldo_total|floatformat:2 }}</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>window.onload = function(){ window.print(); };</script>
+</body>
+</html>

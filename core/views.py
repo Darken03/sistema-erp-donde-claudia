@@ -4954,6 +4954,66 @@ def deudor_detalle(request, pk):
 
 
 @login_required
+def deudor_impresion(request, pk):
+    """Página imprimible del historial de deudas de un deudor."""
+    deudor = get_object_or_404(Deudor.objects.prefetch_related('deudas__abonos', 'deudas__producto', 'deudas__presentacion'), pk=pk)
+    mostrar_todas = request.GET.get('todas') == '1'
+    deudas = sorted(deudor.deudas.all(), key=lambda d: d.fecha_registro, reverse=True)
+    for d in deudas:
+        _resumen_deuda(d)
+    deudas_mostrar = list(deudas) if mostrar_todas else [d for d in deudas if d.calc_saldo > 0]
+    abonos = AbonoDeuda.objects.filter(deuda__deudor=deudor).select_related('deuda').order_by('-fecha')
+    saldo = sum((d.calc_saldo for d in deudas), Decimal('0'))
+    total_monto = sum((d.monto for d in deudas), Decimal('0'))
+    total_abonado = sum((d.calc_abonado for d in deudas), Decimal('0'))
+    context = {
+        'deudor': deudor,
+        'deudas': deudas,
+        'deudas_mostrar': deudas_mostrar,
+        'mostrar_todas': mostrar_todas,
+        'num_pendientes': sum(1 for d in deudas if d.calc_saldo > 0),
+        'abonos': abonos,
+        'saldo': saldo,
+        'total_monto': total_monto,
+        'total_abonado': total_abonado,
+        'ahora': timezone.now(),
+    }
+    return render(request, 'core/deudor_impresion.html', context)
+
+
+@login_required
+def deudores_totales_impresion(request):
+    """Página imprimible con la lista de deudores y cuanto deben."""
+    q = request.GET.get('q', '').strip()
+    deudores = Deudor.objects.all()
+    if q:
+        deudores = deudores.filter(
+            Q(nombre__icontains=q) | Q(apellido__icontains=q) |
+            Q(alias__icontains=q) | Q(ci__icontains=q) | Q(telefono__icontains=q)
+        )
+    deudores = list(deudores.order_by('nombre', 'apellido'))
+    for d in deudores:
+        ds = sorted(d.deudas.all(), key=lambda x: x.fecha_registro, reverse=True)
+        for dd in ds:
+            _resumen_deuda(dd)
+        d.calc_pendientes = sum(1 for dd in ds if dd.calc_saldo > 0)
+        d.calc_saldo = sum((dd.calc_saldo for dd in ds), Decimal('0'))
+        d.calc_total = sum((dd.monto for dd in ds), Decimal('0'))
+    saldo_total = sum((d.calc_saldo for d in deudores), Decimal('0'))
+    total_deudores = len(deudores)
+    num_pendientes = sum(1 for d in deudores if d.calc_saldo > 0)
+    context = {
+        'deudores': deudores,
+        'saldo_total': saldo_total,
+        'total_deudores': total_deudores,
+        'num_pendientes': num_pendientes,
+        'q': q,
+        'ahora': timezone.now(),
+    }
+    return render(request, 'core/deudores_totales_impresion.html', context)
+
+
+@login_required
 def deudor_toggle(request, pk):
     deudor = get_object_or_404(Deudor, pk=pk)
     deudor.activo = not deudor.activo
