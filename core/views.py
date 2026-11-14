@@ -6802,6 +6802,10 @@ def arqueos_admin(request):
     qs = params.urlencode()
 
     empleados = Empleado.objects.filter(activo=True).select_related('user')
+    # En multi-POS el dropdown solo ofrece empleados con turnos en el POS
+    # filtrado: la página no debe "revelar" empleados de otros POS.
+    if pos_actual is not None:
+        empleados = empleados.filter(turnos__punto_venta=pos_actual).distinct()
     return render(request, 'core/arqueos_admin.html', {
         'pendientes': pendientes,
         'historial': page_obj,
