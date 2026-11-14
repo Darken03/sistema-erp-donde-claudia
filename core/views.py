@@ -6715,16 +6715,22 @@ def conteo_comparar(request, pk):
 @requiere_admin
 def arqueos_admin(request):
     """Sección del admin: turnos abiertos con su arqueo/conteos (pendientes)
-    e historial de turnos ya cerrados con su decisión."""
+    e historial COMPLETO de turnos cerrados con su decisión.
+
+    El historial ya no está limitado a los 20 más recientes: admite filtros
+    por periodo (todos / dia / mes / ano), fecha, empleado y POS (multi-POS),
+    con paginado. Así se pueden revisar todos los arqueos del sistema,
+    organizados por mes."""
+    from django.utils import timezone
     # Spec §5 multi-POS: filtro ?pos= por punto_venta del turno (cada POS
     # opera su caja, turnos y cierres independientes). Fuera de multi-POS
-    # se ignora. Sin cambios de template (filtro por URL).
+    # se ignora.
     pos_actual, puntos_venta = _resolver_pos_filtro(request)
     abiertos = Turno.objects.filter(abierto=True).select_related(
-        'empleado__user', 'punto_venta').prefetch_related(
+        'empleado__user', 'punto_venta', 'arqueo').prefetch_related(
         'conteos', 'ventas').order_by('-fecha_apertura')
     historial_qs = Turno.objects.filter(abierto=False).select_related(
-        'empleado__user', 'punto_venta').order_by('-fecha_cierre')
+        'empleado__user', 'punto_venta', 'arqueo').order_by('-fecha_cierre')
     if pos_actual is not None:
         abiertos = abiertos.filter(punto_venta=pos_actual)
         historial_qs = historial_qs.filter(punto_venta=pos_actual)
@@ -6737,10 +6743,76 @@ def arqueos_admin(request):
             'conteos_abiertos': t.conteos.filter(estado='abierto').count(),
             'conteos_cerrados': t.conteos.filter(estado='cerrado'),
         })
-    historial = historial_qs[:20]
+
+    # --- Filtros del historial (mismo patrón que venta_lista) ---
+    fecha_str = request.GET.get('fecha', '')
+    empleado_filtro = request.GET.get('empleado', '')
+    periodo = request.GET.get('periodo', 'todos')
+    hoy = ahora_servidor().date()
+    if fecha_str:
+        try:
+            fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha = hoy
+    else:
+        fecha = hoy
+
+    MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                'julio', 'agosto', 'septiembre', 'octubre', 'noviembre',
+                'diciembre']
+    if periodo == 'dia':
+        titulo_historial = f'Historial del día {fecha.strftime("%d/%m/%Y")}'
+        historial_qs = historial_qs.filter(fecha_cierre__date=fecha)
+    elif periodo == 'mes':
+        titulo_historial = (f'Historial de {MESES_ES[fecha.month - 1]} '
+                            f'de {fecha.year}')
+        historial_qs = historial_qs.filter(
+            fecha_cierre__year=fecha.year, fecha_cierre__month=fecha.month)
+    elif periodo == 'ano':
+        titulo_historial = f'Historial del año {fecha.year}'
+        historial_qs = historial_qs.filter(fecha_cierre__year=fecha.year)
+    else:
+        titulo_historial = 'Historial de todos los arqueos'
+        # periodo 'todos': sin filtro de fecha, se lista TODO el historial.
+
+    if empleado_filtro:
+        historial_qs = historial_qs.filter(
+            empleado__user__username=empleado_filtro)
+
+    # Resumen del periodo filtrado, calculado en Python porque usa
+    # propiedades de ArqueoTurno (diferencia_total) que no son campos de BD.
+    historial_todos = list(historial_qs)
+    arqueos_h = [t.arqueo for t in historial_todos if getattr(t, 'arqueo', None)]
+    resumen_historial = {
+        'turnos': len(historial_todos),
+        'con_arqueo': len(arqueos_h),
+        'total_ventas': sum(t.total_ventas or 0 for t in historial_todos),
+        'contado_efectivo': sum((a.contado_efectivo or 0) for a in arqueos_h),
+        'contado_transferencia': sum(
+            (a.contado_transferencia or 0) for a in arqueos_h),
+        'diferencia': sum(a.diferencia_total or 0 for a in arqueos_h),
+        'descuadrados': sum(1 for a in arqueos_h if a.descuadra),
+    }
+
+    # Paginado: los filtros se conservan en los enlaces (igual que productos).
+    paginator = Paginator(historial_todos, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    params = request.GET.copy()
+    params.pop('page', None)
+    qs = params.urlencode()
+
+    empleados = Empleado.objects.filter(activo=True).select_related('user')
     return render(request, 'core/arqueos_admin.html', {
         'pendientes': pendientes,
-        'historial': historial,
+        'historial': page_obj,
+        'page_obj': page_obj,
+        'qs': qs,
+        'fecha': fecha.strftime('%Y-%m-%d'),
+        'periodo': periodo,
+        'empleado_filtro': empleado_filtro,
+        'empleados': empleados,
+        'titulo_historial': titulo_historial,
+        'resumen_historial': resumen_historial,
         'es_multi_pos': modo_actual() == 'multi_pos',
         'puntos_venta': puntos_venta,
         'pos_actual': pos_actual,

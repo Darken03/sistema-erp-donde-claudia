@@ -67,7 +67,122 @@
     </div>
 </div>
 
-<h5 class="mb-3">Historial reciente</h5>
+<h5 class="mb-3">{{ titulo_historial }}</h5>
+
+<!-- Filtros del historial: por periodo (todos / día / mes / año), fecha, empleado y POS -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Periodo</label>
+                <select name="periodo" class="form-select">
+                    <option value="todos" {% if periodo == 'todos' %}selected{% endif %}>Todos</option>
+                    <option value="dia" {% if periodo == 'dia' %}selected{% endif %}>Por día</option>
+                    <option value="mes" {% if periodo == 'mes' %}selected{% endif %}>Por mes</option>
+                    <option value="ano" {% if periodo == 'ano' %}selected{% endif %}>Por año</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Fecha</label>
+                <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Empleado</label>
+                <select name="empleado" class="form-select">
+                    <option value="">Todos</option>
+                    {% for emp in empleados %}
+                    <option value="{{ emp.user.username }}" {% if empleado_filtro == emp.user.username %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if es_multi_pos %}
+            <div class="col-md-2">
+                <label class="form-label">Punto de venta</label>
+                <select name="pos" class="form-select">
+                    <option value="">Todos</option>
+                    {% for p in puntos_venta %}
+                    <option value="{{ p.pk }}" {% if pos_actual and pos_actual.pk == p.pk %}selected{% endif %}>{{ p.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-{% if es_multi_pos %}3{% else %}5{% endif %}">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i> Filtrar
+                </button>
+            </div>
+        </form>
+        <div class="text-muted small mt-2">
+            <i class="bi bi-info-circle me-1"></i>Elige «Por mes» y una fecha para ver los arqueos de ese mes (sirve cualquier día del mes). Sin filtros se listan todos los arqueos del sistema.
+        </div>
+    </div>
+</div>
+
+<!-- Resumen del periodo filtrado -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Turnos cerrados</h6>
+                        <h3 class="mb-0">{{ resumen_historial.turnos }}</h3>
+                        <small class="text-muted d-block">Con arqueo: {{ resumen_historial.con_arqueo }}</small>
+                    </div>
+                    <div class="text-primary"><i class="bi bi-clock-history" style="font-size:2rem;"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Ventas del periodo</h6>
+                        <h3 class="mb-0 mono">${{ resumen_historial.total_ventas|floatformat:2 }}</h3>
+                        <small class="text-muted d-block">&nbsp;</small>
+                    </div>
+                    <div class="text-success"><i class="bi bi-receipt" style="font-size:2rem;"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Dinero contado</h6>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Efectivo</span>
+                    <span class="mono fw-bold">${{ resumen_historial.contado_efectivo|floatformat:2 }}</span>
+                </div>
+                <div class="d-flex justify-content-between small">
+                    <span>Transferencia</span>
+                    <span class="mono fw-bold">${{ resumen_historial.contado_transferencia|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Diferencias</h6>
+                        {% if resumen_historial.diferencia == 0 %}
+                        <h3 class="mb-0 mono text-success">$0.00</h3>
+                        {% else %}
+                        <h3 class="mb-0 mono {% if resumen_historial.diferencia > 0 %}text-warning{% else %}text-danger{% endif %}">{% if resumen_historial.diferencia > 0 %}+{% endif %}${{ resumen_historial.diferencia|floatformat:2 }}</h3>
+                        {% endif %}
+                        <small class="text-muted d-block">Descuadrados: {{ resumen_historial.descuadrados }}</small>
+                    </div>
+                    <div class="{% if resumen_historial.diferencia == 0 %}text-success{% else %}text-warning{% endif %}"><i class="bi bi-cash-coin" style="font-size:2rem;"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -76,6 +191,7 @@
                     <tr>
                         <th>Empleado</th>
                         <th>Cierre</th>
+                        <th>Estado</th>
                         <th class="text-end">Total</th>
                         <th class="text-end">Dif. dinero</th>
                         <th>Decisión</th>
@@ -87,12 +203,19 @@
                     <tr>
                         <td><strong>{{ t.empleado }}</strong></td>
                         <td class="text-muted small">{{ t.fecha_cierre|date:"d/m H:i"|default:"—" }}</td>
+                        <td>
+                            {% if t.arqueo %}
+                                {% if t.arqueo.estado == 'confirmado' %}<span class="badge bg-success">Confirmado</span>
+                                {% elif t.arqueo.estado == 'declarado' %}<span class="badge bg-warning">Declarado</span>
+                                {% else %}<span class="badge bg-secondary">Borrador</span>{% endif %}
+                            {% else %}<span class="text-muted">sin arqueo</span>{% endif %}
+                        </td>
                         <td class="text-end mono">${{ t.total_ventas|floatformat:2 }}</td>
                         <td class="text-end mono">
                             {% if t.arqueo %}
                                 {% if t.arqueo.diferencia_total == 0 %}<span class="badge bg-success">$0.00</span>
                                 {% else %}<span class="badge {% if t.arqueo.diferencia_total > 0 %}bg-warning{% else %}bg-danger{% endif %}">{% if t.arqueo.diferencia_total > 0 %}+{% endif %}${{ t.arqueo.diferencia_total|floatformat:2 }}</span>{% endif %}
-                            {% else %}<span class="text-muted">sin arqueo</span>{% endif %}
+                            {% else %}<span class="text-muted">—</span>{% endif %}
                         </td>
                         <td>
                             {% if t.arqueo and t.arqueo.decision %}<span class="badge bg-secondary">{{ t.arqueo.get_decision_display }}</span>
@@ -103,11 +226,53 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="6" class="text-center text-muted py-4">Sin historial</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">Sin arqueos en este periodo</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<!-- Paginado: 25 arqueos por página; los filtros se conservan en los enlaces -->
+{% if page_obj.paginator.num_pages > 1 %}
+<nav aria-label="Paginación de arqueos" class="mt-3">
+    <div class="text-center text-muted small mb-2">
+        Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} arqueos
+    </div>
+    <ul class="pagination justify-content-center flex-wrap mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?{% if qs %}{{ qs }}&{% endif %}page=1" aria-label="Primera página">«</a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Página anterior">‹</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">«</span></li>
+        <li class="page-item disabled"><span class="page-link">‹</span></li>
+        {% endif %}
+        {% for n in page_obj.paginator.page_range %}
+            {% if n == page_obj.number %}
+            <li class="page-item active" aria-current="page"><span class="page-link">{{ n }}</span></li>
+            {% elif n >= page_obj.number|add:'-2' and n <= page_obj.number|add:'2' %}
+            <li class="page-item">
+                <a class="page-link" href="?{% if qs %}{{ qs }}&{% endif %}page={{ n }}">{{ n }}</a>
+            </li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.next_page_number }}" aria-label="Página siguiente">›</a>
+        </li>
+        <li class="page-item">
+            <a class="page-link" href="?{% if qs %}{{ qs }}&{% endif %}page={{ page_obj.paginator.num_pages }}" aria-label="Última página">»</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">›</span></li>
+        <li class="page-item disabled"><span class="page-link">»</span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}
