@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}Abonado - Deudas - BizMaster{% endblock %}
+{% block topbar_text %}Deudas · Abonado{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Abonado <small class="text-muted fs-6">Dinero cobrado de deudas</small></h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'core:deudor_lista' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-people me-1"></i> Deudores
+        </a>
+        <a href="{% url 'core:deuda_lista' %}" class="btn btn-outline-primary">
+            <i class="bi bi-journal-text me-1"></i> Historial de Deudas
+        </a>
+    </div>
+</div>
+
+<!-- Resumen -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Abonado Hoy</h6>
+                <h3 class="mb-0 text-success mono">${{ hoy_total|floatformat:2 }}</h3>
+                <small class="text-muted">{{ hoy_cantidad }} pago(s) · Ef. ${{ hoy_efectivo|floatformat:2 }} / Tr. ${{ hoy_transferencia|floatformat:2 }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Total en el Filtro</h6>
+                <h3 class="mb-0 mono">${{ resumen_total|floatformat:2 }}</h3>
+                <small class="text-muted">{{ resumen_cantidad }} abono(s)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Efectivo (Filtro)</h6>
+                <h3 class="mb-0 text-success mono">${{ resumen_efectivo|floatformat:2 }}</h3>
+                <small class="text-muted">cobrado en efectivo</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-info border-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-1">Transferencia (Filtro)</h6>
+                <h3 class="mb-0 text-info mono">${{ resumen_transferencia|floatformat:2 }}</h3>
+                <small class="text-muted">cobrado por transferencia</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Periodo</label>
+                <select name="periodo" class="form-select">
+                    <option value="dia" {% if periodo == 'dia' %}selected{% endif %}>Día</option>
+                    <option value="mes" {% if periodo == 'mes' %}selected{% endif %}>Mes</option>
+                    <option value="ano" {% if periodo == 'ano' %}selected{% endif %}>Año</option>
+                    <option value="todos" {% if periodo == 'todos' %}selected{% endif %}>Todos</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Fecha</label>
+                <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Deudor</label>
+                <select name="deudor" class="form-select">
+                    <option value="">Todos los deudores</option>
+                    {% for d in deudores_filtro %}
+                    <option value="{{ d.pk }}" {% if f_deudor == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.nombre_display }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Método</label>
+                <select name="metodo" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="efectivo" {% if f_metodo == 'efectivo' %}selected{% endif %}>Efectivo</option>
+                    <option value="transferencia" {% if f_metodo == 'transferencia' %}selected{% endif %}>Transferencia</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Buscar</label>
+                <input type="text" name="q" class="form-control" placeholder="Deudor, deuda, nota o cobrador..." value="{{ q }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'core:abono_lista' %}?periodo=dia&fecha={{ hoy }}" class="btn btn-outline-success w-100">
+                    <i class="bi bi-calendar-day me-1"></i> Hoy
+                </a>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'core:abono_lista' %}" class="btn btn-outline-secondary w-100">Limpiar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resumen por día -->
+{% if resumen_por_dia %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Total abonado por día</h5>
+        <span class="badge bg-secondary">{{ resumen_por_dia|length }} día(s)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th class="text-center">Pagos</th>
+                        <th class="text-end">Efectivo</th>
+                        <th class="text-end">Transferencia</th>
+                        <th class="text-end">Total del día</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in resumen_por_dia %}
+                    <tr>
+                        <td>
+                            <a href="?periodo=dia&fecha={{ r.fecha|date:'Y-m-d' }}" class="fw-bold">
+                                {{ r.fecha|date:"d/m/Y" }}
+                            </a>
+                        </td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ r.cantidad }}</span></td>
+                        <td class="text-end mono">${{ r.efectivo|floatformat:2 }}</td>
+                        <td class="text-end mono">${{ r.transferencia|floatformat:2 }}</td>
+                        <td class="text-end fw-bold text-success mono">${{ r.total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Historial de abonos -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial del dinero abonado</h5>
+        <span class="badge bg-secondary">{{ abonos|length }} registro(s)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>No. Deuda</th>
+                        <th>Deudor</th>
+                        <th>Método</th>
+                        <th class="text-end">Monto</th>
+                        <th>Nota</th>
+                        <th>Cobrado por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in abonos %}
+                    <tr>
+                        <td>{{ a.fecha|date:"d/m/Y" }}</td>
+                        <td><span class="mono">{{ a.fecha|time:"H:i" }}</span></td>
+                        <td>
+                            <span class="mono fw-bold">{{ a.deuda.numero_deuda }}</span>
+                            <small class="text-muted d-block">{{ a.deuda.get_tipo_display }}</small>
+                        </td>
+                        <td>
+                            <a href="{% url 'core:deudor_detalle' a.deuda.deudor.pk %}" class="fw-bold">
+                                {{ a.deuda.deudor.nombre_display }}
+                            </a>
+                            <small class="text-muted d-block mono">{{ a.deuda.deudor.ci|default:'-' }}</small>
+                        </td>
+                        <td>
+                            {% if a.metodo == 'efectivo' %}
+                                <span class="badge bg-success">Efectivo</span>
+                            {% else %}
+                                <span class="badge bg-info">Transferencia</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold text-success mono">${{ a.monto|floatformat:2 }}</td>
+                        <td><small>{{ a.nota|default:'-' }}</small></td>
+                        <td><small>{{ a.registrada_por.get_full_name|default:a.registrada_por.username }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No hay abonos registrados para ese filtro.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

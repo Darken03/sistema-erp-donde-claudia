@@ -97,6 +97,7 @@ urlpatterns = [
     path('deudores/<int:pk>/abonar/', views.deudor_abonar, name='deudor_abonar'),
     path('deudores/<int:pk>/eliminar/', views.deudor_eliminar, name='deudor_eliminar'),
     path('deudas/', views.deuda_lista, name='deuda_lista'),
+    path('deudas/abonado/', views.abono_lista, name='abono_lista'),
     path('deudas/crear/', views.deuda_crear, name='deuda_crear'),
     path('deudas/<int:pk>/editar/', views.deuda_editar, name='deuda_editar'),
     path('deudas/<int:pk>/abonar/', views.deuda_abonar, name='deuda_abonar'),

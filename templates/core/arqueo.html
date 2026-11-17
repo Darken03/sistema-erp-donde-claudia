@@ -61,7 +61,7 @@
     <div class="card-body p-4">
         <div class="form-card-head">
             <span class="section-icon"><i class="bi bi-pc-display"></i></span>
-            <div><h5>Esperado del turno</h5><small>Calculado por el sistema a partir de ventas y gastos (no visible por seguridad).</small></div>
+            <div><h5>Datos del turno</h5><small>Calculado por el sistema a partir de ventas y gastos (no visible por seguridad).</small></div>
         </div>
         <p class="text-muted mb-0 small">Fondo inicial registrado: ${{ arqueo.fondo_inicial|floatformat:2 }}</p>
     </div>
@@ -104,14 +104,29 @@
                     </div>
                     <div class="input-group input-group-lg">
                         <span class="input-group-text">$</span>
-                        <input type="number" name="contado_transferencia" id="contTr" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0">
+                        <input type="number" name="contado_transferencia" id="contTr" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0" oninput="denCalc()">
+                    </div>
+                </div>
+            </div>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="form-card-head">
+                        <span class="section-icon"><i class="bi bi-journal-check"></i></span>
+                        <div><h5>Deudas Cobradas</h5><small>Dinero recibido en el día por abonos de deudas (aparte de las ventas)</small></div>
+                    </div>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text">$</span>
+                        <input type="number" name="contado_deudas" id="contDeudas" class="form-control text-end fw-bold mono" step="0.01" min="0" value="0" oninput="denCalc()">
                     </div>
                 </div>
             </div>
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4 text-center">
-                    <small class="text-muted d-block">TOTAL CONTADO (EFECTIVO + TRANSFERENCIA)</small>
+                    <small class="text-muted d-block">TOTAL CONTADO (VENTAS: EFECTIVO + TRANSFERENCIA)</small>
                     <div class="dif-val" id="totContado">$0.00</div>
+                    <hr class="my-2">
+                    <small class="text-muted d-block">DEUDAS COBRADAS (APARTE)</small>
+                    <div class="fs-4 fw-bold mono text-primary" id="totDeudas">$0.00</div>
                 </div>
             </div>
             <div class="card border-0 shadow-sm">
@@ -159,13 +174,19 @@
         var totalContado = tot + tr;
         var elTot = document.getElementById('totContado');
         if (elTot) elTot.textContent = money(totalContado);
-        var obs = document.getElementById('obsInput');
+        var deuEl = document.getElementById('contDeudas');
+        var deu = deuEl ? (parseFloat(deuEl.value) || 0) : 0;
+        var elDeu = document.getElementById('totDeudas');
+        if (elDeu) elDeu.textContent = money(deu);
         // El motivo se exige en el servidor si hay diferencia; aquí no se revela
-        // el esperado ni la diferencia para evitar ajustes fraudulentos.
+        // cuánto calcula el sistema para evitar ajustes fraudulentos.
     };
     document.getElementById('declararForm').addEventListener('submit', function(e){
         var tr = parseFloat(document.getElementById('contTr').value);
-        if (isNaN(tr) || tr < 0){ e.preventDefault(); alert('Transferencia contada inválida.'); }
+        if (isNaN(tr) || tr < 0){ e.preventDefault(); alert('Transferencia contada inválida.'); return; }
+        var deuEl = document.getElementById('contDeudas');
+        var deu = deuEl ? parseFloat(deuEl.value) : 0;
+        if (isNaN(deu) || deu < 0){ e.preventDefault(); alert('Deudas cobradas inválidas.'); }
     });
     denCalc();
 })();
@@ -182,16 +203,23 @@
     </div>
 </div>
 <div class="row g-3">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm"><div class="card-body p-4">
             <h6 class="text-muted">Efectivo</h6>
             <div>Contado: <strong class="mono">${{ arqueo.contado_efectivo|floatformat:2 }}</strong></div>
         </div></div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm"><div class="card-body p-4">
             <h6 class="text-muted">Transferencia</h6>
             <div>Contada: <strong class="mono">${{ arqueo.contado_transferencia|floatformat:2 }}</strong></div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm border-start border-primary border-4"><div class="card-body p-4">
+            <h6 class="text-muted">Deudas cobradas</h6>
+            <div>Declaradas: <strong class="mono">${{ arqueo.contado_deudas|floatformat:2 }}</strong></div>
+            <small class="text-muted">Se revisan aparte de las ventas.</small>
         </div></div>
     </div>
 </div>

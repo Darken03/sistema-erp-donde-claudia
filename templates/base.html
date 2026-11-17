@@ -67,19 +67,20 @@
                         </div>
                     </li>
                     <li class="nav-item side-group">
-                        <button type="button" class="side-group-btn {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideFinanzas" aria-expanded="{% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
+                        <button type="button" class="side-group-btn {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideFinanzas" aria-expanded="{% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
                             <i class="bi bi-wallet2 me-2"></i> Finanzas
                             <i class="bi bi-chevron-down chev"></i>
                         </button>
-                        <div class="collapse side-group-collapse {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}show{% endif %}" id="sideFinanzas">
+                        <div class="collapse side-group-collapse {% if 'gasto' in request.resolver_match.url_name or 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}show{% endif %}" id="sideFinanzas">
                             <a class="side-sub-link {% if 'gasto' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:gasto_lista' %}">Gastos</a>
-                            <button type="button" class="side-sub-toggle {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideDeudas" aria-expanded="{% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
+                            <button type="button" class="side-sub-toggle {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}active{% endif %}" data-bs-toggle="collapse" data-bs-target="#sideDeudas" aria-expanded="{% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}true{% else %}false{% endif %}">
                                 <i class="bi bi-cash-coin me-2"></i> Deudas
                                 <i class="bi bi-chevron-down chev"></i>
                             </button>
-                            <div class="collapse side-group-collapse {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name %}show{% endif %}" id="sideDeudas">
+                            <div class="collapse side-group-collapse {% if 'deuda' in request.resolver_match.url_name or 'deudor' in request.resolver_match.url_name or 'abono' in request.resolver_match.url_name %}show{% endif %}" id="sideDeudas">
                                 <a class="side-sub-link {% if request.resolver_match.url_name == 'deuda_lista' %}active{% endif %}" href="{% url 'core:deuda_lista' %}">Historial de Deudas</a>
                                 <a class="side-sub-link {% if 'deudor' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'core:deudor_lista' %}">Deudores</a>
+                                <a class="side-sub-link {% if request.resolver_match.url_name == 'abono_lista' %}active{% endif %}" href="{% url 'core:abono_lista' %}">Abonado</a>
                             </div>
                         </div>
                     </li>

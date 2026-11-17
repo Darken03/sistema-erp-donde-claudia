@@ -25,6 +25,18 @@
             <td>Transferencia esperada</td>
             <td class="text-end mono">${{ resumen.esperado_transferencia|floatformat:2 }}</td>
         </tr>
+        <tr class="fw-bold border-top">
+            <td>Deudas cobradas <small class="text-muted">(aparte de las ventas)</small></td>
+            <td class="text-end mono text-primary">${{ resumen.deudas_cobradas|floatformat:2 }}</td>
+        </tr>
+        <tr>
+            <td>· de ellas en efectivo</td>
+            <td class="text-end mono">${{ resumen.deudas_efectivo|floatformat:2 }}</td>
+        </tr>
+        <tr>
+            <td>· de ellas por transferencia</td>
+            <td class="text-end mono">${{ resumen.deudas_transferencia|floatformat:2 }}</td>
+        </tr>
     </tbody>
 </table>
-<small class="text-muted">{{ resumen.num_ventas }} venta(s) en este turno · Total ${{ resumen.total_ventas|floatformat:2 }}</small>
+<small class="text-muted">{{ resumen.num_ventas }} venta(s) en este turno · Total ${{ resumen.total_ventas|floatformat:2 }} · {{ resumen.num_deudas_cobradas }} abono(s) de deudas</small>

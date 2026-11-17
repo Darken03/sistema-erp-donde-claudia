@@ -67,7 +67,7 @@ class DeudorAdmin(admin.ModelAdmin):
 class AbonoDeudaInline(admin.TabularInline):
     model = AbonoDeuda
     extra = 0
-    readonly_fields = ['deuda', 'monto', 'metodo', 'nota', 'fecha', 'registrada_por']
+    readonly_fields = ['deuda', 'turno', 'monto', 'metodo', 'nota', 'fecha', 'registrada_por']
 
 
 @admin.register(Deuda)
@@ -103,10 +103,13 @@ class MostradorEstadoAdmin(admin.ModelAdmin):
 
 @admin.register(ArqueoTurno)
 class ArqueoTurnoAdmin(admin.ModelAdmin):
-    list_display = ['turno', 'estado', 'fondo_inicial', 'esperado_efectivo', 'contado_efectivo', 'esperado_transferencia', 'contado_transferencia']
+    list_display = ['turno', 'estado', 'fondo_inicial', 'esperado_efectivo', 'contado_efectivo',
+                    'esperado_transferencia', 'contado_transferencia', 'esperado_deudas', 'contado_deudas']
     list_filter = ['estado']
     readonly_fields = ['turno', 'fondo_inicial', 'esperado_efectivo', 'esperado_transferencia',
-                       'contado_efectivo', 'contado_transferencia', 'detalle_json', 'observacion',
+                       'esperado_deudas', 'esperado_deudas_efectivo', 'esperado_deudas_transferencia',
+                       'contado_efectivo', 'contado_transferencia', 'contado_deudas',
+                       'detalle_json', 'observacion',
                        'estado', 'declarado_por', 'declarado_at', 'confirmado_por', 'confirmado_at']
 
 

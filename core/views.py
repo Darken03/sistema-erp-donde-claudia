@@ -4671,11 +4671,16 @@ def saldo_deudor(deudor):
     return sum((_resumen_deuda(d).calc_saldo for d in deudor.deudas.all()), Decimal('0'))
 
 
-def _aplicar_abono_deudor(deudor, monto, metodo, nota, usuario):
+def _aplicar_abono_deudor(deudor, monto, metodo, nota, usuario, turno=None):
     """Liquida: distribuye el pago entre las deudas pendientes (más antiguas primero)."""
     monto = Decimal(str(monto))
     if monto <= 0:
         raise ValueError('El monto debe ser mayor a 0.')
+    if turno is None and usuario is not None:
+        try:
+            turno = usuario.empleado.turno_abierto
+        except Exception:
+            turno = None
     deudas = list(Deuda.objects.filter(deudor=deudor).prefetch_related('abonos').order_by('fecha_registro', 'id'))
     for d in deudas:
         _resumen_deuda(d)
@@ -4691,7 +4696,7 @@ def _aplicar_abono_deudor(deudor, monto, metodo, nota, usuario):
             continue
         parte = min(d.calc_saldo, restante)
         AbonoDeuda.objects.create(
-            deuda=d, monto=parte, metodo=metodo,
+            deuda=d, turno=turno, monto=parte, metodo=metodo,
             nota=nota or '', registrada_por=usuario,
         )
         aplicados.append({'deuda': d, 'monto': parte})
@@ -5171,8 +5176,13 @@ def deuda_abonar(request, pk):
                 raise ValueError('El monto debe ser mayor a 0.')
             if monto > deuda.calc_saldo:
                 raise ValueError(f'El monto supera el saldo pendiente (${deuda.calc_saldo}).')
+            turno = None
+            try:
+                turno = request.user.empleado.turno_abierto
+            except Exception:
+                turno = None
             AbonoDeuda.objects.create(
-                deuda=deuda, monto=monto, metodo=metodo,
+                deuda=deuda, turno=turno, monto=monto, metodo=metodo,
                 nota=nota, registrada_por=request.user,
             )
             messages.success(request, f'Abono de ${monto} registrado.')
@@ -5182,6 +5192,112 @@ def deuda_abonar(request, pk):
             return redirect('core:deuda_abonar', pk=pk)
 
     return render(request, 'core/deuda_abonar.html', {'deuda': deuda})
+
+
+@requiere_admin
+def abono_lista(request):
+    """Módulo Abonado (Deudas): dinero abonado por día e historial completo."""
+    hoy = ahora_servidor().date()
+    periodo = request.GET.get('periodo', 'dia')
+    if periodo not in ('dia', 'mes', 'ano', 'todos'):
+        periodo = 'dia'
+    fecha_str = (request.GET.get('fecha') or '').strip()
+    if fecha_str:
+        try:
+            fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            fecha = hoy
+    else:
+        fecha = hoy
+    f_deudor = (request.GET.get('deudor') or '').strip()
+    f_metodo = (request.GET.get('metodo') or '').strip()
+    q = (request.GET.get('q') or '').strip()
+
+    abonos_qs = AbonoDeuda.objects.select_related(
+        'deuda__deudor', 'deuda__producto', 'registrada_por', 'turno'
+    ).order_by('-fecha', '-id')
+
+    if periodo == 'dia':
+        abonos_qs = abonos_qs.filter(fecha__date=fecha)
+    elif periodo == 'mes':
+        abonos_qs = abonos_qs.filter(fecha__year=fecha.year, fecha__month=fecha.month)
+    elif periodo == 'ano':
+        abonos_qs = abonos_qs.filter(fecha__year=fecha.year)
+
+    if f_deudor:
+        try:
+            abonos_qs = abonos_qs.filter(deuda__deudor_id=int(f_deudor))
+        except ValueError:
+            pass
+    if f_metodo in ('efectivo', 'transferencia'):
+        abonos_qs = abonos_qs.filter(metodo=f_metodo)
+    if q:
+        abonos_qs = abonos_qs.filter(
+            Q(deuda__numero_deuda__icontains=q)
+            | Q(deuda__deudor__nombre__icontains=q)
+            | Q(deuda__deudor__apellido__icontains=q)
+            | Q(deuda__deudor__alias__icontains=q)
+            | Q(deuda__deudor__ci__icontains=q)
+            | Q(nota__icontains=q)
+            | Q(registrada_por__username__icontains=q)
+            | Q(registrada_por__first_name__icontains=q)
+            | Q(registrada_por__last_name__icontains=q)
+        )
+
+    agg = abonos_qs.aggregate(
+        total=Sum('monto'),
+        cantidad=Count('id'),
+        efectivo=Sum('monto', filter=Q(metodo='efectivo')),
+        transferencia=Sum('monto', filter=Q(metodo='transferencia')),
+    )
+    hoy_agg = AbonoDeuda.objects.filter(fecha__date=hoy).aggregate(
+        total=Sum('monto'),
+        cantidad=Count('id'),
+        efectivo=Sum('monto', filter=Q(metodo='efectivo')),
+        transferencia=Sum('monto', filter=Q(metodo='transferencia')),
+    )
+
+    abonos_all = list(abonos_qs)
+    por_dia = {}
+    for a in abonos_all:
+        try:
+            d_loc = timezone.localtime(a.fecha).date() if timezone.is_aware(a.fecha) else a.fecha.date()
+        except Exception:
+            d_loc = a.fecha.date()
+        item = por_dia.setdefault(d_loc, {
+            'fecha': d_loc,
+            'cantidad': 0,
+            'efectivo': Decimal('0'),
+            'transferencia': Decimal('0'),
+            'total': Decimal('0'),
+        })
+        item['cantidad'] += 1
+        if a.metodo == 'efectivo':
+            item['efectivo'] += a.monto
+        elif a.metodo == 'transferencia':
+            item['transferencia'] += a.monto
+        item['total'] += a.monto
+    resumen_por_dia = sorted(por_dia.values(), key=lambda x: x['fecha'], reverse=True)
+
+    return render(request, 'core/abono_lista.html', {
+        'abonos': abonos_all[:300],
+        'resumen_por_dia': resumen_por_dia,
+        'deudores_filtro': list(Deudor.objects.filter(activo=True).order_by('nombre', 'apellido')),
+        'periodo': periodo,
+        'fecha': fecha.strftime('%Y-%m-%d'),
+        'hoy': hoy.strftime('%Y-%m-%d'),
+        'f_deudor': f_deudor,
+        'f_metodo': f_metodo,
+        'q': q,
+        'resumen_total': agg['total'] or Decimal('0'),
+        'resumen_cantidad': agg['cantidad'] or 0,
+        'resumen_efectivo': agg['efectivo'] or Decimal('0'),
+        'resumen_transferencia': agg['transferencia'] or Decimal('0'),
+        'hoy_total': hoy_agg['total'] or Decimal('0'),
+        'hoy_cantidad': hoy_agg['cantidad'] or 0,
+        'hoy_efectivo': hoy_agg['efectivo'] or Decimal('0'),
+        'hoy_transferencia': hoy_agg['transferencia'] or Decimal('0'),
+    })
 
 
 @login_required
@@ -6142,11 +6258,23 @@ def _empleado_de(request):
         return None
 
 
+def _abonos_de_turno(turno):
+    """Abonos cobrados en este turno (por FK turno o por el cajero mientras estuvo abierto)."""
+    q = Q(turno=turno) | (
+        Q(turno__isnull=True, registrada_por=turno.empleado.user,
+          fecha__gte=turno.fecha_apertura)
+        & (Q(fecha__lte=turno.fecha_cierre) if turno.fecha_cierre else Q())
+    )
+    return AbonoDeuda.objects.filter(q).select_related(
+        'deuda__deudor', 'registrada_por').order_by('-fecha')
+
+
 def _resumen_turno(turno):
-    """Esperado del turno por método (ventas − gastos del turno).
+    """Esperado del turno por método (ventas − gastos del turno) y deudas cobradas aparte.
 
     Efectivo esperado = Σ monto_recibido − Σ cambio − gastos en efectivo.
     Transferencia esperada = Σ monto_transferencia − gastos por transferencia.
+    Deudas cobradas = Σ abonos del turno (siempre aparte de las ventas).
     """
     agg = turno.ventas.filter(cancelada=False).aggregate(
         ef=Sum('monto_recibido'), tr=Sum('monto_transferencia'),
@@ -6158,6 +6286,15 @@ def _resumen_turno(turno):
         ef=Sum('cantidad_efectivo'), tr=Sum('cantidad_transferencia'))
     gef = gagg['ef'] or Decimal('0')
     gtr = gagg['tr'] or Decimal('0')
+    ab_agg = _abonos_de_turno(turno).aggregate(
+        tot=Sum('monto'),
+        ef=Sum('monto', filter=Q(metodo='efectivo')),
+        tr=Sum('monto', filter=Q(metodo='transferencia')),
+        n=Count('id'),
+    )
+    ab_ef = ab_agg['ef'] or Decimal('0')
+    ab_tr = ab_agg['tr'] or Decimal('0')
+    ab_tot = ab_agg['tot'] or Decimal('0')
     return {
         'num_ventas': agg['n'] or 0,
         'total_ventas': agg['tot'] or Decimal('0'),
@@ -6167,6 +6304,10 @@ def _resumen_turno(turno):
         'gastos_transferencia': gtr,
         'esperado_efectivo': ef - gef,
         'esperado_transferencia': tr - gtr,
+        'deudas_cobradas': ab_tot,
+        'deudas_efectivo': ab_ef,
+        'deudas_transferencia': ab_tr,
+        'num_deudas_cobradas': ab_agg['n'] or 0,
     }
 
 
@@ -6261,6 +6402,7 @@ def arqueo(request):
                 return redirect('core:mi_panel')
             arqueo.contado_efectivo = Decimal('0')
             arqueo.contado_transferencia = Decimal('0')
+            arqueo.contado_deudas = Decimal('0')
             arqueo.detalle_json = '{}'
             arqueo.observacion = ''
             arqueo.estado = 'borrador'
@@ -6281,6 +6423,9 @@ def arqueo(request):
                 arqueo.fondo_inicial = fondo
                 arqueo.esperado_efectivo = resumen['esperado_efectivo'] + fondo
                 arqueo.esperado_transferencia = resumen['esperado_transferencia']
+                arqueo.esperado_deudas = resumen['deudas_cobradas']
+                arqueo.esperado_deudas_efectivo = resumen['deudas_efectivo']
+                arqueo.esperado_deudas_transferencia = resumen['deudas_transferencia']
                 arqueo.paso1_listo = True
                 arqueo.save()
                 messages.success(request, 'Paso 1 guardado. Ahora cuenta el efectivo.')
@@ -6310,13 +6455,28 @@ def arqueo(request):
                     'arqueo': arqueo, 'paso': '2',
                     'denominaciones': denominaciones_form(),
                 })
+            try:
+                cont_deudas = Decimal(str(request.POST.get('contado_deudas', '0') or '0'))
+                if cont_deudas < 0:
+                    raise ValueError('negativo')
+            except Exception:
+                messages.error(request, 'Deudas cobradas declaradas inválidas.')
+                return render(request, 'core/arqueo.html', {
+                    'empleado': empleado, 'turno': turno,
+                    'arqueo': arqueo, 'paso': '2',
+                    'denominaciones': denominaciones_form(),
+                })
             observacion = (request.POST.get('observacion', '') or '').strip()
             # Foto fresca del esperado al declarar: la calcula el servidor y
             # solo la verá el admin al confirmar (el cajero nunca la ve).
             arqueo.esperado_efectivo = resumen['esperado_efectivo'] + arqueo.fondo_inicial
             arqueo.esperado_transferencia = resumen['esperado_transferencia']
+            arqueo.esperado_deudas = resumen['deudas_cobradas']
+            arqueo.esperado_deudas_efectivo = resumen['deudas_efectivo']
+            arqueo.esperado_deudas_transferencia = resumen['deudas_transferencia']
             arqueo.contado_efectivo = total_ef
             arqueo.contado_transferencia = cont_tr
+            arqueo.contado_deudas = cont_deudas
             arqueo.detalle_json = _json.dumps(detalle)
             arqueo.observacion = observacion
             arqueo.estado = 'declarado'
@@ -6396,8 +6556,10 @@ def arqueo_confirmar(request, pk):
         turno.cerrar()
     messages.success(
         request,
-        'Arqueo confirmado (%s) y turno cerrado. Diferencia: $%.2f.'
-        % (arqueo.get_decision_display(), dif))
+        'Arqueo confirmado (%s) y turno cerrado. Diferencia caja: $%.2f · '
+        'Deudas cobradas (aparte): $%.2f (esperado $%.2f).'
+        % (arqueo.get_decision_display(), dif,
+           arqueo.contado_deudas, arqueo.esperado_deudas))
     return redirect('core:empleado_turnos', pk=turno.empleado_id)
 
 
@@ -6749,7 +6911,7 @@ def arqueos_admin(request):
 
 @requiere_admin
 def revisar_turno(request, pk):
-    """Revisión conjunta del turno: dinero (arqueo) + físico (conteos).
+    """Revisión conjunta del turno: dinero (arqueo) + deudas cobradas aparte + físico (conteos).
 
     Aquí el admin ve lo declarado por el empleado, elige qué hacer con
     cada diferencia y confirma: eso cierra el turno.
@@ -6761,11 +6923,25 @@ def revisar_turno(request, pk):
     conteos = turno.conteos.prefetch_related('lineas__producto').all()
     bloqueos = _bloqueos_cierre_turno(turno) if turno.abierto else []
     bloqueos_fisico = _bloqueos_cierre_turno(turno, incluir_arqueo=False) if turno.abierto else []
+    abonos_turno = list(_abonos_de_turno(turno))
+    ids_turno = [a.id for a in abonos_turno]
+    fecha_turno = (
+        timezone.localtime(turno.fecha_apertura).date()
+        if timezone.is_aware(turno.fecha_apertura)
+        else turno.fecha_apertura.date()
+    )
+    otros_abonos_total = (
+        AbonoDeuda.objects.filter(fecha__date=fecha_turno)
+        .exclude(id__in=ids_turno)
+        .aggregate(t=Sum('monto'))['t'] or Decimal('0')
+    )
     return render(request, 'core/revisar_turno.html', {
         'turno': turno,
         'empleado': turno.empleado,
         'resumen': resumen,
         'arqueo': arqueo,
+        'abonos_turno': abonos_turno,
+        'otros_abonos_total': otros_abonos_total,
         'conteos': conteos,
         'decisiones_arqueo': [c for c in ArqueoTurno.DECISIONES if c[0]],
         'bloqueos': bloqueos,

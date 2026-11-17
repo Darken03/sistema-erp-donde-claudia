@@ -70,6 +70,49 @@
     </div>
 </div>
 
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm border-start border-primary border-4"><div class="card-body">
+            <h6 class="text-muted">Deudas cobradas <small class="text-muted">(aparte de las ventas)</small></h6>
+            <div>Esperado: <strong class="mono">${{ resumen.deudas_cobradas|floatformat:2 }}</strong></div>
+            <div>Declarado por el cajero: <strong class="mono">${{ arqueo.contado_deudas|floatformat:2 }}</strong></div>
+            <div>Diferencia: <strong class="mono {% if arqueo.diferencia_deudas == 0 %}text-success{% else %}text-danger{% endif %}">${{ arqueo.diferencia_deudas|floatformat:2 }}</strong></div>
+            <small class="text-muted">Ef. ${{ resumen.deudas_efectivo|floatformat:2 }} / Tr. ${{ resumen.deudas_transferencia|floatformat:2 }}</small>
+        </div></div>
+    </div>
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-muted mb-0">Abonos cobrados en este turno</h6>
+                <span class="badge bg-secondary">{{ abonos_turno|length }} abono(s)</span>
+            </div>
+            {% if abonos_turno %}
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light"><tr><th>Hora</th><th>Deudor</th><th>Deuda</th><th>Método</th><th class="text-end">Monto</th></tr></thead>
+                    <tbody>
+                        {% for a in abonos_turno %}
+                        <tr>
+                            <td class="mono">{{ a.fecha|date:"H:i" }}</td>
+                            <td>{{ a.deuda.deudor.nombre_display }}</td>
+                            <td class="mono">{{ a.deuda.numero_deuda }}</td>
+                            <td>{{ a.get_metodo_display }}</td>
+                            <td class="text-end mono fw-bold">${{ a.monto|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <small class="text-muted">Sin abonos cobrados en este turno.</small>
+            {% endif %}
+            {% if otros_abonos_total %}
+            <div class="form-text mt-2">Otros abonos del día (fuera de este turno): <strong class="mono">${{ otros_abonos_total|floatformat:2 }}</strong></div>
+            {% endif %}
+        </div></div>
+    </div>
+</div>
+
 {% if arqueo.estado == 'declarado' and turno.abierto %}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">

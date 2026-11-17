@@ -935,6 +935,9 @@ class AbonoDeuda(models.Model):
         ('transferencia', 'Transferencia'),
     ]
     deuda = models.ForeignKey(Deuda, on_delete=models.CASCADE, related_name='abonos')
+    turno = models.ForeignKey(
+        Turno, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='abonos_deuda')
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     metodo = models.CharField(max_length=15, choices=METODO_CHOICES, default='efectivo')
     nota = models.CharField(max_length=255, blank=True, default='')
@@ -1041,9 +1044,14 @@ class ArqueoTurno(models.Model):
     # Foto del esperado al momento de declarar (no cambia si siguen vendiendo).
     esperado_efectivo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     esperado_transferencia = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Dinero esperado por abonos de deudas cobradas (aparte de las ventas).
+    esperado_deudas = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    esperado_deudas_efectivo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    esperado_deudas_transferencia = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # Lo que declara el cajero.
     contado_efectivo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     contado_transferencia = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    contado_deudas = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # Detalle del conteo por denominaciones: {"1000": 2, "100": 5, ...}.
     detalle_json = models.TextField(default='{}')
     observacion = models.CharField(max_length=255, blank=True, default='')
@@ -1088,6 +1096,10 @@ class ArqueoTurno(models.Model):
     @property
     def diferencia_total(self):
         return self.diferencia_efectivo + self.diferencia_transferencia
+
+    @property
+    def diferencia_deudas(self):
+        return (self.contado_deudas or 0) - (self.esperado_deudas or 0)
 
     @property
     def descuadra(self):

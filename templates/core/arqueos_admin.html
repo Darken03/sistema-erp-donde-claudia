@@ -21,6 +21,7 @@
                         <th class="text-end">Total</th>
                         <th>Arqueo</th>
                         <th class="text-end">Dif. dinero</th>
+                        <th class="text-end">Deudas</th>
                         <th>Conteos</th>
                         <th></th>
                     </tr>
@@ -45,6 +46,10 @@
                                 {% else %}<span class="badge {% if p.arqueo.diferencia_total > 0 %}bg-warning{% else %}bg-danger{% endif %}">{% if p.arqueo.diferencia_total > 0 %}+{% endif %}${{ p.arqueo.diferencia_total|floatformat:2 }}</span>{% endif %}
                             {% else %}<span class="text-muted">—</span>{% endif %}
                         </td>
+                        <td class="text-end mono">
+                            ${{ p.resumen.deudas_cobradas|floatformat:2 }}
+                            <small class="text-muted d-block">{{ p.resumen.num_deudas_cobradas }} abono(s)</small>
+                        </td>
                         <td>
                             {% if p.conteos_abiertos %}<span class="badge bg-warning">{{ p.conteos_abiertos }} abierto(s)</span>{% endif %}
                             {% for c in p.conteos_cerrados %}
@@ -59,7 +64,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="8" class="text-center text-muted py-4">No hay turnos abiertos</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-4">No hay turnos abiertos</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
