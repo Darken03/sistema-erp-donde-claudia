@@ -22,8 +22,29 @@ NO toca la bd.sqlite3 de la raíz del proyecto ni los respaldos.
 
 import io
 import os
+import shutil
 import sys
 from pathlib import Path
+
+# Django 6.0 requiere Python 3.12+. Si se ejecuta con el Python 3.8 de
+# Microsoft Store, relanzamos el script con el Python 3.13 instalado.
+if sys.version_info < (3, 12):
+    _candidates = [
+        r"C:\Users\algor\AppData\Local\Programs\Python\Python313\python.exe",
+    ]
+    _py = shutil.which("python3.13") or shutil.which("python3.12")
+    if _py:
+        _candidates.insert(0, _py)
+    for _candidate in _candidates:
+        if _candidate and Path(_candidate).exists():
+            # En Windows os.execv no entrecomilla rutas con espacios.
+            _script = '"' + str(Path(__file__).resolve()) + '"'
+            os.execv(_candidate, [_candidate, _script, *sys.argv[1:]])
+    raise SystemExit(
+        "Este script necesita Python 3.12 o superior (Django 6.0). "
+        "Ejecútalo con:\n"
+        r'  C:\Users\algor\AppData\Local\Programs\Python\Python313\python.exe "BD pythonanywhere\migrar_a_supabase.py"'
+    )
 
 HERE = Path(__file__).resolve().parent
 PROJECT_DIR = HERE.parent
