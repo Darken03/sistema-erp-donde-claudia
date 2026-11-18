@@ -12,6 +12,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import secrets
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,16 +23,61 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# En PythonAnywhere define la variable de entorno DJANGO_SECRET_KEY.
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-@55y3bkd5@_t5s5tesu661^3y*zgptyu&m8yv3q(v_=c#=15_o'
-)
+# ---------------------------------------------------------------------------
+# Entorno: local (SQLite) vs. Render + Supabase (PostgreSQL)
+# ---------------------------------------------------------------------------
+# DATABASE_URL se define solo en el despliegue. Si no existe, el ERP sigue
+# funcionando exactamente igual que antes con db.sqlite3.
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# En local sigue True; en PythonAnywhere pon DJANGO_DEBUG=False.
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+
+def _env_bool(nombre, por_defecto=False):
+    valor = os.environ.get(nombre)
+    if valor is None or not valor.strip():
+        return por_defecto
+    return valor.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _env_lista(nombre):
+    return [parte.strip() for parte in os.environ.get(nombre, '').split(',') if parte.strip()]
+
+
+# En local DEBUG sigue activo por defecto; en producción (DATABASE_URL definida)
+# se desactiva salvo que DJANGO_DEBUG se fije explícitamente.
+DEBUG = _env_bool('DJANGO_DEBUG', por_defecto=not DATABASE_URL)
+ES_PRODUCCION = not DEBUG
+
+# Render define automáticamente esta variable con el hostname del servicio.
+RENDER_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip()
+
+
+def _obtener_secret_key():
+    """Nunca guarda la clave en el repositorio.
+
+    Producción: exige DJANGO_SECRET_KEY y falla si falta.
+    Desarrollo: reutiliza/genera .dev_secret_key (ignorado por Git).
+    """
+    clave = os.environ.get('DJANGO_SECRET_KEY', '').strip()
+    if clave:
+        return clave
+    if ES_PRODUCCION:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY es obligatoria en producción (DATABASE_URL definida '
+            'o DJANGO_DEBUG=False). Configúrala en Render.'
+        )
+    ruta = BASE_DIR / '.dev_secret_key'
+    try:
+        clave = ruta.read_text(encoding='utf-8').strip()
+        if clave:
+            return clave
+    except FileNotFoundError:
+        pass
+    clave = secrets.token_urlsafe(50)
+    ruta.write_text(clave, encoding='utf-8')
+    return clave
+
+
+SECRET_KEY = _obtener_secret_key()
 
 ALLOWED_HOSTS = [
     '127.0.0.1',
@@ -37,20 +85,34 @@ ALLOWED_HOSTS = [
     '192.168.86.206',
     'dondeclaudia.pythonanywhere.com',
 ]
-# Hosts extra vía entorno (Enzonic: DJANGO_ALLOWED_HOSTS=mi-app.enzonic.com).
-ALLOWED_HOSTS += [
-    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
-    if h.strip()
-]
+# Hosts extra vía entorno (Enzonic: DJANGO_ALLOWED_HOSTS=mi-app.enzonic.com;
+# Render: DJANGO_ALLOWED_HOSTS=mi-servicio.onrender.com o RENDER_EXTERNAL_HOSTNAME).
+ALLOWED_HOSTS += _env_lista('DJANGO_ALLOWED_HOSTS')
+if RENDER_HOST:
+    ALLOWED_HOSTS.append(RENDER_HOST)
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 # Necesario para que los POST (login, formularios, POS) funcionen por HTTPS.
 CSRF_TRUSTED_ORIGINS = [
     'https://dondeclaudia.pythonanywhere.com',
 ]
-CSRF_TRUSTED_ORIGINS += [
-    ('https://' + h.strip()) for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
-    if h.strip()
-]
+# Se conserva el comportamiento previo: todo host de DJANGO_ALLOWED_HOSTS
+# genera automáticamente su origen HTTPS para CSRF (p. ej. Enzonic).
+CSRF_TRUSTED_ORIGINS += [f'https://{h}' for h in _env_lista('DJANGO_ALLOWED_HOSTS')]
+CSRF_TRUSTED_ORIGINS += _env_lista('DJANGO_CSRF_TRUSTED_ORIGINS')
+if RENDER_HOST:
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_HOST}')
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(CSRF_TRUSTED_ORIGINS))
+
+# Render termina TLS en su proxy; Django debe fiarse de X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = _env_bool('DJANGO_SECURE_SSL_REDIRECT', ES_PRODUCCION)
+SESSION_COOKIE_SECURE = ES_PRODUCCION
+CSRF_COOKIE_SECURE = ES_PRODUCCION
+if ES_PRODUCCION:
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = False
 
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
@@ -71,6 +133,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise sirve los estáticos recogidos por collectstatic en Render.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -103,12 +167,30 @@ WSGI_APPLICATION = 'system_erp.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if DATABASE_URL:
+    # Producción: PostgreSQL de Supabase. La URL (incluida la contraseña) solo
+    # se lee de la variable de entorno; nunca se almacena en el repositorio.
+    import dj_database_url
+
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+            conn_health_checks=True,
+        )
     }
-}
+    _opciones = DATABASES['default'].setdefault('OPTIONS', {})
+    _opciones.setdefault('sslmode', 'require')
+    _opciones.setdefault('connect_timeout', 10)
+else:
+    # Desarrollo local: se mantiene SQLite y db.sqlite3 intacto.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -148,8 +230,20 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
-# Carpeta destino de `collectstatic` (mapeo /static/ en PythonAnywhere).
+# Carpeta destino de `collectstatic` (mapeo /static/ en PythonAnywhere y
+# servida por WhiteNoise en Render).
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Django 6.x: almacenamiento de estáticos con hashes y compresión.
+# Requiere `python manage.py collectstatic --noinput` en el Build Command.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Media files (uploads)
 MEDIA_URL = '/media/'

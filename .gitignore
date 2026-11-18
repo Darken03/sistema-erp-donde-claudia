@@ -20,3 +20,12 @@ Desktop.ini
 .vscode/
 .idea/
 *.zip
+
+# Secretos y variables de entorno (NUNCA subir a GitHub)
+.env
+.env.*
+*.env
+.dev_secret_key
+
+# Logs
+*.log

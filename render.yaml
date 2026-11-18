@@ -1,0 +1,29 @@
+# Blueprint OPCIONAL para Render.
+# Uso: Dashboard > Blueprints > New Blueprint Instance > seleccionar este repo.
+# Si prefieres crear el Web Service a mano, ignora este archivo y sigue
+# DEPLOY_RENDER.md. No se define ninguna base de datos aquí: se usa Supabase.
+#
+# Las variables con `sync: false` se introducen en el dashboard de Render.
+# NUNCA escribas la contraseña de Supabase en este archivo.
+
+services:
+  - type: web
+    name: sistema-erp
+    runtime: python
+    plan: free
+    rootDir: .
+    # Python 3.13 es compatible con Django 6.0.3.
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    # Gunicorn enlaza automáticamente 0.0.0.0:$PORT cuando Render define PORT.
+    startCommand: gunicorn system_erp.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.7"
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_SECRET_KEY
+        sync: false
+      - key: DJANGO_DEBUG
+        value: "False"
+    # DJANGO_ALLOWED_HOSTS y DJANGO_CSRF_TRUSTED_ORIGINS se derivan
+    # automáticamente de RENDER_EXTERNAL_HOSTNAME en settings.py.

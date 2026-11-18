@@ -1,5 +1,9 @@
 Django==6.0.3
 Pillow==12.1.1
 xhtml2pdf==0.2.17
-waitress
-pillow-heif
+waitress==3.0.2
+pillow-heif==1.8.0
+gunicorn==23.0.0
+psycopg[binary]==3.2.9
+dj-database-url==2.1.0
+whitenoise==6.12.0
