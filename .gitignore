@@ -29,3 +29,6 @@ Desktop.ini
 
 # Logs
 *.log
+
+# URL privada de Supabase usada por el script de migración (NUNCA subir)
+.bd_supabase_url

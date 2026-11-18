@@ -8,6 +8,11 @@ urlpatterns = [
     path('', include('core.urls')),
 ]
 
+# Los archivos subidos (productos/, tienda/) se sirven desde MEDIA_ROOT tanto
+# en local como en producción: las imágenes se suben directamente a esa carpeta
+# en el servidor y Django las entrega por /media/. En producción los estáticos
+# los sirve WhiteNoise, no este bloque.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
