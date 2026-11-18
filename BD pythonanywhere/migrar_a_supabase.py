@@ -138,15 +138,18 @@ def main():
 
     # 2) Volcado rápido desde SQLite con PKs (sin claves naturales).
     print(f"\n[2/4] Exportando datos desde PythonAnywhere -> {DUMP_FILE} ...")
-    call_command(
-        "dumpdata",
-        "core",
-        "auth.User",
-        database="source",
-        indent=0,
-        output=str(DUMP_FILE),
-        verbosity=0,
-    )
+    # Abrimos el archivo en UTF-8 explícitamente: Django usa la codificación
+    # del sistema (cp1252 en Windows) y los datos contienen emojis.
+    with open(DUMP_FILE, "w", encoding="utf-8") as fh:
+        call_command(
+            "dumpdata",
+            "core",
+            "auth.User",
+            database="source",
+            indent=0,
+            stdout=fh,
+            verbosity=0,
+        )
     print(f"Exportado: {DUMP_FILE.stat().st_size:,} bytes")
 
     # 3) Carga en Supabase.
