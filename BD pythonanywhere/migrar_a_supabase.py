@@ -129,10 +129,8 @@ def main():
     from django.db import connections, transaction
 
     host = settings.DATABASES["default"].get("HOST", "")
-    print(f"Destino: PostgreSQL en {host}")
-    resp = input("¿Continuar migrando datos a ese destino? (escribe SI): ").strip()
-    if resp.upper() != "SI":
-        raise SystemExit("Cancelado por el usuario.")
+    print(f"Destino: PostgreSQL en {host}", flush=True)
+    # Sin confirmación interactiva: el script se ejecuta y ya, como se pidió.
 
     # 1) Esquema (idempotente: no destruye nada).
     print("\n[1/4] Aplicando migraciones en Supabase...")
