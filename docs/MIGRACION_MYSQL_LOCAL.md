@@ -6,10 +6,11 @@
 - Base de datos creada: `algomio_dondeclaudia` (utf8mb4 / utf8mb4_unicode_ci).
 - Usuario: `algomio_bizzmaster` / contraseña `Algo@2026`, con todos los privilegios sobre esa BD
   (definido para `localhost` y `127.0.0.1`).
-- Usuario root de XAMPP: la contraseñaoriginal se desconocía, así que se resetó mediante
+- Usuario root de XAMPP: la contraseña original se desconocía, así que se resetó mediante
   `--skip-grant-tables`. La nueva contraseña quedó guardada en `.mysql_root_password.local.txt`
-  (archivo ignorado por Git). Si usas phpMyAdmin con la config por defecto de XAMPP, actualiza
-  `$cfg['Servers'][$i]['password']` en `C:\xampp\phpMyAdmin\config.inc.php` con esa contraseña.
+  (archivo ignorado por Git). Ya se actualizó `C:\xampp\phpMyAdmin\config.inc.php` con esa
+  contraseña (`$cfg['Servers'][$i]['password']` y `AllowNoPassword = false`) para que
+  phpMyAdmin no siga generando warnings de "Access denied for user 'root'... (using password: NO)".
 - El esquema se aplicó con `manage.py migrate` y los datos del `db.sqlite3` se importaron
   completa y correctamente (verificación de conteos: `auth_user` 9, `core_producto` 198,
   `core_venta` 464, `core_detalleventa` 786, `core_movimientoinventario` 924, etc.).
