@@ -4,6 +4,9 @@
 # PassengerAppRoot si el dominio tiene un document root propio
 # (por ejemplo /home/USERNAME/dondeclau.algomio.com en vez de public_html).
 
+# Evita que Apache liste el contenido si Passenger no llega a arrancar.
+Options -Indexes
+
 PassengerEnabled on
 PassengerAppRoot /home/USERNAME/public_html
 PassengerAppEnv production
