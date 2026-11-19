@@ -109,6 +109,20 @@ WSGI_APPLICATION = 'system_erp.wsgi.application'
 # En local apunta a XAMPP (algomio_dondeclaudia); en producción se usan las
 # mismas variables de entorno con los valores del hosting cPanel.
 # Para usar SQLite temporalmente: DB_ENGINE=django.db.backends.sqlite3 DB_NAME=<ruta>
+#
+# Driver: en hosting compartido no suele haber headers para compilar mysqlclient,
+# así que usamos PyMySQL (puro Python) registrándolo como MySQLdb. En local, si
+# mysqlclient está instalado, se sigue usando ese.
+if os.environ.get('DB_DRIVER', 'auto').lower() == 'pymysql':
+    import pymysql
+    pymysql.install_as_MySQLdb()
+else:
+    try:
+        import MySQLdb  # noqa: F401
+    except ImportError:
+        import pymysql
+        pymysql.install_as_MySQLdb()
+
 _db_engine = os.environ.get(
     'DB_ENGINE',
     'django.db.backends.mysql'

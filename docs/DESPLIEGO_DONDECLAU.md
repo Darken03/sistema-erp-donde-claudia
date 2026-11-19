@@ -15,7 +15,10 @@ Este documento describe cómo quedaría la configuración del ERP para el domini
     - `DB_HOST=localhost`
     - `DB_PORT=3306`
   - Todos esos valores se pueden sobrescribir por variables de entorno.
-- `requirements.txt`: agregado `mysqlclient==2.3.2`.
+- `requirements.txt`: agregado `PyMySQL==1.2.4` (en vez de `mysqlclient`). En cPanel con
+  Python 3.13 no hay wheels de Linux para `mysqlclient` y compilarlo falla porque no
+  están los headers de MySQL. `settings.py` registra PyMySQL como `MySQLdb` automáticamente
+  cuando `mysqlclient` no está disponible; también se puede forzar con `DB_DRIVER=pymysql`.
 - `passenger_wsgi.py`: entry point de Passenger, con la lista de variables de entorno requeridas.
 - `.htaccess`: configurado para Passenger en modo `production` (revisar los placeholders `USERNAME`).
 
