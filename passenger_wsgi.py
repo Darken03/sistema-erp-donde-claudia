@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """
 WSGI entry point for Phusion Passenger.
 
-Dominio de producción: dondeclau.algomio.com (cPanel / Passenger).
+Dominio de produccion: dondeclau.algomio.com (cPanel / Passenger).
 
 Variables de entorno que debe definir la app en cPanel:
   DJANGO_DEBUG=False
