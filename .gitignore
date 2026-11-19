@@ -20,3 +20,6 @@ Desktop.ini
 .vscode/
 .idea/
 *.zip
+# Credenciales locales y volcados temporales
+.mysql_root_password.local.txt
+datos_sqlite.json

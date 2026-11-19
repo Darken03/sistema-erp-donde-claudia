@@ -36,6 +36,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '192.168.86.206',
     'dondeclaudia.pythonanywhere.com',
+    'dondeclau.algomio.com',
 ]
 # Hosts extra vía entorno (Enzonic: DJANGO_ALLOWED_HOSTS=mi-app.enzonic.com).
 ALLOWED_HOSTS += [
@@ -46,6 +47,7 @@ ALLOWED_HOSTS += [
 # Necesario para que los POST (login, formularios, POS) funcionen por HTTPS.
 CSRF_TRUSTED_ORIGINS = [
     'https://dondeclaudia.pythonanywhere.com',
+    'https://dondeclau.algomio.com',
 ]
 CSRF_TRUSTED_ORIGINS += [
     ('https://' + h.strip()) for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
@@ -103,10 +105,47 @@ WSGI_APPLICATION = 'system_erp.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Base de datos principal: MySQL/MariaDB.
+# En local apunta a XAMPP (algomio_dondeclaudia); en producción se usan las
+# mismas variables de entorno con los valores del hosting cPanel.
+# Para usar SQLite temporalmente: DB_ENGINE=django.db.backends.sqlite3 DB_NAME=<ruta>
+_db_engine = os.environ.get(
+    'DB_ENGINE',
+    'django.db.backends.mysql'
+).strip()
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': _db_engine,
+        'NAME': os.environ.get(
+            'DB_NAME',
+            'algomio_dondeclaudia'
+        ),
+        'USER': os.environ.get(
+            'DB_USER',
+            'algomio_bizzmaster'
+        ),
+        'PASSWORD': os.environ.get(
+            'DB_PASSWORD',
+            'Algo@2026'
+        ),
+        'HOST': os.environ.get(
+            'DB_HOST',
+            'localhost'
+        ),
+        'PORT': os.environ.get(
+            'DB_PORT',
+            '3306'
+        ),
+        'OPTIONS': (
+            {}
+            if _db_engine == 'django.db.backends.sqlite3'
+            else {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            }
+        ),
+        'CONN_MAX_AGE': 60,
     }
 }
 

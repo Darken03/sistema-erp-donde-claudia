@@ -1,6 +1,18 @@
 """
 WSGI entry point for Phusion Passenger.
 
+Dominio de producción: dondeclau.algomio.com (cPanel / Passenger).
+
+Variables de entorno que debe definir la app en cPanel:
+  DJANGO_DEBUG=False
+  DJANGO_SECRET_KEY=<clave larga y aleatoria>
+  DJANGO_ALLOWED_HOSTS=dondeclau.algomio.com
+  DB_NAME=algomio_dondeclaudia
+  DB_USER=algomio_bizzmaster
+  DB_PASSWORD=Algo@2026
+  DB_HOST=localhost
+  DB_PORT=3306
+
 Si se ejecuta directo (python3 passenger_wsgi.py, como hace Enzonic),
 levanta la app con waitress en 0.0.0.0:$PORT.
 """
