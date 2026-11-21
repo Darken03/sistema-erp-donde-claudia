@@ -29,7 +29,7 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # En local sigue True; en PythonAnywhere pon DJANGO_DEBUG=False.
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = True
 
 ALLOWED_HOSTS = [
     '127.0.0.1',
@@ -137,7 +137,7 @@ DATABASES = {
         ),
         'USER': os.environ.get(
             'DB_USER',
-            'algomio_bizzmaster'
+            'algomio_dondeclaudia'
         ),
         'PASSWORD': os.environ.get(
             'DB_PASSWORD',

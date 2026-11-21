@@ -1966,9 +1966,8 @@ def pos_mis_ventas(request):
     hoy = ahora_servidor().date()
     ventas = Venta.objects.filter(
         cajero=request.user,
-        fecha_venta__date=hoy,
         cancelada=False
-    ).order_by('-fecha_venta')
+    ).extra(where=["DATE(fecha_venta) = %s"], params=[hoy]).order_by('-fecha_venta')
 
     resumen = ventas.aggregate(total=Sum('total'), cantidad=Count('id'))
 
@@ -2834,8 +2833,7 @@ def pos_mis_gastos(request):
     hoy = ahora_servidor().date()
     gastos = Gasto.objects.filter(
         cajero=request.user,
-        fecha_gasto__date=hoy,
-    ).order_by('-fecha_gasto')
+    ).extra(where=["DATE(fecha_gasto) = %s"], params=[hoy]).order_by('-fecha_gasto')
 
     resumen = gastos.aggregate(
         total=Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
@@ -2878,8 +2876,7 @@ def pos_mis_entradas(request):
     si no, se muestra todo lo del día.
     """
     hoy = ahora_servidor().date()
-    entradas = EntradaProducto.objects.filter(
-        fecha_entrada__date=hoy).select_related('producto')
+    entradas = EntradaProducto.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[hoy]).select_related('producto')
     desde_turno = False
     try:
         turno = request.user.empleado.turno_abierto
@@ -3248,7 +3245,7 @@ def entrada_lista(request):
     else:
         fecha = hoy
 
-    entradas = EntradaProducto.objects.filter(fecha_entrada__date=fecha).select_related('producto').order_by('-fecha_entrada')
+    entradas = EntradaProducto.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[fecha]).select_related('producto').order_by('-fecha_entrada')
 
     resumen = entradas.aggregate(
         total=Sum('costo_total'),
@@ -3418,8 +3415,8 @@ def almacen_panel(request):
     existencias = AlmacenStock.objects.select_related(
         'producto', 'almacen').order_by('producto__nombre')
     movs = AlmacenMovimiento.objects.select_related('producto', 'almacen')
-    entradas_qs = AlmacenEntrada.objects.filter(fecha_entrada__date=hoy)
-    traslados_qs = AlmacenTraslado.objects.filter(fecha_traslado__date=hoy)
+    entradas_qs = AlmacenEntrada.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[hoy])
+    traslados_qs = AlmacenTraslado.objects.extra(where=["DATE(fecha_traslado) = %s"], params=[hoy])
     if almacen_f:
         existencias = existencias.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
         movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
@@ -3501,8 +3498,7 @@ def almacen_entrada_lista(request):
     else:
         fecha = hoy
     almacen_f, multi = _resolver_almacen(request)
-    entradas = AlmacenEntrada.objects.filter(
-        fecha_entrada__date=fecha).select_related('producto', 'almacen').order_by('-fecha_entrada')
+    entradas = AlmacenEntrada.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[fecha]).select_related('producto', 'almacen').order_by('-fecha_entrada')
     if almacen_f:
         entradas = entradas.filter(almacen=almacen_f)
     resumen = entradas.aggregate(total=Sum('costo_total'), cantidad=Count('id'))
@@ -3657,8 +3653,7 @@ def almacen_traslado_lista(request):
     else:
         fecha = hoy
     almacen_f, multi = _resolver_almacen(request)
-    traslados = AlmacenTraslado.objects.filter(
-        fecha_traslado__date=fecha).select_related(
+    traslados = AlmacenTraslado.objects.extra(where=["DATE(fecha_traslado) = %s"], params=[fecha]).select_related(
         'producto', 'origen', 'destino_almacen').order_by('-fecha_traslado')
     if almacen_f:
         traslados = traslados.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f))
@@ -5218,7 +5213,7 @@ def abono_lista(request):
     ).order_by('-fecha', '-id')
 
     if periodo == 'dia':
-        abonos_qs = abonos_qs.filter(fecha__date=fecha)
+        abonos_qs = abonos_qs.extra(where=["DATE(fecha) = %s"], params=[fecha])
     elif periodo == 'mes':
         abonos_qs = abonos_qs.filter(fecha__year=fecha.year, fecha__month=fecha.month)
     elif periodo == 'ano':
@@ -5250,7 +5245,7 @@ def abono_lista(request):
         efectivo=Sum('monto', filter=Q(metodo='efectivo')),
         transferencia=Sum('monto', filter=Q(metodo='transferencia')),
     )
-    hoy_agg = AbonoDeuda.objects.filter(fecha__date=hoy).aggregate(
+    hoy_agg = AbonoDeuda.objects.extra(where=["DATE(fecha) = %s"], params=[hoy]).aggregate(
         total=Sum('monto'),
         cantidad=Count('id'),
         efectivo=Sum('monto', filter=Q(metodo='efectivo')),
