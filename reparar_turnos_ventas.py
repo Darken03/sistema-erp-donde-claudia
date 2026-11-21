@@ -9,9 +9,9 @@ Uso en el SERVIDOR (dentro del entorno del proyecto):
 
     python manage.py shell < reparar_turnos_ventas.py
 
-Por defecto corre en SIMULACION. Para aplicar:
+Por defecto APLICA los cambios. Para simular sin modificar nada:
 
-    export REPARAR_APLICAR=1
+    export REPARAR_DRY_RUN=1
     python manage.py shell < reparar_turnos_ventas.py
 
 Configuración (arriba del todo):
@@ -23,7 +23,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-DRY_RUN = os.environ.get('REPARAR_APLICAR', '') != '1'
+DRY_RUN = os.environ.get('REPARAR_DRY_RUN', '') == '1'
 USUARIO = None            # ej. 'islianet' o None para todos
 FECHA_INICIO = None       # ej. '2026-11-01'
 FECHA_FIN = None          # ej. '2026-11-30'

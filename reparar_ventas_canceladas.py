@@ -7,9 +7,9 @@ Uso en el SERVIDOR (dentro del entorno del proyecto):
 
     python manage.py shell < reparar_ventas_canceladas.py
 
-Por defecto corre en SIMULACION. Para aplicar:
+Por defecto APLICA los cambios directamente. Si solo quieres simular:
 
-    export REPARAR_APLICAR=1
+    export REPARAR_DRY_RUN=1
     python manage.py shell < reparar_ventas_canceladas.py
 
 Para cada número de venta:
@@ -24,7 +24,7 @@ Para cada número de venta:
 """
 import os
 
-DRY_RUN = os.environ.get('REPARAR_APLICAR', '') != '1'
+DRY_RUN = os.environ.get('REPARAR_DRY_RUN', '') == '1'
 VENTAS = ['VTA-010365', 'VTA-010276']
 
 from django.db.models import Q
@@ -105,4 +105,11 @@ for numero in VENTAS:
             venta.cancelada = True
             venta.save(update_fields=['cancelada'])
 
-print('\nFIN.', 'No se aplicaron cambios.' if DRY_RUN else 'Cambios aplicados.')
+print('\nVERIFICACION FINAL:')
+for numero in VENTAS:
+    q = MovimientoInventario.objects.filter(descripcion__icontains=numero).count() + \
+        AlmacenMovimiento.objects.filter(descripcion__icontains=numero).count()
+    v = Venta.objects.filter(numero_venta=numero).first()
+    print(f'  {numero}: movimientos restantes={q} | '
+          f'venta={"cancelada" if v and v.cancelada else ("existe" if v else "eliminada")}')
+print('FIN.', 'No se aplicaron cambios.' if DRY_RUN else 'Cambios aplicados.')
