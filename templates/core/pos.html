@@ -589,6 +589,13 @@ html[data-theme="dark"] .deu-cart-head { background:var(--soft); }
           <input type="text" id="searchInput" class="pos-search-input" placeholder="Buscar producto por nombre o código..." autocomplete="off">
         </div>
       </div>
+      <div class="pos-scan-row" style="padding:0 14px 10px;">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+          <input type="text" id="scannerInput" class="form-control" placeholder="Escanee código de barras (pistola)…" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button type="button" class="btn btn-outline-primary" id="scannerBtn" onclick="procesarEscaneo()"><i class="bi bi-plus-lg"></i> Agregar</button>
+        </div>
+      </div>
       <div class="pos-products-scroll">
         <div class="pos-grid" id="productsGrid">
           {% for producto in productos %}
@@ -1009,6 +1016,32 @@ function setTarget(c){ campoActivo = c;
   if (bT) bT.className = 'monto-btn' + (c==='transferencia'?' active':'');
   if (nt) nt.innerHTML = 'Editando: <strong>' + (c==='efectivo'?'Efectivo':'Transferencia') + '</strong>';
 }
+/* ---------- escáner de código de barras (pistola = teclado + Enter) ---------- */
+const URL_SCAN = '{% url "core:pos_buscar_codigo" %}';
+function procesarEscaneo(){
+  const el = $('scannerInput');
+  if (!el) return;
+  const code = (el.value || '').trim();
+  if (!code){ toast('Escanee un código de barras', 'warning'); el.focus(); return; }
+  el.value = '';
+  el.focus();
+  fetch(URL_SCAN, {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken':CSRF_TOKEN},
+    body:'codigo='+encodeURIComponent(code)
+  })
+  .then(r => r.json().then(j => ({ok:r.ok, j})))
+  .then(({ok, j}) => {
+    if (!ok || !j.producto){ toast(j.error || 'Producto no encontrado', 'error'); return; }
+    // Cachea el producto devuelto para que addToCart funcione igual que con el catálogo.
+    const p = j.producto;
+    POS_CATALOG[p.id] = p;
+    addToCart(p.id);
+    toast(p.nombre + ' agregado al carrito', 'success');
+  })
+  .catch(()=>toast('Error al consultar el código', 'error'));
+}
+
 function addToCart(id, presId){
   const p = POS_CATALOG[Number(id)];
   if (!p){ toast('Producto no encontrado en catálogo', 'warning'); return; }
@@ -1284,6 +1317,12 @@ $('btnSync').addEventListener('click', ()=>syncOfflineQueue(true));
 /* ---------- búsqueda / categorías (solo desplegable) ---------- */
 let searchTimeout;
 $('searchInput').addEventListener('input', ()=>{ clearTimeout(searchTimeout); searchTimeout = setTimeout(buscarProductos, 300); });
+if ($('scannerInput')){
+  // La pistola envía los dígitos y un Enter: disparamos al presionar Enter.
+  $('scannerInput').addEventListener('keydown', e=>{ if (e.key === 'Enter'){ e.preventDefault(); procesarEscaneo(); } });
+  // El escáner enfoca este campo; mantenerlo enfocado tras cada lectura.
+  $('scannerInput').addEventListener('blur', ()=>{ setTimeout(()=>{ if ($('scannerInput')) $('scannerInput').focus(); }, 50); });
+}
 function getCategoriaSeleccionada(){
   const act = document.querySelector('#catList .cat-item.active');
   return act ? (act.dataset.categoria || '') : '';

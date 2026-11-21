@@ -119,11 +119,13 @@ class ProductoForm(forms.ModelForm):
     class Meta:
         model = Producto
         fields = [
-            'nombre', 'descripcion', 'categoria', 'unidad_medida',
+            'codigo', 'codigo_barras', 'nombre', 'descripcion', 'categoria', 'unidad_medida',
             'precio_compra', 'precio_venta', 'stock', 'stock_minimo',
             'permite_decimal', 'imagen', 'activo'
         ]
         widgets = {
+            'codigo': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'SKU interno'}),
+            'codigo_barras': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 6901234567892', 'autocomplete': 'off'}),
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre del producto'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'categoria': forms.Select(attrs={'class': 'form-select'}),

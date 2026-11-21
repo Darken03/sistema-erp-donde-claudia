@@ -12,9 +12,9 @@ class CategoriaAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ['codigo', 'nombre', 'categoria', 'precio_compra', 'precio_venta', 'stock', 'permite_decimal', 'activo']
+    list_display = ['codigo', 'codigo_barras', 'nombre', 'categoria', 'precio_compra', 'precio_venta', 'stock', 'permite_decimal', 'activo']
     list_filter = ['activo', 'categoria', 'permite_decimal']
-    search_fields = ['codigo', 'nombre']
+    search_fields = ['codigo', 'codigo_barras', 'nombre']
     list_editable = ['precio_venta', 'activo']
     ordering = ['nombre']
 

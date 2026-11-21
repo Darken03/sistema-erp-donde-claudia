@@ -42,6 +42,12 @@
                                 <div class="form-text">Generado automáticamente</div>
                             {% endif %}
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Código de barras</label>
+                            {{ form.codigo_barras }}
+                            {% if form.codigo_barras.errors %}<div class="text-danger small mt-1">{{ form.codigo_barras.errors.0 }}</div>{% endif %}
+                            <div class="form-text">Lo lee la pistola escáner en el POS.</div>
+                        </div>
                         <div class="col-md-8">
                             <label class="form-label">Nombre *</label>
                             {{ form.nombre }}

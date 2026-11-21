@@ -11,6 +11,7 @@ urlpatterns = [
     # Dashboard (solo admin)
     path('dashboard/', views.dashboard, name='dashboard'),
     # Productos (solo admin)
+    path('productos/codigos-barras/', views.productos_codigos_barras, name='productos_codigos_barras'),
     path('productos/', views.producto_lista, name='producto_lista'),
     path('productos/crear/', views.producto_crear, name='producto_crear'),
     path('productos/<int:pk>/', views.producto_detalle, name='producto_detalle'),
@@ -45,6 +46,7 @@ urlpatterns = [
 # Punto de Venta
     path('pos/', views.pos, name='pos'),
     path('pos/buscar/', views.pos_buscar_productos, name='pos_buscar'),
+    path('pos/buscar-codigo/', views.pos_buscar_codigo, name='pos_buscar_codigo'),
     path('pos/procesar/', views.pos_procesar_venta, name='pos_procesar'),
     path('pos/mis-ventas/', views.pos_mis_ventas, name='pos_mis_ventas'),
     path('pos/entradas/', views.pos_mis_entradas, name='pos_mis_entradas'),

@@ -305,6 +305,60 @@ def dashboard(request):
 # PRODUCTOS
 # ============================================================
 @requiere_admin
+def productos_codigos_barras(request):
+    """Alta masiva de códigos de barras: lista todos los productos y guarda los códigos.
+
+    Acceso restringido a administradores. Un escáner actúa como teclado: al
+    enfocar el input de "escaneo rápido" y leer un código, se asigna al
+    producto marcado (o al primero de la lista).
+    """
+    desde = request.GET.get('q', '').strip()
+    productos_qs = Producto.objects.all().select_related('categoria').order_by('nombre')
+    if desde:
+        productos_qs = productos_qs.filter(
+            Q(nombre__icontains=desde) | Q(codigo__icontains=desde)
+            | Q(codigo_barras__icontains=desde))
+    productos = list(productos_qs)
+    mensaje = None
+    if request.method == 'POST':
+        codes = {}
+        for key, value in request.POST.items():
+            if key.startswith('cb_'):
+                codes[int(key[3:])] = (value or '').strip()
+        # Validar duplicados dentro del propio formulario.
+        vistos = {}
+        duplicados = []
+        for pid, codigo in codes.items():
+            if not codigo:
+                continue
+            if codigo in vistos:
+                duplicados.append(codigo)
+            vistos[codigo] = pid
+        if duplicados:
+            messages.error(request, f'Códigos duplicados en el formulario: {", ".join(sorted(set(duplicados)))}')
+        else:
+            with transaction.atomic():
+                existentes = {}
+                for p in Producto.objects.filter(codigo_barras__in=[c for c in vistos if c]):
+                    existentes[p.codigo_barras] = p.id
+                for pid, codigo in codes.items():
+                    if not codigo:
+                        continue
+                    if codigo in existentes and existentes[codigo] != pid:
+                        messages.error(request, f'El código {codigo} ya pertenece a otro producto.')
+                        break
+                    Producto.objects.filter(pk=pid).update(codigo_barras=codigo)
+                else:
+                    messages.success(request, 'Códigos de barras guardados correctamente.')
+        return redirect('core:productos_codigos_barras')
+
+    return render(request, 'core/productos_codigos_barras.html', {
+        'productos': productos,
+        'q': desde,
+    })
+
+
+@requiere_admin
 def producto_lista(request):
     productos = Producto.objects.select_related('categoria').order_by('nombre')
     query = request.GET.get('q')
@@ -1632,6 +1686,7 @@ def _serializar_producto_pos(p, stock_override=None):
     return {
         'id': p.id,
         'codigo': p.codigo,
+        'codigo_barras': p.codigo_barras or '',
         'nombre': p.nombre,
         'precio': str(p.precio_para()),
         'stock': str(stock),
@@ -1720,6 +1775,35 @@ def _limpiar_ids(nodo):
 
 
 @login_required
+
+
+@login_required
+def pos_buscar_codigo(request):
+    """Busca un producto por código de barras exacto para el escáner del POS."""
+    codigo = (request.POST.get('codigo') or request.GET.get('codigo') or '').strip()
+    if not codigo:
+        return JsonResponse({'error': 'Código vacío.'}, status=400)
+    es_multi = (modo_actual() == 'multi_pos')
+    stock_map = {}
+    if es_multi:
+        _, pos_obj, almacen = _turno_pos_almacen(request)
+        if pos_obj is None or almacen is None:
+            return JsonResponse({'error': 'Sin punto de venta asignado en el turno.'}, status=400)
+        stock_map = _stock_map_para(almacen)
+    qs = Producto.objects.filter(codigo_barras=codigo, activo=True)
+    if not es_multi:
+        qs = qs.filter(visible_pos=True)
+    p = qs.select_related('categoria').prefetch_related('presentaciones').first()
+    if p is None:
+        return JsonResponse({'error': 'Producto no encontrado para ese código.'}, status=404)
+    over = None
+    if es_multi:
+        over = stock_map.get(p.id, Decimal('0'))
+        if over <= 0:
+            return JsonResponse({'error': 'Producto sin stock en este punto de venta.'}, status=404)
+    elif (p.stock or 0) <= 0:
+        return JsonResponse({'error': 'Producto sin stock.'}, status=404)
+    return JsonResponse({'producto': _serializar_producto_pos(p, stock_override=over)})
 
 
 @require_POST

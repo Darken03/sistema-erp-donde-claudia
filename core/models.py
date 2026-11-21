@@ -210,6 +210,10 @@ class Producto(models.Model):
         ('gramos', 'Gramos (g)'),
     ]
     codigo = models.CharField(max_length=50, unique=True, blank=True)
+    codigo_barras = models.CharField(
+        max_length=64, blank=True, null=True, unique=True, db_index=True,
+        verbose_name='Código de barras',
+        help_text='Código leído por la pistola escáner (EAN/UPC/Code128).')
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True, null=True)
     categoria = models.ForeignKey(

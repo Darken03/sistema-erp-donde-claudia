@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}Códigos de barras - BizMaster{% endblock %}
+{% block topbar_text %}Alta masiva de códigos de barras{% endblock %}
+
+{% block layout %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i> Dashboard</a>
+      <h4 class="mt-2 mb-0"><i class="bi bi-upc-scan me-2"></i>Códigos de barras de productos</h4>
+    </div>
+    <span class="text-muted">{{ productos|length }} producto(s)</span>
+  </div>
+
+  <div class="alert alert-info py-2">
+    <i class="bi bi-info-circle me-1"></i>
+    <b>Cómo usar el escáner:</b> conecte la pistola (funciona como teclado), haga clic en el campo
+    <b>Escaneo rápido</b> de abajo y lea códigos: se asignarán al producto seleccionado en la fila
+    (o al primero de la lista). Luego presione <b>Guardar todos</b>. También puede escribir el código
+    directamente en cada fila.
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Escaneo rápido (pistola)</label>
+          <input type="text" id="scanRapido" class="form-control form-control-lg" placeholder="Escanee aquí…" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label small mb-1">Producto destino</label>
+          <select id="scanProducto" class="form-select">
+            {% for p in productos %}<option value="{{ p.id }}">{{ p.nombre }} ({{ p.codigo }})</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button type="button" class="btn btn-primary w-100" onclick="asignarEscaneo()"><i class="bi bi-plus-lg"></i> Asignar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <form method="get" class="d-flex gap-2">
+        <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="Buscar por nombre, SKU o código de barras…">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i></button>
+        <a href="{% url 'core:productos_codigos_barras' %}" class="btn btn-outline-secondary">Limpiar</a>
+      </form>
+    </div>
+  </div>
+
+  <form method="post" id="formCodigos">
+    {% csrf_token %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr><th style="width:70px;">#</th><th>Producto</th><th>Categoría</th><th>SKU</th><th style="width:240px;">Código de barras</th><th style="width:50px;"></th></tr>
+          </thead>
+          <tbody>
+            {% for p in productos %}
+            <tr id="row-{{ p.id }}">
+              <td class="text-muted">{{ forloop.counter }}</td>
+              <td><strong>{{ p.nombre }}</strong></td>
+              <td>{{ p.categoria.nombre|default:"-" }}</td>
+              <td><code>{{ p.codigo }}</code></td>
+              <td>
+                <input type="text" name="cb_{{ p.id }}" id="cb_{{ p.id }}" class="form-control form-control-sm mono" value="{{ p.codigo_barras|default:'' }}" placeholder="Sin asignar" autocomplete="off">
+              </td>
+              <td><span class="badge bg-success" id="ok-{{ p.id }}" style="display:none;"><i class="bi bi-check"></i></span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-4">No hay productos.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center">
+        <span class="text-muted small">Los códigos duplicados se rechazan automáticamente.</span>
+        <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i> Guardar todos</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function asignarEscaneo(){
+  const inp = document.getElementById('scanRapido');
+  const sel = document.getElementById('scanProducto');
+  if (!inp || !sel) return;
+  const code = (inp.value || '').trim();
+  if (!code){ inp.focus(); return; }
+  const pid = sel.value;
+  const field = document.getElementById('cb_' + pid);
+  if (field){
+    field.value = code;
+    const ok = document.getElementById('ok-' + pid);
+    if (ok) ok.style.display = '';
+    field.scrollIntoView({block:'center', behavior:'smooth'});
+    field.focus();
+  }
+  inp.value = '';
+  inp.focus();
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = document.getElementById('scanRapido');
+  if (!inp) return;
+  // Pistola = teclado + Enter.
+  inp.addEventListener('keydown', e=>{ if (e.key === 'Enter'){ e.preventDefault(); asignarEscaneo(); } });
+  inp.focus();
+  // Al enfocar un campo de fila, actualizar el selector destino.
+  document.querySelectorAll('input[id^="cb_"]').forEach(f=>{
+    f.addEventListener('focus', ()=>{ document.getElementById('scanProducto').value = f.id.replace('cb_',''); });
+  });
+});
+</script>
+{% endblock %}
