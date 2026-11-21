@@ -4704,9 +4704,15 @@ def submayor_detalle(request, producto_id):
         unidad = producto.unidad_medida if producto else 'unidades'
         return fmt_cantidad_unidad(cantidad, unidad)
 
+    # Las ventas canceladas/de eliminadas no deben seguir apareciendo como
+    # "venta" en el submayor: ocultamos sus movimientos de salida.
+    ids_canceladas = list(
+        Venta.objects.filter(cancelada=True).values_list('id', flat=True))
+
     movimientos = []
     for m in MovimientoInventario.objects.filter(
-            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin):
+            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin
+            ).exclude(tipo='venta', referencia_id__in=ids_canceladas):
         movimientos.append({
             'fecha': m.fecha, 'tipo': m.tipo, 'cantidad': m.cantidad,
             'cantidad_fmt': _fmt(m.cantidad, producto),
@@ -4718,7 +4724,8 @@ def submayor_detalle(request, producto_id):
     # AlmacenMovimiento (no como MovimientoInventario): incluirlas aquí
     # para que el submayor muestre TODO el historial del producto.
     for m in AlmacenMovimiento.objects.filter(
-            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin):
+            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin
+            ).exclude(tipo='venta', referencia_id__in=ids_canceladas):
                 movimientos.append({
                     'fecha': m.fecha, 'tipo': m.tipo, 'cantidad': m.cantidad,
                     'cantidad_fmt': _fmt(m.cantidad, producto),
