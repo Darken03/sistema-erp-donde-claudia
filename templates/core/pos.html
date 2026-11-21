@@ -2005,8 +2005,12 @@ async function liquidarDeudaPOS(){
         $('deuStep2Saldo').className = 'mono ' + (Number(j.saldo_deudor) > 0 ? 'text-danger' : 'text-success');
       }
     }
-    // refrescar deudas
+    // refrescar deudas y la lista de deudores (saldos)
     try { await seleccionarDeudor(deuSelec.id); } catch(e){}
+    try { await cargarDeudores(); } catch(e){}
+    if (histDeudorId != null && typeof cargarHistoricoDeudas === 'function'){
+      try { await cargarHistoricoDeudas(true); } catch(e){}
+    }
     deuHidePosModal('deudaAbonarModal');
   } catch(e){ toast(e.message,'danger'); }
   finally { deuLockBtn($('deuAbonarBtn'), false); }
