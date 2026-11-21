@@ -1426,8 +1426,25 @@ def venta_editar(request, pk):
             venta.cancelada = True
             venta.save()
             with transaction.atomic():
+                es_multi = (modo_actual() == 'multi_pos')
+                almacen = None
+                if es_multi and venta.punto_venta_id:
+                    almacen = venta.punto_venta.almacen
                 for detalle in venta.detalles.all():
-                    _registrar_movimiento(detalle.producto, 'devolucion', detalle.cantidad_base or detalle.cantidad, request.user, venta.id, f'Venta #{venta.numero_venta} cancelada')
+                    cantidad_devuelta = detalle.cantidad_base or detalle.cantidad
+                    if es_multi and almacen is not None:
+                        stock = _stock_de(detalle.producto, almacen)
+                        anterior = stock.cantidad if stock is not None else Decimal('0')
+                        if stock is None:
+                            stock, _ = _get_or_create_stock(detalle.producto, almacen)
+                        stock.cantidad = anterior + cantidad_devuelta
+                        stock.save(update_fields=['cantidad', 'fecha_actualizacion'])
+                        _movimiento_almacen(
+                            detalle.producto, 'devolucion', cantidad_devuelta,
+                            anterior, stock.cantidad, request.user, venta.id,
+                            f'Venta #{venta.numero_venta} cancelada', almacen=almacen)
+                    else:
+                        _registrar_movimiento(detalle.producto, 'devolucion', cantidad_devuelta, request.user, venta.id, f'Venta #{venta.numero_venta} cancelada')
                     _reencadenar_producto_desde(detalle.producto, venta.fecha_venta.date())
             messages.success(request, f'Venta {venta.numero_venta} cancelada. Stock restaurado.')
             return redirect('core:venta_lista')
@@ -4670,20 +4687,28 @@ def submayor_detalle(request, producto_id):
     fecha_fin = request.GET.get('fecha_fin')
     
     hoy = timezone.localdate()
-    if not fecha_inicio:
-        fecha_inicio = (hoy - timedelta(days=30)).strftime('%Y-%m-%d')
-    if not fecha_fin:
-        fecha_fin = hoy.strftime('%Y-%m-%d')
-    
+    try:
+        fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').date() if fecha_inicio else hoy - timedelta(days=30)
+    except ValueError:
+        fecha_inicio_dt = hoy - timedelta(days=30)
+    try:
+        fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').date() if fecha_fin else hoy
+    except ValueError:
+        fecha_fin_dt = hoy
+    inicio, fin = _rango_fecha_local(fecha_inicio_dt)
+    _, fin_fin = _rango_fecha_local(fecha_fin_dt)
+    fecha_inicio = fecha_inicio_dt.strftime('%Y-%m-%d')
+    fecha_fin = fecha_fin_dt.strftime('%Y-%m-%d')
+
     movimientos = MovimientoInventario.objects.filter(
         producto=producto,
-        fecha__date__gte=fecha_inicio,
-        fecha__date__lte=fecha_fin
+        fecha__gte=inicio,
+        fecha__lte=fin_fin,
     ).order_by('-fecha')
 
     historial = producto.historial_precios.filter(
-        fecha__date__gte=fecha_inicio,
-        fecha__date__lte=fecha_fin
+        fecha__gte=inicio,
+        fecha__lte=fin_fin,
     ).order_by('-fecha')
 
     context = {
