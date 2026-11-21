@@ -1099,13 +1099,15 @@ def venta_lista(request):
     )
     
     # Gastos del periodo
-    gastos_qs = Gasto.objects.filter(fecha_gasto__date=fecha) if periodo == 'dia' else Gasto.objects.all()
     if periodo == 'dia':
-        gastos_qs = gastos_qs.filter(fecha_gasto__date=fecha)
+        _gi, _gf = _rango_fecha_local(fecha)
+        gastos_qs = Gasto.objects.filter(fecha_gasto__gte=_gi, fecha_gasto__lte=_gf)
     elif periodo == 'mes':
-        gastos_qs = gastos_qs.filter(fecha_gasto__year=fecha.year, fecha_gasto__month=fecha.month)
+        gastos_qs = Gasto.objects.filter(fecha_gasto__year=fecha.year, fecha_gasto__month=fecha.month)
     elif periodo == 'ano':
-        gastos_qs = gastos_qs.filter(fecha_gasto__year=fecha.year)
+        gastos_qs = Gasto.objects.filter(fecha_gasto__year=fecha.year)
+    else:
+        gastos_qs = Gasto.objects.all()
     
     if empleado_filtro:
         gastos_qs = gastos_qs.filter(cajero__username=empleado_filtro)
@@ -2242,7 +2244,8 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
     cambio_devuelto = resumen_dinero['cambio'] or 0
     total_ventas_monto = resumen_dinero['total_ventas'] or 0
     
-    gastos_dia = Gasto.objects.filter(fecha_gasto__date=fecha)
+    _gi, _gf = _rango_fecha_local(fecha)
+    gastos_dia = Gasto.objects.filter(fecha_gasto__gte=_gi, fecha_gasto__lte=_gf)
     resumen_gastos = gastos_dia.aggregate(
         total=Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
         efectivo=Sum('cantidad_efectivo'),
@@ -2468,8 +2471,9 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
             'tiene_deuda': en_deuda > 0,
         })
 
+    _gi, _gf = _rango_fecha_local(fecha)
     resumen_dinero = Venta.objects.filter(
-        fecha_venta__date=fecha, cancelada=False,
+        fecha_venta__gte=_gi, fecha_venta__lte=_gf, cancelada=False,
         punto_venta=pos).aggregate(
         efectivo=_Sum('monto_recibido'),
         transferencia=_Sum('monto_transferencia'),
@@ -2477,7 +2481,7 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
         total_ventas=_Sum('total'),
     )
     gastos_dia = Gasto.objects.filter(
-        fecha_gasto__date=fecha, turno__punto_venta=pos)
+        fecha_gasto__gte=_gi, fecha_gasto__lte=_gf, turno__punto_venta=pos)
     resumen_gastos = gastos_dia.aggregate(
         total=_Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
         efectivo=_Sum('cantidad_efectivo'),
@@ -2703,7 +2707,7 @@ def _movs_dia_producto(producto, fecha):
 
 
 def _reencadenar_producto_desde(producto, fecha_desde):
-    inicio, fin = _rango_fecha_local(fecha)
+    inicio, fin = _rango_fecha_local(fecha_desde)
     """Re-encadena el IPB de UN producto desde una fecha hasta hoy.
 
     Para ventas tardías (ej. ayer se olvidó pasar un producto): el día D
@@ -3187,8 +3191,9 @@ def gasto_lista(request):
     gastos = Gasto.objects.select_related('cajero').all()
 
     if periodo == 'dia':
+        inicio, fin = _rango_fecha_local(fecha)
         titulo = f'Gastos del dia {fecha.strftime("%d/%m/%Y")}'
-        gastos = gastos.filter(fecha_gasto__date=fecha)
+        gastos = gastos.filter(fecha_gasto__gte=inicio, fecha_gasto__lte=fin)
     elif periodo == 'mes':
         titulo = f'Gastos de {fecha.strftime("%B %Y")}'
         gastos = gastos.filter(fecha_gasto__year=fecha.year, fecha_gasto__month=fecha.month)
@@ -3196,8 +3201,9 @@ def gasto_lista(request):
         titulo = f'Gastos del ano {fecha.year}'
         gastos = gastos.filter(fecha_gasto__year=fecha.year)
     else:
+        inicio, fin = _rango_fecha_local(fecha)
         titulo = f'Gastos del dia {fecha.strftime("%d/%m/%Y")}'
-        gastos = gastos.filter(fecha_gasto__date=fecha)
+        gastos = gastos.filter(fecha_gasto__gte=inicio, fecha_gasto__lte=fin)
 
     if empleado_filtro:
         gastos = gastos.filter(cajero__username=empleado_filtro)
@@ -4503,7 +4509,6 @@ def config_almacen_toggle(request, pk):
 # ============================================================
 @requiere_admin
 def retiro_donacion_lista(request):
-    inicio, fin = _rango_fecha_local(fecha)
     hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
 
@@ -4515,6 +4520,7 @@ def retiro_donacion_lista(request):
     else:
         fecha = hoy
 
+    inicio, fin = _rango_fecha_local(fecha)
     retiros = RetiroDonacion.objects.filter(
         fecha_retiro__gte=inicio, fecha_retiro__lte=fin
     ).select_related('producto', 'beneficiario', 'registrado_por').order_by('-fecha_retiro')
@@ -4921,7 +4927,6 @@ def deudor_lista(request):
 
 @login_required
 def deuda_lista(request):
-    inicio, fin = _rango_fecha_local(fecha)
     q = request.GET.get('q', '').strip()
     f_desde = (request.GET.get('desde') or '').strip()
     f_hasta = (request.GET.get('hasta') or '').strip()
@@ -4934,9 +4939,9 @@ def deuda_lista(request):
     desde = _parse_fecha_pago(f_desde)
     hasta = _parse_fecha_pago(f_hasta)
     if desde:
-        deudas = deudas.filter(fecha_registro__date__gte=desde)
+        deudas = deudas.filter(fecha_registro__gte=_rango_fecha_local(desde)[0])
     if hasta:
-        deudas = deudas.filter(fecha_registro__date__lte=hasta)
+        deudas = deudas.filter(fecha_registro__lte=_rango_fecha_local(hasta)[1])
     if f_deudor:
         try:
             deudas = deudas.filter(deudor_id=int(f_deudor))
