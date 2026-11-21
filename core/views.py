@@ -4700,11 +4700,33 @@ def submayor_detalle(request, producto_id):
     fecha_inicio = fecha_inicio_dt.strftime('%Y-%m-%d')
     fecha_fin = fecha_fin_dt.strftime('%Y-%m-%d')
 
-    movimientos = MovimientoInventario.objects.filter(
-        producto=producto,
-        fecha__gte=inicio,
-        fecha__lte=fin_fin,
-    ).order_by('-fecha')
+    def _fmt(cantidad, producto):
+        unidad = producto.unidad_medida if producto else 'unidades'
+        return fmt_cantidad_unidad(cantidad, unidad)
+
+    movimientos = []
+    for m in MovimientoInventario.objects.filter(
+            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin):
+        movimientos.append({
+            'fecha': m.fecha, 'tipo': m.tipo, 'cantidad': m.cantidad,
+            'cantidad_fmt': _fmt(m.cantidad, producto),
+            'stock_anterior_fmt': _fmt(m.stock_anterior, producto),
+            'stock_nuevo_fmt': _fmt(m.stock_nuevo, producto),
+            'descripcion': m.descripcion, 'usuario': m.usuario,
+        })
+    # En modo multi-POS las ventas del POS se registran como
+    # AlmacenMovimiento (no como MovimientoInventario): incluirlas aquí
+    # para que el submayor muestre TODO el historial del producto.
+    for m in AlmacenMovimiento.objects.filter(
+            producto=producto, fecha__gte=inicio, fecha__lte=fin_fin):
+                movimientos.append({
+                    'fecha': m.fecha, 'tipo': m.tipo, 'cantidad': m.cantidad,
+                    'cantidad_fmt': _fmt(m.cantidad, producto),
+                    'stock_anterior_fmt': _fmt(m.stock_anterior, producto),
+                    'stock_nuevo_fmt': _fmt(m.stock_nuevo, producto),
+                    'descripcion': m.descripcion, 'usuario': m.usuario,
+                })
+    movimientos.sort(key=lambda m: m['fecha'], reverse=True)
 
     historial = producto.historial_precios.filter(
         fecha__gte=inicio,
