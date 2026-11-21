@@ -106,6 +106,7 @@ urlpatterns = [
     path('pos/deudores/', views.pos_deudores, name='pos_deudores'),
     path('pos/deudor/crear/', views.pos_deudor_crear, name='pos_deudor_crear'),
     path('pos/deudor/<int:pk>/', views.pos_deudor_detalle, name='pos_deudor_detalle'),
+    path('pos/deudor/<int:pk>/historico/', views.pos_deudor_historico, name='pos_deudor_historico'),
     path('pos/deuda/crear/', views.pos_deuda_crear, name='pos_deuda_crear'),
     path('pos/deuda/abonar/', views.pos_deuda_abonar, name='pos_deuda_abonar'),
     # Panel del vendedor + Arqueo de turno + Conteo ciego

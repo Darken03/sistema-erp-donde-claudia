@@ -348,6 +348,8 @@
 #deudaDineroModal .modal-dialog, #deudaAbonarModal .modal-dialog { max-width:min(440px,calc(100% - 2rem)); }
 #deudaDineroModal .modal-dialog { max-width:min(420px,calc(100% - 2rem)); }
 #misVentasModal .modal-dialog, #misEntradasModal .modal-dialog { max-width:min(820px,calc(100% - 2rem)); }
+#deudaHistoricoModal .modal-dialog { max-width:min(900px,calc(100% - 2rem)); }
+#deudaHistoricoModal .table-responsive { max-height:56vh; overflow-y:auto; }
 
 /* ===== Modal Detalle de Venta ===== */
 .det-head { background:linear-gradient(135deg,#0ea5e9,#0284c7); color:#fff; border:0; padding:14px 18px; display:flex; align-items:center; gap:12px; }
@@ -664,7 +666,7 @@ html[data-theme="dark"] .deu-cart-head { background:var(--soft); }
 <!-- Modal Mis Ventas -->
 <div class="modal fade" id="misVentasModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
   <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2"></i>Mis Ventas del Día</h5>
-    <div><span class="badge bg-success me-1" id="resumenDiaTotal">{{ TIENDA.simbolo|default:"$" }}0</span><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
+    <div><span class="badge bg-info" id="resumenDiaCantidad">0 ventas</span>
     <button class="btn btn-sm btn-outline-secondary ms-2" onclick="cargarMisVentas()"><i class="bi bi-arrow-clockwise"></i></button></div>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body p-0"><div class="table-responsive" style="max-height:400px;overflow-y:auto;">
@@ -727,6 +729,7 @@ html[data-theme="dark"] .deu-cart-head { background:var(--soft); }
     <div class="deu-selected" id="deudaSelBox" style="display:none;">
       <div class="flex-grow-1"><strong id="deudaSelNombre"></strong><small class="text-muted d-block mono" id="deudaSelCI"></small></div>
       <div class="text-end"><small class="text-muted d-block">SALDO</small><strong class="mono" id="deudaSelSaldo"></strong></div>
+      <button type="button" class="btn btn-outline-info btn-sm text-nowrap" id="deudaVerHistorico" title="Ver histórico de deudas"><i class="bi bi-clock-history me-1"></i>Ver histórico</button>
       <button type="button" class="btn-close" id="deudaSelX" title="Quitar selección"></button>
     </div>
     <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-1" id="deudaNuevoBtn"><i class="bi bi-person-plus me-1"></i>Nuevo deudor</button>
@@ -817,6 +820,38 @@ html[data-theme="dark"] .deu-cart-head { background:var(--soft); }
   <div class="modal-footer">
     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
     <button type="button" class="btn btn-success" id="deuAbonarBtn"><i class="bi bi-cash-coin me-1"></i>Aplicar Pago</button>
+  </div>
+</div></div></div>
+
+<!-- Modal Histórico de Deudas del Deudor (flotante, se refresca solo) -->
+<div class="modal fade" id="deudaHistoricoModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+  <div class="modal-header">
+    <h5 class="modal-title text-truncate"><i class="bi bi-clock-history me-2"></i>Histórico · <span id="deuHistNombre"></span></h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  </div>
+  <div class="modal-body p-0">
+    <div class="d-flex align-items-center gap-2 flex-wrap p-2 border-bottom">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de deudas">
+        <button type="button" class="btn btn-outline-primary active" data-hist-filtro="pendientes">Pendientes</button>
+        <button type="button" class="btn btn-outline-primary" data-hist-filtro="dia">Del día</button>
+        <button type="button" class="btn btn-outline-primary" data-hist-filtro="todas">Todas</button>
+      </div>
+      <span class="badge bg-secondary" id="deuHistResumen">—</span>
+      <span class="badge bg-danger ms-auto" id="deuHistSaldo">Saldo: {{ TIENDA.simbolo|default:"$" }}0</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="deuHistRefresh" title="Actualizar ahora"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover table-hom mb-0">
+        <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+          <tr><th>No.</th><th>Fecha</th><th>Detalle</th><th class="text-end">Monto</th><th class="text-end">Saldo</th><th>Estado</th></tr>
+        </thead>
+        <tbody id="deuHistBody"><tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="modal-footer py-2">
+    <small class="text-muted me-auto" id="deuHistFoot">Se actualiza automáticamente.</small>
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
   </div>
 </div></div></div>
 
@@ -1448,6 +1483,16 @@ async function cargarMisEntradas(){
   } catch(e){}
 }
 $('misEntradasModal').addEventListener('show.bs.modal', cargarMisEntradas);
+/* Mis ventas: en tablet no se refresca solo; recargar al abrir y cada 15 s mientras esté abierto. */
+let misVentasTimer = null;
+$('misVentasModal').addEventListener('show.bs.modal', ()=>{
+  cargarMisVentas();
+  if (misVentasTimer) clearInterval(misVentasTimer);
+  misVentasTimer = setInterval(cargarMisVentas, 15000);
+});
+$('misVentasModal').addEventListener('hidden.bs.modal', ()=>{
+  if (misVentasTimer){ clearInterval(misVentasTimer); misVentasTimer = null; }
+});
 function verDetalleVenta(v){
   setTxt('detalleVentaNumeroHead', v.numero);
   setTxt('detalleVentaNumero', v.numero); setTxt('detalleVentaHora', v.hora);
@@ -1525,23 +1570,28 @@ async function cargarDeudores(){
   } catch(e){}
 }
 
-async function seleccionarDeudor(id){
+async function seleccionarDeudor(id, silencioso){
   try {
-    const r = await fetch(URL_DEUDOR_DET.replace('DEUID', id));
+    const r = await fetch(URL_DEUDOR_DET.replace('DEUID', id), {headers:{'X-CSRFToken':CSRF_TOKEN}, cache:'no-store'});
     const d = await r.json();
-    if (!r.ok || d.id == null){ toast(d.error||'Deudor no encontrado','danger'); return; }
+    if (!r.ok || d.id == null){ if (!silencioso) toast(d.error||'Deudor no encontrado','danger'); return null; }
     deuSelec = d;
     $('deudaSelBox').style.display = '';
     setTxt('deudaSelNombre', d.nombre_display || d.nombre_completo);
     setTxt('deudaSelCI', d.ci || 'sin CI');
     setTxt('deudaSelSaldo', money(d.saldo));
     if ($('deudaSelSaldo')) $('deudaSelSaldo').className = 'mono ' + (Number(d.saldo) > 0 ? 'text-danger' : 'text-success');
+    // Mantener sincronizado el saldo del paso 2 (mini-POS) si está visible.
+    setTxt('deuStep2Nombre', d.nombre_display || d.nombre_completo);
+    setTxt('deuStep2Saldo', money(d.saldo));
+    if ($('deuStep2Saldo')) $('deuStep2Saldo').className = 'mono ' + (Number(d.saldo) > 0 ? 'text-danger' : 'text-success');
     $('deudaLista').querySelectorAll('.deu-item').forEach(b=>{
       b.classList.toggle('active', Number(b.dataset.id) === Number(id));
     });
     if ($('deuContinuar')) $('deuContinuar').disabled = false;
     renderPendientes();
-  } catch(e){ toast('Error al cargar deudor','danger'); }
+    return d;
+  } catch(e){ if (!silencioso) toast('Error al cargar deudor','danger'); return null; }
 }
 
 function renderPendientes(){
@@ -1552,6 +1602,87 @@ function renderPendientes(){
   box.innerHTML = deuSelec.deudas.map(x=>
     '<div class="deu-pend"><span><strong class="mono">'+esc(x.numero)+'</strong>'+(x.presentacion?' <small class="text-muted">· '+esc(x.presentacion)+'</small>':'')+'<br><small class="text-muted">'+esc(x.motivo)+'</small></span><span class="text-end"><strong class="mono text-danger">$'+Math.round(Number(x.saldo))+'</strong><br><small class="text-muted">'+esc(x.fecha)+'</small></span></div>'
   ).join('');
+}
+
+/* ---------- histórico de deudas del deudor (modal flotante) ---------- */
+const URL_DEUDOR_HIST = '{% url "core:pos_deudor_historico" 0 %}'.replace('/0/', '/DEUID/');
+const HIST_REFRESCO_MS = 15000;
+let histDeudorId = null;
+let histFiltro = 'pendientes';
+let histTimer = null;
+
+function deuHistMarcarFiltro(){
+  document.querySelectorAll('#deudaHistoricoModal [data-hist-filtro]').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-hist-filtro') === histFiltro);
+  });
+}
+
+async function cargarHistoricoDeudas(silencioso){
+  if (histDeudorId == null) return;
+  const body = $('deuHistBody');
+  if (!body) return;
+  if (!silencioso) body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
+  try {
+    const r = await fetch(URL_DEUDOR_HIST.replace('DEUID', histDeudorId) + '?filtro=' + encodeURIComponent(histFiltro),
+      {headers:{'X-CSRFToken':CSRF_TOKEN}, cache:'no-store'});
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(j.error || 'No se pudo cargar el histórico');
+    setTxt('deuHistNombre', j.nombre_display || j.nombre_completo || '');
+    const items = j.deudas || [];
+    setTxt('deuHistResumen', items.length + ' deuda' + (items.length === 1 ? '' : 's'));
+    setTxt('deuHistSaldo', 'Saldo: ' + money(j.total_saldo));
+    if ($('deuHistSaldo')) $('deuHistSaldo').className = 'badge ms-auto ' + (Number(j.total_saldo) > 0 ? 'bg-danger' : 'bg-success');
+    if (!items.length){
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">'
+        + (histFiltro === 'pendientes' ? 'Sin deudas pendientes. ¡Al día!' : 'Sin deudas registradas para este filtro.') + '</td></tr>';
+    } else {
+      body.innerHTML = items.map(d=>{
+        const pagada = d.estado === 'pagada';
+        const saldoCls = Number(d.saldo) > 0 ? 'text-danger fw-bold' : 'text-muted';
+        return '<tr>'
+          + '<td><small class="fw-bold">'+esc(d.numero)+'</small></td>'
+          + '<td><small>'+esc(d.fecha)+(d.hora ? '<br><span class="text-muted">'+esc(d.hora)+'</span>' : '')+'</small></td>'
+          + '<td><small>'+esc(d.productos || d.motivo || '—')+'</small></td>'
+          + '<td class="text-end"><small class="mono">'+money(d.monto)+'</small></td>'
+          + '<td class="text-end"><small class="mono '+saldoCls+'">'+money(d.saldo)+'</small></td>'
+          + '<td><span class="badge '+(pagada ? 'bg-success' : 'bg-warning text-dark')+'">'+(pagada ? 'Pagada' : 'Pendiente')+'</span></td>'
+          + '</tr>';
+      }).join('');
+    }
+    if ($('deuHistFoot')){
+      $('deuHistFoot').textContent = 'Actualizado ' + new Date().toLocaleTimeString() + ' · se refresca cada ' + Math.round(HIST_REFRESCO_MS / 1000) + ' s';
+    }
+  } catch(e){
+    if (!silencioso) body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">'+esc(e.message || 'Error al cargar el histórico')+'</td></tr>';
+  }
+}
+
+function deuHistPararPolling(){
+  if (histTimer){ clearInterval(histTimer); histTimer = null; }
+}
+
+function deuHistIniciarPolling(){
+  deuHistPararPolling();
+  histTimer = setInterval(()=>{
+    if (histDeudorId == null) return;
+    cargarHistoricoDeudas(true);
+    // La tablet no refresca sola: recargar deudas pendientes y ventas del día.
+    if (deuSelec && Number(deuSelec.id) === Number(histDeudorId)) seleccionarDeudor(histDeudorId, true);
+    cargarMisVentas();
+  }, HIST_REFRESCO_MS);
+}
+
+function deuAbrirHistorico(){
+  if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
+  histDeudorId = deuSelec.id;
+  histFiltro = 'pendientes';
+  deuHistMarcarFiltro();
+  setTxt('deuHistNombre', deuSelec.nombre_display || deuSelec.nombre_completo || '');
+  const body = $('deuHistBody');
+  if (body) body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
+  // Se cierra el modal de deudas conservando la selección (ver hidden).
+  deuHidePosModal('registrarDeudaModal');
+  setTimeout(()=>{ bootstrap.Modal.getOrCreateInstance($('deudaHistoricoModal')).show(); }, 320);
 }
 
 async function crearDeudorPOS(){
@@ -1891,8 +2022,39 @@ if ($('deuProdSearch')) $('deuProdSearch').addEventListener('input', ()=>deuRend
 
 /* modal show/hide */
 if ($('registrarDeudaModal')){
-  $('registrarDeudaModal').addEventListener('show.bs.modal', ()=>{ deuResetAll(); cargarDeudores(); });
-  $('registrarDeudaModal').addEventListener('hidden.bs.modal', ()=>{ deuResetAll(); });
+  $('registrarDeudaModal').addEventListener('show.bs.modal', ()=>{ cargarDeudores(); });
+  $('registrarDeudaModal').addEventListener('hidden.bs.modal', ()=>{
+    // Al abrir el histórico este modal se cierra: conservar la selección del deudor.
+    if (histDeudorId != null) return;
+    deuResetAll();
+  });
+}
+if ($('deudaVerHistorico')) $('deudaVerHistorico').onclick = deuAbrirHistorico;
+if ($('deuHistRefresh')) $('deuHistRefresh').onclick = ()=>cargarHistoricoDeudas();
+document.querySelectorAll('#deudaHistoricoModal [data-hist-filtro]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    histFiltro = b.getAttribute('data-hist-filtro') || 'pendientes';
+    deuHistMarcarFiltro();
+    cargarHistoricoDeudas();
+  });
+});
+if ($('deudaHistoricoModal')){
+  $('deudaHistoricoModal').addEventListener('show.bs.modal', ()=>{
+    cargarHistoricoDeudas();
+    deuHistIniciarPolling();
+    if (deuSelec && Number(deuSelec.id) === Number(histDeudorId)) seleccionarDeudor(histDeudorId, true);
+  });
+  $('deudaHistoricoModal').addEventListener('hidden.bs.modal', ()=>{
+    deuHistPararPolling();
+    const id = histDeudorId;
+    histDeudorId = null;
+    if (id != null){
+      setTimeout(()=>{
+        bootstrap.Modal.getOrCreateInstance($('registrarDeudaModal')).show();
+        setTimeout(()=>seleccionarDeudor(id, true), 450);
+      }, 200);
+    }
+  });
 }
 if ($('deudaDineroModal')){
   $('deudaDineroModal').addEventListener('show.bs.modal', ()=>{ if ($('deuDineroMonto')) $('deuDineroMonto').value=''; if ($('deuDineroMotivo')) $('deuDineroMotivo').value=''; });

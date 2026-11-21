@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -34,6 +35,18 @@ from .forms import (
 
 def ahora_servidor():
     return datetime.now()
+
+
+def _rango_fecha_local(fecha):
+    """Rango [inicio, fin] consciente de zona horaria para un día local.
+
+    Evita DATE(campo) en SQL: en MySQL ese valor se calcula en UTC y no
+    coincide con la fecha local de La Habana. Django convierte los datetimes
+    conscientes a UTC al consultar.
+    """
+    inicio = timezone.make_aware(datetime.combine(fecha, datetime.min.time()))
+    fin = timezone.make_aware(datetime.combine(fecha, datetime.max.time()))
+    return inicio, fin
 
 
 # El sistema empezó a operar el 22/09/2026: no existe IPB anterior.
@@ -1030,7 +1043,7 @@ def venta_lista(request):
     empleado_filtro = request.GET.get('empleado', '')
     periodo = request.GET.get('periodo', 'dia')
 
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     
     if fecha_str:
         try:
@@ -1137,7 +1150,7 @@ def venta_lista(request):
 def venta_crear(request):
     productos = Producto.objects.filter(activo=True).select_related('categoria').order_by('nombre')
     empleados = Empleado.objects.filter(activo=True).select_related('user')
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     # Prefill ?fecha= (botón "venta de este día" desde IPB/lista), validado.
     fecha_default = hoy
     fecha_qs = request.GET.get('fecha', '')
@@ -1281,7 +1294,7 @@ def venta_editar(request, pk):
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        if venta.turno_id is None and venta.fecha_venta.date() == ahora_servidor().date():
+        if venta.turno_id is None and venta.fecha_venta.date() == timezone.localdate():
             try:
                 turno = venta.cajero.empleado.turno_abierto
             except Empleado.DoesNotExist:
@@ -1504,6 +1517,7 @@ def _turno_pos_almacen(request):
 
 
 @login_required
+@never_cache
 def pos(request):
     # Verificar si es cajero y si tiene turno abierto
     try:
@@ -1899,7 +1913,7 @@ def pos_procesar_venta(request):
                 else:
                     _registrar_movimiento(d['producto'], 'venta', d['cantidad_base'], request.user, venta.id, f'Venta #{venta.numero_venta}')
 
-        _sincronizar_inventario_dia(ahora_servidor().date())
+        _sincronizar_inventario_dia(timezone.localdate())
 
         return JsonResponse({
             'success': True,
@@ -1962,12 +1976,19 @@ def pos_ticket(request, pk):
 
 
 @login_required
+@never_cache
 def pos_mis_ventas(request):
-    hoy = ahora_servidor().date()
+    from django.utils import timezone
+    from datetime import time
+    hoy_local = timezone.localdate()
+    inicio = timezone.make_aware(datetime.combine(hoy_local, time.min))
+    fin = timezone.make_aware(datetime.combine(hoy_local, time.max))
     ventas = Venta.objects.filter(
         cajero=request.user,
-        cancelada=False
-    ).extra(where=["DATE(fecha_venta) = %s"], params=[hoy]).order_by('-fecha_venta')
+        cancelada=False,
+        fecha_venta__gte=inicio,
+        fecha_venta__lte=fin,
+    ).order_by('-fecha_venta')
 
     resumen = ventas.aggregate(total=Sum('total'), cantidad=Count('id'))
 
@@ -2011,6 +2032,7 @@ def _fmt_cantidad_ipb(valor, unidad_medida):
 
 
 def _obtener_datos_ipb(fecha, punto_venta=None):
+    inicio, fin = _rango_fecha_local(fecha)
     """Prepara los datos del IPB para una fecha dada. Retorna un diccionio con el contexto.
 
     Con `punto_venta` (modo multi-POS, filtro `?pos=`): IPB de ese POS
@@ -2022,7 +2044,7 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
     from datetime import timedelta
     from django.db.models import Sum
     
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     
     _sincronizar_inventario_dia(fecha)
     
@@ -2092,26 +2114,26 @@ def _obtener_datos_ipb(fecha, punto_venta=None):
     # para registros viejos con cantidad_base en 0.
     from django.db.models import Sum as _Sum
     donaciones_dia = RetiroDonacion.objects.filter(
-        fecha_retiro__date=fecha
+        fecha_retiro__gte=inicio, fecha_retiro__lte=fin
     ).values('producto_id').annotate(total=_Sum('cantidad'))
     donado_map = {d['producto_id']: Decimal(str(d['total'] or 0)) for d in donaciones_dia}
     try:
         deudas_dia = Deuda.objects.filter(
-            fecha_registro__date=fecha, tipo='producto'
+            fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto'
         ).values('producto_id').annotate(total=_Sum('cantidad_base'))
         deuda_map = {d['producto_id']: Decimal(str(d['total'] or 0)) for d in deudas_dia}
         # Fallback: registros anteriores a la migración de presentaciones
         # (cantidad_base = 0) se miden con cantidad.
         if any(v == 0 for v in deuda_map.values()):
             deudas_old = Deuda.objects.filter(
-                fecha_registro__date=fecha, tipo='producto', cantidad_base=0
+                fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto', cantidad_base=0
             ).values('producto_id').annotate(total=_Sum('cantidad'))
             for d in deudas_old:
                 if deuda_map.get(d['producto_id'], 0) == 0:
                     deuda_map[d['producto_id']] = Decimal(str(d['total'] or 0))
     except Exception:
         deudas_dia = Deuda.objects.filter(
-            fecha_registro__date=fecha, tipo='producto'
+            fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto'
         ).values('producto_id').annotate(total=_Sum('cantidad'))
         deuda_map = {d['producto_id']: Decimal(str(d['total'] or 0)) for d in deudas_dia}
     
@@ -2264,14 +2286,16 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
     """
     from django.db.models import Sum as _Sum
 
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
+    inicio, fin = _rango_fecha_local(fecha)
     almacen = pos.almacen if pos is not None else None
 
     def _dec(v):
         return Decimal(str(v or 0))
 
     ventas_qs = DetalleVenta.objects.filter(
-        venta__fecha_venta__date=fecha, venta__cancelada=False,
+        venta__fecha_venta__gte=inicio, venta__fecha_venta__lte=fin,
+        venta__cancelada=False,
         venta__punto_venta=pos)
     ventas_map = {
         v['producto_id']: _dec(v['t'])
@@ -2320,19 +2344,19 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
     donado_map = {
         d['producto_id']: _dec(d['total'])
         for d in RetiroDonacion.objects.filter(
-            fecha_retiro__date=fecha
+            fecha_retiro__gte=inicio, fecha_retiro__lte=fin
         ).values('producto_id').annotate(total=_Sum('cantidad'))
     }
     try:
         deuda_map = {
             d['producto_id']: _dec(d['total'])
             for d in Deuda.objects.filter(
-                fecha_registro__date=fecha, tipo='producto'
+                fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto'
             ).values('producto_id').annotate(total=_Sum('cantidad_base'))
         }
         if any(v == 0 for v in deuda_map.values()):
             for d in Deuda.objects.filter(
-                    fecha_registro__date=fecha, tipo='producto',
+                    fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto',
                     cantidad_base=0).values('producto_id').annotate(
                         total=_Sum('cantidad')):
                 if deuda_map.get(d['producto_id'], 0) == 0:
@@ -2341,7 +2365,7 @@ def _obtener_datos_ipb_por_pos(fecha, pos):
         deuda_map = {
             d['producto_id']: _dec(d['total'])
             for d in Deuda.objects.filter(
-                fecha_registro__date=fecha, tipo='producto'
+                fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto'
             ).values('producto_id').annotate(total=_Sum('cantidad'))
         }
 
@@ -2505,6 +2529,7 @@ def _registrar_movimiento(producto, tipo, cantidad, usuario=None, referencia_id=
 
 
 def _sincronizar_inventario_dia(fecha):
+    inicio, fin = _rango_fecha_local(fecha)
     """Sincroniza el inventario del día con las ventas, entradas y donaciones reales.
 
     REGLA DE ORO: el historial no se reescribe con el stock vivo.
@@ -2520,7 +2545,7 @@ def _sincronizar_inventario_dia(fecha):
     from django.db.models import Sum
     from decimal import Decimal
 
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
 
     # Bloqueo total del pasado previo al sistema: ni siquiera se calculan
     # movimientos, para no crear filas ficticias en la BD.
@@ -2541,7 +2566,7 @@ def _sincronizar_inventario_dia(fecha):
     entradas_map = {e['producto_id']: e['cantidad_entrada'] or 0 for e in entradas_dia}
     
     donaciones_dia = RetiroDonacion.objects.filter(
-        fecha_retiro__date=fecha
+        fecha_retiro__gte=inicio, fecha_retiro__lte=fin
     ).values('producto_id').annotate(cantidad_donada=Sum('cantidad'))
     donaciones_map = {d['producto_id']: d['cantidad_donada'] or 0 for d in donaciones_dia}
 
@@ -2549,20 +2574,20 @@ def _sincronizar_inventario_dia(fecha):
     # Se mide en UNIDAD BASE (cantidad_base = cantidad x factor de presentación).
     try:
         deudas_dia = Deuda.objects.filter(
-            fecha_registro__date=fecha,
+            fecha_registro__gte=inicio, fecha_registro__lte=fin,
             tipo='producto'
         ).values('producto_id').annotate(cantidad_deuda=Sum('cantidad_base'))
         deudas_map = {d['producto_id']: deudas_dia and (d['cantidad_deuda'] or 0) for d in deudas_dia}
         # Fallback para deudas viejas (cantidad_base = 0): usar cantidad.
         deudas_old = Deuda.objects.filter(
-            fecha_registro__date=fecha, tipo='producto', cantidad_base=0
+            fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto', cantidad_base=0
         ).values('producto_id').annotate(cantidad_deuda=Sum('cantidad'))
         for d in deudas_old:
             if not deudas_map.get(d['producto_id']):
                 deudas_map[d['producto_id']] = d['cantidad_deuda'] or 0
     except Exception:
         deudas_dia = Deuda.objects.filter(
-            fecha_registro__date=fecha,
+            fecha_registro__gte=inicio, fecha_registro__lte=fin,
             tipo='producto'
         ).values('producto_id').annotate(cantidad_deuda=Sum('cantidad'))
         deudas_map = {d['producto_id']: d['cantidad_deuda'] or 0 for d in deudas_dia}
@@ -2628,6 +2653,7 @@ def _sincronizar_inventario_dia(fecha):
 
 
 def _movs_dia_producto(producto, fecha):
+    inicio, fin = _rango_fecha_local(fecha)
     """Movimientos de UN producto en un día (autoridad: tablas reales)."""
     from django.db.models import Sum
     from decimal import Decimal
@@ -2643,15 +2669,15 @@ def _movs_dia_producto(producto, fecha):
         producto=producto
     ).aggregate(t=Sum('cantidad_base'))['t'] or 0
     don = RetiroDonacion.objects.filter(
-        fecha_retiro__date=fecha, producto=producto
+        fecha_retiro__gte=inicio, fecha_retiro__lte=fin, producto=producto
     ).aggregate(t=Sum('cantidad'))['t'] or 0
     try:
         deu = Deuda.objects.filter(
-            fecha_registro__date=fecha, tipo='producto', producto=producto
+            fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto', producto=producto
         ).aggregate(t=Sum('cantidad_base'))['t'] or 0
         if not deu:
             deu = Deuda.objects.filter(
-                fecha_registro__date=fecha, tipo='producto',
+                fecha_registro__gte=inicio, fecha_registro__lte=fin, tipo='producto',
                 producto=producto, cantidad_base=0
             ).aggregate(t=Sum('cantidad'))['t'] or 0
     except Exception:
@@ -2660,6 +2686,7 @@ def _movs_dia_producto(producto, fecha):
 
 
 def _reencadenar_producto_desde(producto, fecha_desde):
+    inicio, fin = _rango_fecha_local(fecha)
     """Re-encadena el IPB de UN producto desde una fecha hasta hoy.
 
     Para ventas tardías (ej. ayer se olvidó pasar un producto): el día D
@@ -2671,7 +2698,7 @@ def _reencadenar_producto_desde(producto, fecha_desde):
     from datetime import timedelta
     from decimal import Decimal
 
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     if fecha_desde < FECHA_INICIO_SISTEMA:
         return 0
     if fecha_desde > hoy:
@@ -2750,7 +2777,7 @@ def _ajustar_pago_venta(venta):
 @requiere_admin
 def ipb(request):
     fecha_str = request.GET.get('fecha', '')
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     
     if fecha_str:
         try:
@@ -2830,10 +2857,13 @@ def pos_registrar_gasto(request):
 
 @login_required
 def pos_mis_gastos(request):
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
+    inicio, fin = _rango_fecha_local(hoy)
     gastos = Gasto.objects.filter(
         cajero=request.user,
-    ).extra(where=["DATE(fecha_gasto) = %s"], params=[hoy]).order_by('-fecha_gasto')
+        fecha_gasto__gte=inicio,
+        fecha_gasto__lte=fin,
+    ).order_by('-fecha_gasto')
 
     resumen = gastos.aggregate(
         total=Sum(F('cantidad_efectivo') + F('cantidad_transferencia')),
@@ -2875,8 +2905,11 @@ def pos_mis_entradas(request):
     Si la empleada tiene turno abierto, se filtra desde la apertura del turno;
     si no, se muestra todo lo del día.
     """
-    hoy = ahora_servidor().date()
-    entradas = EntradaProducto.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[hoy]).select_related('producto')
+    hoy = timezone.localdate()
+    inicio, fin = _rango_fecha_local(hoy)
+    entradas = EntradaProducto.objects.filter(
+        fecha_entrada__gte=inicio, fecha_entrada__lte=fin
+    ).select_related('producto')
     desde_turno = False
     try:
         turno = request.user.empleado.turno_abierto
@@ -2918,16 +2951,16 @@ def venta_impresion(request, fecha=None):
         try:
             fecha = timezone.datetime.strptime(fecha, '%Y-%m-%d').date()
         except ValueError:
-            fecha = ahora_servidor().date()
+            fecha = timezone.localdate()
     else:
         fecha_str = request.GET.get('fecha', '')
         if fecha_str:
             try:
                 fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
             except ValueError:
-                fecha = ahora_servidor().date()
+                fecha = timezone.localdate()
         else:
-            fecha = ahora_servidor().date()
+            fecha = timezone.localdate()
     
     periodo = request.GET.get('periodo', 'dia')
     empleado_filtro = request.GET.get('empleado', '')
@@ -3065,16 +3098,16 @@ def ipb_impresion(request, fecha=None):
         try:
             fecha = timezone.datetime.strptime(fecha, '%Y-%m-%d').date()
         except ValueError:
-            fecha = ahora_servidor().date()
+            fecha = timezone.localdate()
     else:
         fecha_str = request.GET.get('fecha', '')
         if fecha_str:
             try:
                 fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
             except ValueError:
-                fecha = ahora_servidor().date()
+                fecha = timezone.localdate()
         else:
-            fecha = ahora_servidor().date()
+            fecha = timezone.localdate()
 
     # Sin IPB antes del inicio del sistema: el PDF cae al primer día válido.
     if fecha < FECHA_INICIO_SISTEMA:
@@ -3121,7 +3154,7 @@ def ipb_impresion(request, fecha=None):
 
 @requiere_admin
 def gasto_lista(request):
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
     empleado_filtro = request.GET.get('empleado', '')
     periodo = request.GET.get('periodo', 'dia')
@@ -3234,7 +3267,7 @@ def gasto_eliminar(request, pk):
 
 @requiere_admin
 def entrada_lista(request):
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
 
     if fecha_str:
@@ -3245,7 +3278,10 @@ def entrada_lista(request):
     else:
         fecha = hoy
 
-    entradas = EntradaProducto.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[fecha]).select_related('producto').order_by('-fecha_entrada')
+    inicio, fin = _rango_fecha_local(fecha)
+    entradas = EntradaProducto.objects.filter(
+        fecha_entrada__gte=inicio, fecha_entrada__lte=fin
+    ).select_related('producto').order_by('-fecha_entrada')
 
     resumen = entradas.aggregate(
         total=Sum('costo_total'),
@@ -3330,7 +3366,7 @@ def entrada_crear(request):
             producto.visible_pos = True
         _registrar_movimiento(producto, 'entrada', cantidad, request.user, entrada.id, f'Entrada #{numero_entrada}')
 
-        _sincronizar_inventario_dia(ahora_servidor().date())
+        _sincronizar_inventario_dia(timezone.localdate())
 
         messages.success(request, f'Entrada {numero_entrada} registrada. {"%g" % float(cantidad)} {producto.unidad_medida} agregados a {producto.nombre}.')
         return redirect('core:entrada_lista')
@@ -3410,13 +3446,16 @@ def _movimiento_almacen(producto, tipo, cantidad, stock_anterior, stock_nuevo,
 @requiere_almacen
 def almacen_panel(request):
     """Panel del almacén: existencias valorizadas y actividad del día."""
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     almacen_f, multi = _resolver_almacen(request)
     existencias = AlmacenStock.objects.select_related(
         'producto', 'almacen').order_by('producto__nombre')
     movs = AlmacenMovimiento.objects.select_related('producto', 'almacen')
-    entradas_qs = AlmacenEntrada.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[hoy])
-    traslados_qs = AlmacenTraslado.objects.extra(where=["DATE(fecha_traslado) = %s"], params=[hoy])
+    inicio, fin = _rango_fecha_local(hoy)
+    entradas_qs = AlmacenEntrada.objects.filter(
+        fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
+    traslados_qs = AlmacenTraslado.objects.filter(
+        fecha_traslado__gte=inicio, fecha_traslado__lte=fin)
     if almacen_f:
         existencias = existencias.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
         movs = movs.filter(Q(almacen=almacen_f) | Q(almacen__isnull=True))
@@ -3488,7 +3527,7 @@ def almacen_stock(request):
 
 @requiere_almacen
 def almacen_entrada_lista(request):
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
     if fecha_str:
         try:
@@ -3498,7 +3537,10 @@ def almacen_entrada_lista(request):
     else:
         fecha = hoy
     almacen_f, multi = _resolver_almacen(request)
-    entradas = AlmacenEntrada.objects.extra(where=["DATE(fecha_entrada) = %s"], params=[fecha]).select_related('producto', 'almacen').order_by('-fecha_entrada')
+    inicio, fin = _rango_fecha_local(fecha)
+    entradas = AlmacenEntrada.objects.filter(
+        fecha_entrada__gte=inicio, fecha_entrada__lte=fin
+    ).select_related('producto', 'almacen').order_by('-fecha_entrada')
     if almacen_f:
         entradas = entradas.filter(almacen=almacen_f)
     resumen = entradas.aggregate(total=Sum('costo_total'), cantidad=Count('id'))
@@ -3643,7 +3685,7 @@ def almacen_entrada_cancelar(request, pk):
 
 @requiere_almacen
 def almacen_traslado_lista(request):
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
     if fecha_str:
         try:
@@ -3653,7 +3695,10 @@ def almacen_traslado_lista(request):
     else:
         fecha = hoy
     almacen_f, multi = _resolver_almacen(request)
-    traslados = AlmacenTraslado.objects.extra(where=["DATE(fecha_traslado) = %s"], params=[fecha]).select_related(
+    inicio, fin = _rango_fecha_local(fecha)
+    traslados = AlmacenTraslado.objects.filter(
+        fecha_traslado__gte=inicio, fecha_traslado__lte=fin
+    ).select_related(
         'producto', 'origen', 'destino_almacen').order_by('-fecha_traslado')
     if almacen_f:
         traslados = traslados.filter(Q(origen=almacen_f) | Q(destino_almacen=almacen_f))
@@ -3767,7 +3812,7 @@ def almacen_traslado_crear(request):
                                     stock.cantidad, request.user, traslado.id,
                                     f'Traslado #{num_traslado} al punto de venta (entrada {num_entrada})',
                                     almacen=origen)
-                _sincronizar_inventario_dia(ahora_servidor().date())
+                _sincronizar_inventario_dia(timezone.localdate())
                 messages.success(
                     request,
                     f'Traslado {num_traslado}: {"%g" % float(cantidad)} {producto.unidad_medida} de {producto.nombre} al punto de venta (entrada {num_entrada} en el IPB, ahora visible en el POS).')
@@ -4102,7 +4147,7 @@ def _get_or_create_stock(producto, almacen):
 def _mapa_caducidad(almacen_f):
     """Peor estado de caducidad por producto: vencido > por_vencer > ok."""
     from .models import DIAS_AVISO_CADUCIDAD
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     limite = hoy + timedelta(days=DIAS_AVISO_CADUCIDAD)
     qs = AlmacenEntrada.objects.filter(fecha_caducidad__isnull=False)
     if almacen_f:
@@ -4441,7 +4486,8 @@ def config_almacen_toggle(request, pk):
 # ============================================================
 @requiere_admin
 def retiro_donacion_lista(request):
-    hoy = ahora_servidor().date()
+    inicio, fin = _rango_fecha_local(fecha)
+    hoy = timezone.localdate()
     fecha_str = request.GET.get('fecha', '')
 
     if fecha_str:
@@ -4453,7 +4499,7 @@ def retiro_donacion_lista(request):
         fecha = hoy
 
     retiros = RetiroDonacion.objects.filter(
-        fecha_retiro__date=fecha
+        fecha_retiro__gte=inicio, fecha_retiro__lte=fin
     ).select_related('producto', 'beneficiario', 'registrado_por').order_by('-fecha_retiro')
 
     q = request.GET.get('q', '').strip()
@@ -4567,7 +4613,7 @@ def retiro_donacion_crear(request):
             retiros_creados.append(f"{producto.nombre} x{cantidad}")
 
         if retiros_creados:
-            _sincronizar_inventario_dia(ahora_servidor().date())
+            _sincronizar_inventario_dia(timezone.localdate())
 
             msg = f"Donación registrada para {beneficiario_nombre}: "
             msg += ", ".join(retiros_creados[:3])
@@ -4603,7 +4649,7 @@ def retiro_donacion_eliminar(request, pk):
         producto.stock += cantidad
         producto.save()
         
-        _sincronizar_inventario_dia(ahora_servidor().date())
+        _sincronizar_inventario_dia(timezone.localdate())
 
         messages.success(request, f'Donación {numero} eliminada. Stock restaurado.')
         return redirect('core:retiro_donacion_lista')
@@ -4623,7 +4669,7 @@ def submayor_detalle(request, producto_id):
     fecha_inicio = request.GET.get('fecha_inicio')
     fecha_fin = request.GET.get('fecha_fin')
     
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     if not fecha_inicio:
         fecha_inicio = (hoy - timedelta(days=30)).strftime('%Y-%m-%d')
     if not fecha_fin:
@@ -4779,7 +4825,7 @@ def _crear_deuda(deudor, tipo, usuario, monto=None, producto=None, cantidad=1, m
             producto, 'deuda', cantidad_base, usuario, deuda.id,
             f'Deuda #{deuda.numero_deuda} - {deudor.nombre_completo}'
         )
-        _sincronizar_inventario_dia(ahora_servidor().date())
+        _sincronizar_inventario_dia(timezone.localdate())
     return deuda
 
 
@@ -4821,6 +4867,7 @@ def deudor_lista(request):
 
 @login_required
 def deuda_lista(request):
+    inicio, fin = _rango_fecha_local(fecha)
     q = request.GET.get('q', '').strip()
     f_desde = (request.GET.get('desde') or '').strip()
     f_hasta = (request.GET.get('hasta') or '').strip()
@@ -5192,7 +5239,7 @@ def deuda_abonar(request, pk):
 @requiere_admin
 def abono_lista(request):
     """Módulo Abonado (Deudas): dinero abonado por día e historial completo."""
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     periodo = request.GET.get('periodo', 'dia')
     if periodo not in ('dia', 'mes', 'ano', 'todos'):
         periodo = 'dia'
@@ -5213,7 +5260,8 @@ def abono_lista(request):
     ).order_by('-fecha', '-id')
 
     if periodo == 'dia':
-        abonos_qs = abonos_qs.extra(where=["DATE(fecha) = %s"], params=[fecha])
+        inicio, fin = _rango_fecha_local(fecha)
+        abonos_qs = abonos_qs.filter(fecha__gte=inicio, fecha__lte=fin)
     elif periodo == 'mes':
         abonos_qs = abonos_qs.filter(fecha__year=fecha.year, fecha__month=fecha.month)
     elif periodo == 'ano':
@@ -5245,7 +5293,10 @@ def abono_lista(request):
         efectivo=Sum('monto', filter=Q(metodo='efectivo')),
         transferencia=Sum('monto', filter=Q(metodo='transferencia')),
     )
-    hoy_agg = AbonoDeuda.objects.extra(where=["DATE(fecha) = %s"], params=[hoy]).aggregate(
+    inicio_hoy, fin_hoy = _rango_fecha_local(hoy)
+    hoy_agg = AbonoDeuda.objects.filter(
+        fecha__gte=inicio_hoy, fecha__lte=fin_hoy
+    ).aggregate(
         total=Sum('monto'),
         cantidad=Count('id'),
         efectivo=Sum('monto', filter=Q(metodo='efectivo')),
@@ -5370,6 +5421,80 @@ def pos_deudor_detalle(request, pk):
         'nombre_display': deudor.nombre_display,
         'ci': deudor.ci or '',
         'saldo': str(sum((Decimal(i['saldo']) for i in items), Decimal('0'))),
+        'deudas': items,
+    })
+
+
+@login_required
+@never_cache
+def pos_deudor_historico(request, pk):
+    """Histórico de deudas de un deudor para el modal flotante del POS.
+
+    Parámetro GET ``filtro``:
+      - ``pendientes`` (por defecto): solo deudas con saldo > 0.
+      - ``dia``: todas las deudas registradas hoy.
+      - ``todas``: todas las deudas.
+    """
+    deudor = get_object_or_404(Deudor, pk=pk)
+    filtro = (request.GET.get('filtro') or 'pendientes').strip().lower()
+    if filtro not in ('pendientes', 'dia', 'todas'):
+        filtro = 'pendientes'
+
+    deudas = (Deuda.objects.filter(deudor=deudor)
+              .select_related('producto', 'presentacion')
+              .prefetch_related('abonos')
+              .order_by('-fecha_registro', '-id'))
+    if filtro == 'dia':
+        # Evita __date (CONVERT_TZ falla en MySQL sin tablas de zona horaria):
+        # acota el día local con un rango de datetimes.
+        hoy = timezone.localdate()
+        inicio = timezone.make_aware(
+            datetime.combine(hoy, datetime.min.time()),
+            timezone.get_current_timezone())
+        deudas = deudas.filter(fecha_registro__gte=inicio,
+                               fecha_registro__lt=inicio + timedelta(days=1))
+
+    items = []
+    total_monto = Decimal('0')
+    total_saldo = Decimal('0')
+    pendientes_count = 0
+    for d in deudas:
+        _resumen_deuda(d)
+        if filtro == 'pendientes' and d.calc_saldo <= 0:
+            continue
+        if d.calc_saldo > 0:
+            pendientes_count += 1
+        total_monto += d.monto
+        total_saldo += max(d.calc_saldo, Decimal('0'))
+        fecha_local = (timezone.localtime(d.fecha_registro)
+                       if timezone.is_aware(d.fecha_registro) else d.fecha_registro)
+        items.append({
+            'id': d.id,
+            'numero': d.numero_deuda,
+            'tipo': d.tipo,
+            'fecha': fecha_local.strftime('%d/%m/%Y'),
+            'hora': fecha_local.strftime('%H:%M'),
+            'fecha_iso': fecha_local.strftime('%Y-%m-%d'),
+            'monto': str(d.monto),
+            'abonado': str(d.calc_abonado),
+            'saldo': str(d.calc_saldo),
+            'estado': 'pagada' if d.calc_pagada else 'pendiente',
+            'productos': d.motivo_display,
+            'motivo': d.motivo,
+            'producto': d.producto.nombre if d.producto_id and d.producto else '',
+            'presentacion': d.presentacion_nombre,
+        })
+
+    return JsonResponse({
+        'id': deudor.id,
+        'nombre_completo': deudor.nombre_completo,
+        'alias': deudor.alias,
+        'nombre_display': deudor.nombre_display,
+        'filtro': filtro,
+        'total': len(items),
+        'pendientes_count': pendientes_count,
+        'total_monto': str(total_monto),
+        'total_saldo': str(total_saldo),
         'deudas': items,
     })
 
@@ -5621,7 +5746,7 @@ def ajuste_inventario(request):
             usuario=request.user,
         )
         
-        hoy = ahora_servidor().date()
+        hoy = timezone.localdate()
         inventario_hoy = InventarioDiario.objects.filter(
             fecha=hoy,
             producto=producto
@@ -6322,7 +6447,7 @@ def mi_panel(request):
         messages.warning(request, 'Tu usuario no tiene ficha de empleado.')
         return redirect('core:pos')
     turno = empleado.turno_abierto
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     ventas_hoy = Venta.objects.filter(
         cajero=request.user, fecha_venta__date=hoy, cancelada=False
     ).order_by('-fecha_venta')[:20]
@@ -6905,7 +7030,7 @@ def arqueos_admin(request):
     fecha_str = request.GET.get('fecha', '')
     empleado_filtro = request.GET.get('empleado', '')
     periodo = request.GET.get('periodo', 'todos')
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     if fecha_str:
         try:
             fecha = timezone.datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -7041,7 +7166,7 @@ def _aplicar_ajuste_producto(producto, nuevo_stock, descripcion, usuario):
         descripcion=descripcion,
         usuario=usuario,
     )
-    hoy = ahora_servidor().date()
+    hoy = timezone.localdate()
     inv = InventarioDiario.objects.filter(fecha=hoy, producto=producto).first()
     if inv:
         if not inv.cerrado:
