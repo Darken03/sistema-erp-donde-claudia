@@ -900,6 +900,30 @@ const URL_MOSTRADOR_PUSH = '{% url "core:pos_mostrador_empujar" %}';
 const URL_MOSTRADOR_CLEAR = '{% url "core:pos_mostrador_limpiar" %}';
 const CSRF_TOKEN = '{{ csrf_token }}';
 
+/* Blindaje anti-caché: TODAS las lecturas JSON del POS pasan por aquí.
+   Las tablets (Safari/iOS) pueden servir GET "heurísticamente" desde caché y
+   dejar saldos/ventas/catálogo atrasados aunque la BD ya esté actualizada.
+   `cache:'no-store'` + un parámetro único fuerzan al navegador a pedir datos
+   nuevos siempre. No usar fetch directo para GET en este archivo. */
+function posFetchJSON(url, opts){
+  opts = opts || {};
+  const sep = String(url).indexOf('?') >= 0 ? '&' : '?';
+  const headers = Object.assign({'X-CSRFToken':CSRF_TOKEN}, opts.headers || {});
+  return fetch(String(url) + sep + '_cb=' + Date.now(),
+    Object.assign({}, opts, {cache:'no-store', headers:headers}));
+}
+
+/* Refresco central: cualquier operación que cambie datos del POS (venta,
+   abono, deuda, gasto, donación, sync offline, volver al POS) llama aquí.
+   Así no se puede olvidar actualizar un panel al agregar uno nuevo. */
+async function refrescarPos(opts){
+  opts = opts || {};
+  const tareas = [cargarMisVentas, refreshCatalog, buscarProductos, cargarDeudores];
+  if (opts.deudorId != null) tareas.push(()=>seleccionarDeudor(opts.deudorId, true));
+  if (opts.historico) tareas.push(()=>cargarHistoricoDeudas(true));
+  await Promise.allSettled(tareas.map(fn => Promise.resolve().then(fn)));
+}
+
 const LS_CART = 'bizm_cart_v1', LS_QUEUE = 'bizm_offline_queue_v1', LS_CATALOG = 'bizm_products_cache_v1';
 const EMPTY_CART_HTML = '<div class="pos-empty"><i class="bi bi-cart-x"></i><p>Carrito vacío</p><small>Haz clic en un producto para agregarlo</small></div>';
 
@@ -941,7 +965,7 @@ function saveCart(){ try { localStorage.setItem(LS_CART, JSON.stringify(cart)); 
 async function pingBackend(){
   try {
     const c = new AbortController(); const t = setTimeout(()=>c.abort(), 2500);
-    const r = await fetch(URL_PING, {headers:{'X-CSRFToken':CSRF_TOKEN}, signal:c.signal});
+    const r = await posFetchJSON(URL_PING, {signal:c.signal});
     clearTimeout(t);
     return r.ok;
   } catch(e){ return false; }
@@ -973,8 +997,19 @@ setInterval(refreshOnlineState, 15000);
 async function refreshCatalog(){
   if (!isOnline) return;
   try {
-    const r = await fetch(URL_CATALOGO, {headers:{'X-CSRFToken':CSRF_TOKEN}});
-    if (r.ok) { const d = await r.json(); localStorage.setItem(LS_CATALOG, JSON.stringify({at:Date.now(), data:d})); }
+    const r = await posFetchJSON(URL_CATALOGO);
+    if (r.ok) {
+      const d = await r.json();
+      localStorage.setItem(LS_CATALOG, JSON.stringify({at:Date.now(), data:d}));
+      // El mini-POS de deudas nace de un JSON renderizado al cargar la página;
+      // sin esto su stock se queda atrasado tras registrar deuda/donación.
+      if (Array.isArray(deuProductos) && Array.isArray(d.productos)){
+        const stock = {};
+        d.productos.forEach(p=>{ stock[String(p.id)] = p.stock; });
+        deuProductos.forEach(p=>{ if (stock[String(p.id)] != null) p.stock = stock[String(p.id)]; });
+        deuRenderListaProductos('');
+      }
+    }
   } catch(e){}
 }
 
@@ -1310,7 +1345,7 @@ async function syncOfflineQueue(manual){
   setQueue(rest); syncing = false;
   if (ok) toast(ok + ' venta(s) offline sincronizada(s)', 'success');
   if (fail) toast(fail + ' venta(s) con error (revisar stock)', 'danger');
-  buscarProductos(); cargarMisVentas();
+  refrescarPos();
 }
 $('btnSync').addEventListener('click', ()=>syncOfflineQueue(true));
 
@@ -1486,7 +1521,7 @@ $('catSearch').addEventListener('input', function(){
 /* ---------- mis ventas ---------- */
 async function cargarMisVentas(){
   try {
-    const r = await fetch(URL_MISVENTAS, {headers:{'X-CSRFToken':CSRF_TOKEN}});
+    const r = await posFetchJSON(URL_MISVENTAS);
     const d = await r.json();
     setTxt('resumenDiaTotal', money(d.resumen.total));
     setTxt('resumenDiaCantidad', d.resumen.cantidad + ' venta' + (d.resumen.cantidad!==1?'s':''));
@@ -1507,7 +1542,7 @@ async function cargarMisVentas(){
 /* ---------- entradas del día (solo consulta, sin costos) ---------- */
 async function cargarMisEntradas(){
   try {
-    const r = await fetch(URL_MISENTRADAS, {headers:{'X-CSRFToken':CSRF_TOKEN}});
+    const r = await posFetchJSON(URL_MISENTRADAS);
     const d = await r.json();
     setTxt('resumenEntradasCantidad', d.resumen.cantidad + ' entrada' + (d.resumen.cantidad!==1?'s':''));
     setTxt('misEntradasNota', d.desde_turno ? 'Mercancía recibida desde que abrió tu turno.' : 'Mercancía recibida hoy.');
@@ -1567,7 +1602,7 @@ $('gastoForm').addEventListener('submit', async function(e){
   if (!deuLockBtn(btn, true, 'Registrando...')) return;
   try {
     const r = await fetch('{% url "core:pos_registrar_gasto" %}', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF_TOKEN}, body:JSON.stringify(data)});
-    if (r.ok){ deuHidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); }
+    if (r.ok){ deuHidePosModal('registrarGastoModal'); this.reset(); $('gastoEfectivo').value=SIMBOLO + '0'; $('gastoTransferencia').value=SIMBOLO + '0'; toast('Gasto registrado','success'); refrescarPos(); }
     else { const j = await r.json(); toast(j.error||'Error al registrar gasto','danger'); }
   } catch(err){ toast('Error al registrar gasto','danger'); }
   finally { deuLockBtn(btn, false); }
@@ -1594,7 +1629,7 @@ async function deuFetch(url, data){
 async function cargarDeudores(){
   const q = ($('deudaBuscar') && $('deudaBuscar').value || '').trim();
   try {
-    const r = await fetch(URL_DEUDORES + '?q=' + encodeURIComponent(q));
+    const r = await posFetchJSON(URL_DEUDORES + '?q=' + encodeURIComponent(q));
     const j = await r.json();
     const list = (j.deudores || []);
     $('deudaLista').innerHTML = list.map(d=>
@@ -1611,7 +1646,7 @@ async function cargarDeudores(){
 
 async function seleccionarDeudor(id, silencioso){
   try {
-    const r = await fetch(URL_DEUDOR_DET.replace('DEUID', id), {headers:{'X-CSRFToken':CSRF_TOKEN}, cache:'no-store'});
+    const r = await posFetchJSON(URL_DEUDOR_DET.replace('DEUID', id));
     const d = await r.json();
     if (!r.ok || d.id == null){ if (!silencioso) toast(d.error||'Deudor no encontrado','danger'); return null; }
     deuSelec = d;
@@ -1662,8 +1697,7 @@ async function cargarHistoricoDeudas(silencioso){
   if (!body) return;
   if (!silencioso) body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
   try {
-    const r = await fetch(URL_DEUDOR_HIST.replace('DEUID', histDeudorId) + '?filtro=' + encodeURIComponent(histFiltro),
-      {headers:{'X-CSRFToken':CSRF_TOKEN}, cache:'no-store'});
+    const r = await posFetchJSON(URL_DEUDOR_HIST.replace('DEUID', histDeudorId) + '?filtro=' + encodeURIComponent(histFiltro));
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo cargar el histórico');
     setTxt('deuHistNombre', j.nombre_display || j.nombre_completo || '');
@@ -1972,13 +2006,16 @@ async function registrarDeudaPOS(){
     items: deuCarrito.map(l=>({producto_id: l.id, presentacion_id: l.presId, cantidad: l.cantidad}))
   };
   try {
+    const deudorId = deuSelec.id;
     const j = await deuFetch(URL_DEUDA_CREAR, payload);
+    if (j.saldo_deudor != null) deuSelec.saldo = j.saldo_deudor;
     toast((j.count || 1) + ' deuda(s) registradas — ' + SIMBOLO + Math.round(Number(j.monto)), 'success');
     deuCarrito = []; deuDineros = [];
     if ($('deuFechaPago')) $('deuFechaPago').value = '';
     deuRenderCarrito();
     deuHidePosModal('registrarDeudaModal');
-    if (typeof buscarProductos === 'function') buscarProductos();
+    // Refresco central: saldo, deudas pendientes, listado, stock y ventas.
+    await refrescarPos({deudorId:deudorId, historico: histDeudorId != null});
   } catch(e){ toast(e.message,'danger'); }
   finally { const b = $('deuRegistrarBtn'); if (b) b.disabled = false; }
 }
@@ -1988,6 +2025,7 @@ async function liquidarDeudaPOS(){
   if (!deuSelec){ toast('Seleccione un deudor','warning'); return; }
   if (!deuLockBtn($('deuAbonarBtn'), true, 'Aplicando...')) return;
   try {
+    const deudorId = deuSelec.id;
     const j = await deuFetch(URL_DEUDA_ABONAR, {
       deudor_id: deuSelec.id,
       monto: ($('deuAbonoMonto') && $('deuAbonoMonto').value) || '',
@@ -2005,13 +2043,9 @@ async function liquidarDeudaPOS(){
         $('deuStep2Saldo').className = 'mono ' + (Number(j.saldo_deudor) > 0 ? 'text-danger' : 'text-success');
       }
     }
-    // refrescar deudas y la lista de deudores (saldos)
-    try { await seleccionarDeudor(deuSelec.id); } catch(e){}
-    try { await cargarDeudores(); } catch(e){}
-    if (histDeudorId != null && typeof cargarHistoricoDeudas === 'function'){
-      try { await cargarHistoricoDeudas(true); } catch(e){}
-    }
     deuHidePosModal('deudaAbonarModal');
+    // Refresco central: deudor, pendientes, listado, histórico, stock y ventas.
+    await refrescarPos({deudorId:deudorId, historico: histDeudorId != null});
   } catch(e){ toast(e.message,'danger'); }
   finally { deuLockBtn($('deuAbonarBtn'), false); }
 }
@@ -2196,7 +2230,7 @@ $('donacionForm').addEventListener('submit', async function(e){
     donLineas = []; donRenderLineas();
     $('donProdSearch').value = ''; $('donBeneficiario').value = ''; $('donMotivo').value = '';
     toast(j.message || 'Donación registrada','success');
-    if (typeof buscarProductos === 'function') buscarProductos();
+    refrescarPos();
   } catch(err){ toast(err.message || 'Error al registrar donación','danger'); }
   finally { deuLockBtn(btn, false); }
 });
@@ -2264,5 +2298,9 @@ function avisarMostrador(mensaje){
 /* ---------- init ---------- */
 paintPosThemeIcon();
 renderCart(); updateMontoDisplay(); cargarMisVentas(); cargarMisEntradas(); updateOfflineUI(); refreshOnlineState(); refreshCatalog();
+/* Al volver al POS desde el historial (bfcache) o al despertar la tablet,
+   recargar todo: una pantalla restaurada mostraba saldos de la visita anterior. */
+window.addEventListener('pageshow', function(e){ if (e.persisted) refrescarPos(); });
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && isOnline) refrescarPos(); });
 </script>
 {% endblock %}

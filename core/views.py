@@ -1775,9 +1775,7 @@ def _limpiar_ids(nodo):
 
 
 @login_required
-
-
-@login_required
+@never_cache
 def pos_buscar_codigo(request):
     """Busca un producto por código de barras exacto para el escáner del POS."""
     codigo = (request.POST.get('codigo') or request.GET.get('codigo') or '').strip()
@@ -2038,6 +2036,7 @@ def pos_ping(request):
 
 
 @login_required
+@never_cache
 def pos_catalogo(request):
     """Catálogo completo para cache offline del POS (productos + categorías).
 
@@ -3002,6 +3001,7 @@ def pos_mis_gastos(request):
 
 
 @login_required
+@never_cache
 def pos_mis_entradas(request):
     """Entradas de mercancía del día/turno para consulta de la dependienta.
 
@@ -5508,6 +5508,7 @@ def deuda_eliminar(request, pk):
 # POS - DEUDORES Y DEUDAS (solo online)
 # ============================================================
 @login_required
+@never_cache
 def pos_deudores(request):
     q = request.GET.get('q', '').strip()
     deudores = Deudor.objects.filter(activo=True).prefetch_related('deudas__abonos').order_by('nombre', 'apellido')
@@ -5534,6 +5535,7 @@ def pos_deudores(request):
 
 
 @login_required
+@never_cache
 def pos_deudor_detalle(request, pk):
     deudor = get_object_or_404(Deudor.objects.prefetch_related('deudas__abonos', 'deudas__producto', 'deudas__presentacion'), pk=pk)
     deudas = sorted(deudor.deudas.all(), key=lambda d: (d.fecha_registro, d.id))
