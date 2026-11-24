@@ -195,4 +195,29 @@
     </ul>
 </nav>
 {% endif %}
+
+<script>
+/* El listado siempre debe mostrar datos frescos. Al volver de crear,
+   editar o borrar, el navegador puede restaurar esta página desde su caché
+   (bfcache) y el usuario ve la lista antigua hasta pulsar F5. La vista ya
+   envía no-store; esto cubre además la restauración desde historial. */
+(function(){
+    var CLAVE = 'bizm_productos_listado_visto';
+    function leer(){
+        try { return Number(sessionStorage.getItem(CLAVE) || 0); }
+        catch(e){ return 0; }
+    }
+    function recargarSiAusente(){
+        var desde = leer();
+        if (desde && Date.now() - desde > 30000) location.reload();
+    }
+    try { sessionStorage.setItem(CLAVE, String(Date.now())); } catch(e){}
+    window.addEventListener('pageshow', function(e){
+        if (e.persisted) location.reload();
+    });
+    document.addEventListener('visibilitychange', function(){
+        if (!document.hidden) recargarSiAusente();
+    });
+})();
+</script>
 {% endblock %}

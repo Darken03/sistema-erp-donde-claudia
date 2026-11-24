@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, IntegrityError, transaction
 from django.db.models import Sum, Count
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
@@ -360,19 +360,40 @@ class Producto(models.Model):
 
     @classmethod
     def generar_codigo(cls):
-        ultimo = cls.objects.order_by('-id').first()
-        if ultimo and ultimo.codigo and ultimo.codigo.startswith('PRD-'):
-            try:
-                num = int(ultimo.codigo.split('-')[-1])
-                return f"PRD-{num + 1:04d}"
-            except (ValueError, IndexError):
-                pass
-        return "PRD-0001"
+        """Siguiente código PRD- libre.
+
+        Se calcula sobre el MAYOR número ya usado, no sobre el producto con
+        mayor id. Tras borrados, reingresos o códigos escritos a mano, el
+        último id puede tener un código menor que otro registro (ej. existe
+        PRD-0350 con id menor y PRD-0349 con el id mayor) y el cálculo
+        anterior devolvía PRD-0350 otra vez: Duplicate entry en la BD.
+        """
+        max_num = 0
+        codigos = cls.objects.filter(
+            codigo__startswith='PRD-').values_list('codigo', flat=True)
+        for codigo in codigos:
+            sufijo = str(codigo or '')[4:]
+            if sufijo.isdigit():
+                max_num = max(max_num, int(sufijo))
+        return f"PRD-{max_num + 1:04d}"
 
     def save(self, *args, **kwargs):
-        if not self.codigo:
+        if self.codigo:
+            super().save(*args, **kwargs)
+            return
+        # Dos altas simultáneas pueden calcular el mismo número. Si MySQL
+        # rechaza el duplicado, se recalcula contra lo ya guardado y se
+        # reintenta en vez de dejar un error 500 al usuario.
+        for _ in range(10):
             self.codigo = self.generar_codigo()
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                self.codigo = None
+        raise IntegrityError(
+            'No se pudo asignar un código de producto único. Intente de nuevo.')
 
 
 class PresentacionProducto(models.Model):

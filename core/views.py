@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -305,6 +305,7 @@ def dashboard(request):
 # PRODUCTOS
 # ============================================================
 @requiere_admin
+@never_cache
 def productos_codigos_barras(request):
     """Alta masiva de códigos de barras: lista todos los productos y guarda los códigos.
 
@@ -359,7 +360,14 @@ def productos_codigos_barras(request):
 
 
 @requiere_admin
+@never_cache
 def producto_lista(request):
+    """Listado de administración: siempre datos frescos.
+
+    Sin no-store el navegador puede servir la página desde su caché (o
+    restaurarla desde bfcache) al volver de crear/editar/borrar, y el
+    usuario ve la lista vieja hasta que pulsa F5.
+    """
     productos = Producto.objects.select_related('categoria').order_by('nombre')
     query = request.GET.get('q')
     categoria_id = request.GET.get('categoria')
@@ -400,12 +408,14 @@ def producto_lista(request):
 
 
 @requiere_admin
+@never_cache
 def producto_detalle(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
     return render(request, 'core/producto_detalle.html', {'producto': producto})
 
 
 @requiere_admin
+@never_cache
 def producto_crear(request):
     def _next_seguro(valor):
         if not valor:
@@ -423,31 +433,42 @@ def producto_crear(request):
     if request.method == 'POST':
         form = ProductoForm(request.POST, request.FILES)
         if form.is_valid():
-            producto = form.save()
-            if desde_almacen:
-                # Nace solo en almacén: sin stock en el POS e invisible
-                # hasta su primer traslado. La mercancía entra vía Entrada.
-                producto.stock = Decimal('0')
-                producto.visible_pos = False
-                producto.save(update_fields=['stock', 'visible_pos'])
-                messages.info(
-                    request,
-                    f'{producto.nombre} nace solo en el almacén (sin stock en el POS). '
-                    'Regístrele una Entrada y trasládelo para publicarlo.')
+            try:
+                producto = form.save()
+            except IntegrityError:
+                # Red de seguridad: si otro usuario tomó el mismo código
+                # entre la validación y el guardado, mostrar un error en el
+                # formulario en vez de una pantalla de error 500.
+                form.add_error(
+                    'codigo',
+                    'No se pudo asignar un código único. Intente guardar de '
+                    'nuevo o escriba un código diferente.')
+                formset = PresentacionFormSet(request.POST)
             else:
-                producto.visible_pos = True
-                producto.save(update_fields=['visible_pos'])
-            formset = PresentacionFormSet(request.POST, instance=producto)
-            if formset.is_valid():
-                formset.save()
-                _asegurar_presentacion_default(producto)
-            else:
-                _asegurar_presentacion_default(producto)
-                messages.warning(request, 'Producto creado, pero revise las presentaciones.')
-            if next_url:
-                sep = '&' if '?' in next_url else '?'
-                return redirect(f'{next_url}{sep}producto={producto.pk}')
-            return redirect('core:producto_lista')
+                if desde_almacen:
+                    # Nace solo en almacén: sin stock en el POS e invisible
+                    # hasta su primer traslado. La mercancía entra vía Entrada.
+                    producto.stock = Decimal('0')
+                    producto.visible_pos = False
+                    producto.save(update_fields=['stock', 'visible_pos'])
+                    messages.info(
+                        request,
+                        f'{producto.nombre} nace solo en el almacén (sin stock en el POS). '
+                        'Regístrele una Entrada y trasládelo para publicarlo.')
+                else:
+                    producto.visible_pos = True
+                    producto.save(update_fields=['visible_pos'])
+                formset = PresentacionFormSet(request.POST, instance=producto)
+                if formset.is_valid():
+                    formset.save()
+                    _asegurar_presentacion_default(producto)
+                else:
+                    _asegurar_presentacion_default(producto)
+                    messages.warning(request, 'Producto creado, pero revise las presentaciones.')
+                if next_url:
+                    sep = '&' if '?' in next_url else '?'
+                    return redirect(f'{next_url}{sep}producto={producto.pk}')
+                return redirect('core:producto_lista')
         else:
             formset = PresentacionFormSet(request.POST)
     else:
@@ -494,6 +515,7 @@ def _asegurar_presentacion_default(producto):
 
 
 @requiere_admin
+@never_cache
 def producto_editar(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
     # Nombre en BD antes de que el form mutara la instancia (para borrar
@@ -781,6 +803,7 @@ def _eliminar_producto_en_cascada(producto):
 
 
 @requiere_admin
+@never_cache
 def producto_eliminar(request, pk):
     """Borrado en 2 pasos:
 
