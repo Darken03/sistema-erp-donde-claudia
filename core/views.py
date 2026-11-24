@@ -387,19 +387,10 @@ def producto_lista(request):
     if categoria_id:
         productos = productos.filter(categoria_id=categoria_id)
 
-    # Existencia total en almacenes para revisarla desde el listado.
-    # Se suman todas las filas de AlmacenStock del producto (incluida la
-    # legacy con almacén NULL). El default evita el None en quien no tiene.
-    productos = productos.annotate(
-        almacen_total=Sum('almacen_stock__cantidad', default=Decimal('0')))
-
     # Paginado: solo los primeros 20 productos por página.
     # Los filtros (q, categoria, riesgo) se conservan en los enlaces.
     paginator = Paginator(productos, 20)
     page_obj = paginator.get_page(request.GET.get('page'))
-    for p in page_obj:
-        p.almacen_total_fmt = fmt_cantidad_unidad(
-            p.almacen_total, p.unidad_medida)
     params = request.GET.copy()
     params.pop('page', None)
     qs = params.urlencode()
@@ -420,6 +411,12 @@ def producto_lista(request):
 @never_cache
 def producto_detalle(request, pk):
     producto = get_object_or_404(Producto, pk=pk)
+    # Existencia total en almacenes (suma de todos, incluida la fila legacy
+    # con almacén NULL). Solo se muestra aquí, no en el listado.
+    total = producto.almacen_stock.aggregate(
+        total=Sum('cantidad'))['total'] or Decimal('0')
+    producto.almacen_total_fmt = fmt_cantidad_unidad(
+        total, producto.unidad_medida)
     return render(request, 'core/producto_detalle.html', {'producto': producto})
 
 

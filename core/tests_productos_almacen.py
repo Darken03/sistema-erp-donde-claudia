@@ -1,4 +1,4 @@
-"""Regresión: el listado de productos muestra la existencia total en almacén."""
+"""Regresión: la existencia total en almacén se ve solo en el detalle del producto."""
 
 from decimal import Decimal
 
@@ -9,7 +9,7 @@ from django.urls import reverse
 from .models import Almacen, AlmacenStock, Producto
 
 
-class ProductoListaExistenciaAlmacenTest(TestCase):
+class ProductoExistenciaAlmacenTest(TestCase):
     def setUp(self):
         u = User.objects.create_user(username='admin-almacen', password='x')
         u.perfil.rol = 'admin'
@@ -29,24 +29,24 @@ class ProductoListaExistenciaAlmacenTest(TestCase):
         AlmacenStock.objects.create(
             producto=self.con, almacen=a2, cantidad=Decimal('5.500'))
 
-    def test_listado_suma_las_existencias_de_todos_los_almacenes(self):
-        r = self.client.get(reverse('core:producto_lista'))
+    def test_detalle_muestra_el_total_de_todos_los_almacenes(self):
+        r = self.client.get(
+            reverse('core:producto_detalle', args=[self.con.pk]))
         self.assertEqual(r.status_code, 200)
-        filas = {p.pk: p for p in r.context['productos']}
-        self.assertEqual(filas[self.con.pk].almacen_total, Decimal('15.500'))
-        self.assertEqual(filas[self.con.pk].almacen_total_fmt, '15.5 (lb)')
-        self.assertEqual(filas[self.sin.pk].almacen_total, Decimal('0'))
-        self.assertEqual(filas[self.sin.pk].almacen_total_fmt, '0')
-        self.assertContains(r, 'Existencia en almacén')
+        self.assertEqual(
+            r.context['producto'].almacen_total_fmt, '15.5 (lb)')
+        self.assertContains(r, 'Existencia en almacén (total)')
         self.assertContains(r, '15.5 (lb)')
 
-    def test_el_total_se_mantiene_al_buscar_y_al_filtrar(self):
-        for url in (reverse('core:producto_lista') + '?q=Cerdo',
-                    reverse('core:producto_lista') + '?q=PRD-0001'):
-            with self.subTest(url=url):
-                r = self.client.get(url)
-                self.assertEqual(r.status_code, 200)
-                filas = list(r.context['productos'])
-                self.assertEqual(len(filas), 1)
-                self.assertEqual(filas[0].pk, self.con.pk)
-                self.assertEqual(filas[0].almacen_total, Decimal('15.500'))
+    def test_detalle_muestra_cero_cuando_no_hay_existencias(self):
+        r = self.client.get(
+            reverse('core:producto_detalle', args=[self.sin.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context['producto'].almacen_total_fmt, '0')
+        self.assertContains(r, 'Existencia en almacén (total)')
+
+    def test_listado_no_muestra_la_columna_de_almacen(self):
+        r = self.client.get(reverse('core:producto_lista'))
+        self.assertEqual(r.status_code, 200)
+        self.assertNotContains(r, 'Existencia en almacén')
+        self.assertNotContains(r, '15.5 (lb)')
