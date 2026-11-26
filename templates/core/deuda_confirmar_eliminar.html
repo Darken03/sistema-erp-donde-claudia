@@ -14,6 +14,12 @@
             <p><strong>Deudor:</strong> {{ deuda.deudor.nombre_completo }} ({{ deuda.deudor.ci|default:'sin CI' }})</p>
             <p><strong>Monto:</strong> ${{ deuda.monto|floatformat:2 }}</p>
             {% if deuda.motivo_display != '-' %}<p><strong>Motivo:</strong> {{ deuda.motivo_display }}</p>{% endif %}
+            {% if deuda.tipo == 'producto' and deuda.producto %}
+            <p class="mb-0 text-success"><i class="bi bi-arrow-return-left me-1"></i>
+                Se devolverán <strong>{{ deuda.cantidad_base|floatformat:3 }} {{ deuda.producto.unidad_medida }}</strong>
+                al stock de <strong>{{ deuda.producto.nombre }}</strong>.
+            </p>
+            {% endif %}
         </div>
         <form method="post">
             {% csrf_token %}

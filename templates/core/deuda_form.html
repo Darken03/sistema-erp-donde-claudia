@@ -379,14 +379,42 @@
 {% else %}
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
-        <form method="post" id="deudaForm">
+        <form method="post" id="deudaFormEditar">
             {% csrf_token %}
             <div class="alert alert-info">
                 <strong>{{ deuda.numero_deuda }}</strong> · {{ deuda.deudor.nombre_display }} ·
-                {% if deuda.tipo == 'producto' %}Producto: {{ deuda.producto.nombre }}{% if deuda.presentacion %} ({{ deuda.cantidad }} x {{ deuda.presentacion.nombre }}){% else %} x{{ deuda.cantidad }}{% endif %}{% else %}Dinero{% endif %} ·
-                Monto: ${{ deuda.monto|floatformat:2 }} · Abonado: ${{ deuda.calc_abonado|floatformat:2 }}
+                {% if deuda.tipo == 'producto' %}Producto{% else %}Dinero{% endif %} ·
+                Monto actual: ${{ deuda.monto|floatformat:2 }} · Abonado: ${{ deuda.calc_abonado|floatformat:2 }}
             </div>
-            {% if deuda.tipo == 'dinero' and deuda.calc_abonado <= 0 %}
+
+            {% if deuda.tipo == 'producto' %}
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Producto *</label>
+                    <select name="producto" id="editProducto" class="form-select">
+                        {% for p in productos %}
+                        <option value="{{ p.pk }}" {% if deuda.producto_id == p.pk %}selected{% endif %}>{{ p.codigo }} · {{ p.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Presentación</label>
+                    <select name="presentacion" id="editPresentacion" class="form-select"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Cantidad *</label>
+                    <input type="number" name="cantidad" id="editCantidad" class="form-control text-end"
+                           step="0.001" min="0.001" value="{{ deuda.cantidad }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Nuevo monto</label>
+                    <input type="text" id="editMontoCalc" class="form-control text-end fw-bold mono-big" readonly>
+                </div>
+                <div class="col-12">
+                    <div class="form-text">Al guardar se devuelve el stock de la deuda anterior y se descuenta la nueva cantidad.</div>
+                </div>
+            </div>
+            {% else %}
             <div class="mb-3">
                 <label class="form-label">Monto *</label>
                 <div class="input-group">
@@ -395,9 +423,11 @@
                 </div>
             </div>
             {% endif %}
-            <div class="mb-3">
-                <label class="form-label">Motivo {% if deuda %} {% else %}<span class="text-muted">(en producto se genera solo: ej. "2 x Botella de Agua")</span>{% endif %}</label>
-                <input type="text" name="motivo" class="form-control" value="{{ deuda.motivo|default:'' }}" placeholder="Ej: préstamo en efectivo, 2 x Botella de Agua...">
+
+            <div class="mb-3 mt-3">
+                <label class="form-label">Motivo / nota adicional</label>
+                <input type="text" name="motivo" class="form-control" value="{{ deuda.motivo|default:'' }}" placeholder="Nota opcional">
+                {% if deuda.tipo == 'producto' %}<div class="form-text">La descripción del producto y la cantidad se generan automáticamente.</div>{% endif %}
             </div>
             <div class="mb-3">
                 <label class="form-label">Fecha de Pago (opcional)</label>
@@ -405,7 +435,7 @@
             </div>
             <hr>
             <div class="d-flex gap-2 justify-content-end">
-                <a href="{% if deuda %}{% url 'core:deudor_detalle' deuda.deudor.pk %}{% else %}{% url 'core:deuda_lista' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
+                <a href="{% url 'core:deudor_detalle' deuda.deudor.pk %}" class="btn btn-outline-secondary">Cancelar</a>
                 <button type="submit" class="btn btn-success px-4">
                     <i class="bi bi-check-lg me-1"></i> Guardar
                 </button>
@@ -413,5 +443,54 @@
         </form>
     </div>
 </div>
+
+{% if deuda.tipo == 'producto' %}
+<script id="deudaProductosEdit" type="application/json">[{% for p in productos %}{"id":{{ p.id }},"nombre":"{{ p.nombre|escapejs }}","precio":{{ p.precio_venta }},"presentaciones":[{% for pr in p.presentaciones.all %}{% if pr.activo %}{"id":{{ pr.id }},"nombre":"{{ pr.nombre|escapejs }}","factor":"{{ pr.factor }}","precio":"{{ pr.precio }}","def":{% if pr.es_default %}1{% else %}0{% endif %}}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}]}{% if not forloop.last %},{% endif %}{% endfor %}]</script>
+<script>
+(function(){
+    var el = document.getElementById('deudaProductosEdit');
+    var prodSel = document.getElementById('editProducto');
+    if (!el || !prodSel) return;
+    var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+    var data = [];
+    try { data = JSON.parse(el.textContent || '[]'); } catch(e){ data = []; }
+    var presSel = document.getElementById('editPresentacion');
+    var cant = document.getElementById('editCantidad');
+    var monto = document.getElementById('editMontoCalc');
+    var presActual = '{{ deuda.presentacion_id|default_if_none:"" }}';
+
+    function prodActual(){
+        return (data || []).find(function(x){ return String(x.id) === String(prodSel.value); });
+    }
+    function presDeProducto(p){
+        var arr = (p && p.presentaciones) || [];
+        if (!arr.length) arr = [{id:'', nombre:'Unidad', factor:'1', precio: (p && p.precio) || 0, def:1}];
+        return arr;
+    }
+    function calcular(){
+        var p = prodActual();
+        var arr = presDeProducto(p);
+        var pr = arr.find(function(x){ return String(x.id) === String(presSel.value); }) || arr[0];
+        var factor = parseFloat(pr && pr.factor) || 1;
+        var precio = parseFloat(pr && pr.precio) || 0;
+        var cantidad = parseFloat(cant && cant.value) || 0;
+        if (monto) monto.value = '$' + (precio * cantidad).toFixed(2);
+    }
+    function actualizarPresentaciones(){
+        var arr = presDeProducto(prodActual());
+        presSel.innerHTML = arr.map(function(pr){
+            var pid = (pr.id == null || pr.id === '') ? '' : pr.id;
+            return '<option value="' + esc(pid) + '"' + (String(pid) === String(presActual) ? ' selected' : '') + '>' + esc(pr.nombre) + ' · $' + esc(pr.precio) + '</option>';
+        }).join('');
+        presActual = '';
+        calcular();
+    }
+    prodSel.addEventListener('change', actualizarPresentaciones);
+    presSel.addEventListener('change', calcular);
+    cant.addEventListener('input', calcular);
+    actualizarPresentaciones();
+})();
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

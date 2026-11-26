@@ -5033,6 +5033,17 @@ def _parse_fecha_pago(valor):
         return None
 
 
+def _motivo_auto_deuda(cantidad, presentacion, producto):
+    """Descripción automática de una deuda de producto (igual que al crear)."""
+    try:
+        c = Decimal(str(cantidad))
+        s = format(c.quantize(Decimal('0.001')).normalize(), 'f')
+    except Exception:
+        s = str(cantidad)
+    pres_txt = presentacion.nombre if presentacion else 'Unidad'
+    return f"{s} x {pres_txt} - {producto.nombre}"
+
+
 @login_required
 def deudor_lista(request):
     q = request.GET.get('q', '').strip()
@@ -5372,28 +5383,139 @@ def deuda_crear(request):
 
 @login_required
 def deuda_editar(request, pk):
-    deuda = get_object_or_404(Deuda.objects.select_related('deudor', 'producto').prefetch_related('abonos'), pk=pk)
+    """Edita una deuda. En las de producto devuelve el stock que ocupaba y
+    vuelve a descontar el nuevo valor, para que el inventario quede como
+    corresponde a la deuda ya editada."""
+    from .models import PresentacionProducto
+
+    deuda = get_object_or_404(
+        Deuda.objects.select_related('deudor', 'producto', 'presentacion')
+        .prefetch_related('abonos'), pk=pk)
     _resumen_deuda(deuda)
+    productos = (Producto.objects.filter(activo=True)
+                 .select_related('categoria').prefetch_related('presentaciones')
+                 .order_by('nombre'))
 
     if request.method == 'POST':
-        deuda.motivo = request.POST.get('motivo', '').strip()
-        deuda.fecha_pago = _parse_fecha_pago(request.POST.get('fecha_pago', ''))
-        if deuda.tipo == 'dinero' and deuda.calc_abonado <= 0:
-            try:
-                monto = Decimal(str(request.POST.get('monto', '0')))
+        try:
+            motivo_post = (request.POST.get('motivo') or '').strip()
+            fecha_pago = _parse_fecha_pago(request.POST.get('fecha_pago', ''))
+            cambio = {}
+            producto_nuevo = None
+            base_nueva = Decimal('0')
+
+            if deuda.tipo == 'producto':
+                pid = request.POST.get('producto')
+                if not pid:
+                    raise ValueError('Seleccione el producto.')
+                try:
+                    producto_nuevo = Producto.objects.get(pk=pid, activo=True)
+                except (Producto.DoesNotExist, ValueError, TypeError):
+                    raise ValueError('Producto no válido.')
+                cantidad = Decimal(str(request.POST.get('cantidad') or '0'))
+                if cantidad <= 0:
+                    raise ValueError('La cantidad debe ser mayor a 0.')
+                if (not producto_nuevo.permite_decimal
+                        and cantidad != cantidad.to_integral_value()):
+                    raise ValueError(
+                        f'{producto_nuevo.nombre} solo admite unidades enteras.')
+
+                pres = None
+                pres_id = request.POST.get('presentacion')
+                if pres_id:
+                    try:
+                        pres = PresentacionProducto.objects.get(
+                            pk=pres_id, producto=producto_nuevo, activo=True)
+                    except (PresentacionProducto.DoesNotExist,
+                            ValueError, TypeError):
+                        raise ValueError(
+                            'Presentación no válida para ese producto.')
+                if pres is None:
+                    pres = producto_nuevo.presentacion_default()
+                factor = pres.factor if pres else Decimal('1')
+                precio = pres.precio if pres else producto_nuevo.precio_venta
+                base_nueva = (cantidad * factor).quantize(Decimal('0.001'))
+                if base_nueva <= 0:
+                    raise ValueError('Cantidad inválida.')
+
+                # Si es el mismo producto, su stock vuelve al editar: se
+                # cuenta lo que se devuelve para no rechazar una cantidad
+                # que sí cabe una vez liberada la deuda anterior.
+                disponible = producto_nuevo.stock
+                if deuda.producto_id == producto_nuevo.pk:
+                    disponible += Decimal(deuda.cantidad_base or 0)
+                if base_nueva > disponible:
+                    raise ValueError(
+                        f'Stock insuficiente de {producto_nuevo.nombre}. '
+                        f'Disponible: {("%g" % float(disponible))} '
+                        f'{producto_nuevo.unidad_medida}')
+
+                monto = (precio * cantidad).quantize(Decimal('0.01'))
+                auto_viejo = ''
+                if deuda.producto_id and deuda.producto:
+                    auto_viejo = _motivo_auto_deuda(
+                        deuda.cantidad, deuda.presentacion, deuda.producto)
+                extra = motivo_post
+                if (auto_viejo and motivo_post == (deuda.motivo or '')
+                        and (deuda.motivo or '').startswith(auto_viejo)):
+                    extra = (deuda.motivo or '')[len(auto_viejo):].strip(' -')
+                auto_nuevo = _motivo_auto_deuda(cantidad, pres, producto_nuevo)
+                motivo_final = f'{auto_nuevo} - {extra}' if extra else auto_nuevo
+                cambio.update({
+                    'producto': producto_nuevo,
+                    'presentacion': pres,
+                    'cantidad': cantidad,
+                    'cantidad_base': base_nueva,
+                    'precio_unitario': precio,
+                    'monto': monto,
+                    'motivo': motivo_final,
+                })
+            else:
+                monto = Decimal(str(request.POST.get('monto') or '0'))
                 if monto <= 0:
                     raise ValueError('El monto debe ser mayor a 0.')
-                deuda.monto = monto
-            except (ValueError, ArithmeticError) as e:
-                messages.error(request, str(e))
-                return redirect('core:deuda_editar', pk=pk)
-        deuda.save()
-        messages.success(request, 'Deuda actualizada.')
-        return redirect('core:deudor_detalle', pk=deuda.deudor.pk)
+                cambio.update({'monto': monto, 'motivo': motivo_post})
+
+            with transaction.atomic():
+                if deuda.tipo == 'producto':
+                    producto_viejo = deuda.producto
+                    base_vieja = Decimal(deuda.cantidad_base or 0)
+                    if base_vieja > 0 and producto_viejo:
+                        _registrar_movimiento(
+                            producto_viejo, 'devolucion', base_vieja,
+                            request.user, deuda.pk,
+                            f'Deuda #{deuda.numero_deuda} editada - '
+                            'stock devuelto')
+                        # Si es el mismo producto, refresca antes de volver a
+                        # descontar para no sobreescribir el stock devuelto.
+                        if (producto_nuevo
+                                and producto_nuevo.pk == producto_viejo.pk):
+                            producto_nuevo.refresh_from_db()
+                    if base_nueva > 0:
+                        _registrar_movimiento(
+                            producto_nuevo, 'deuda', base_nueva,
+                            request.user, deuda.pk,
+                            f'Deuda #{deuda.numero_deuda} editada - '
+                            'nueva cantidad')
+                for campo, valor in cambio.items():
+                    setattr(deuda, campo, valor)
+                deuda.fecha_pago = fecha_pago
+                deuda.save()
+            if deuda.tipo == 'producto':
+                _sincronizar_inventario_dia(timezone.localdate())
+            messages.success(
+                request,
+                'Deuda actualizada.' + (' Stock ajustado.'
+                                        if deuda.tipo == 'producto' else ''))
+            return redirect('core:deudor_detalle', pk=deuda.deudor.pk)
+        except (ValueError, ArithmeticError) as e:
+            messages.error(request, str(e))
+            return redirect('core:deuda_editar', pk=pk)
 
     return render(request, 'core/deuda_form.html', {
         'titulo': 'Editar Deuda',
         'deuda': deuda,
+        'productos': productos,
     })
 
 
@@ -5541,15 +5663,34 @@ def abono_lista(request):
 
 @login_required
 def deuda_eliminar(request, pk):
-    deuda = get_object_or_404(Deuda.objects.select_related('deudor'), pk=pk)
+    """Cancela (elimina) una deuda devolviendo el stock que descontó."""
+    deuda = get_object_or_404(
+        Deuda.objects.select_related('deudor', 'producto'), pk=pk)
     if request.method == 'POST':
         if deuda.abonos.exists():
             messages.error(request, 'No se puede eliminar: la deuda tiene abonos registrados.')
             return redirect('core:deudor_detalle', pk=deuda.deudor.pk)
         numero = deuda.numero_deuda
         deudor_pk = deuda.deudor.pk
-        deuda.delete()
-        messages.success(request, f'Deuda {numero} eliminada.')
+        unidad = deuda.producto.unidad_medida if deuda.producto else ''
+        devuelto = Decimal('0')
+        with transaction.atomic():
+            if deuda.tipo == 'producto' and deuda.producto:
+                devuelto = Decimal(deuda.cantidad_base or 0)
+                if devuelto > 0:
+                    _registrar_movimiento(
+                        deuda.producto, 'devolucion', devuelto,
+                        request.user, deuda.pk,
+                        f'Deuda #{numero} cancelada - stock devuelto')
+            deuda.delete()
+        if devuelto > 0:
+            _sincronizar_inventario_dia(timezone.localdate())
+            messages.success(
+                request,
+                f'Deuda {numero} cancelada. Stock devuelto '
+                f'({("%g" % float(devuelto))} {unidad}).')
+        else:
+            messages.success(request, f'Deuda {numero} eliminada.')
         return redirect('core:deudor_detalle', pk=deudor_pk)
     return render(request, 'core/deuda_confirmar_eliminar.html', {'deuda': deuda})
 
