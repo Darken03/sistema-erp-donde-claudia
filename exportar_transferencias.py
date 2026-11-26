@@ -1,11 +1,11 @@
-"""Exporta a Excel las ventas cobradas por transferencia desde el 1 de octubre.
+"""Exporta a Excel las ventas cobradas por transferencia desde el 22 de septiembre.
 
 Regla importante: en las ventas MIXTAS solo se toma la pata de transferencia
 (`monto_transferencia`), nunca el total de la venta ni el efectivo.
 
 Uso (desde la carpeta del proyecto):
     python exportar_transferencias.py
-    python exportar_transferencias.py --desde 2026-10-01 --hasta 2026-11-26
+    python exportar_transferencias.py --desde 2026-09-22 --hasta 2026-11-26
     python exportar_transferencias.py --salida C:/ruta/mi_reporte.xlsx
 """
 
@@ -153,8 +153,8 @@ def generar_excel(desde, hasta, salida):
 def main():
     hoy = timezone.localdate()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--desde', default='2026-10-01',
-                        help='Fecha inicial (YYYY-MM-DD). Defecto: 2026-10-01')
+    parser.add_argument('--desde', default='2026-09-22',
+                        help='Fecha inicial (YYYY-MM-DD). Defecto: 2026-09-22')
     parser.add_argument('--hasta', default=hoy.isoformat(),
                         help='Fecha final inclusiva (YYYY-MM-DD). Defecto: hoy')
     parser.add_argument('--salida', default=None,
