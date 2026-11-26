@@ -1125,6 +1125,10 @@ def venta_lista(request):
     fecha_str = request.GET.get('fecha', '')
     empleado_filtro = request.GET.get('empleado', '')
     periodo = request.GET.get('periodo', 'dia')
+    # Tipo de operación: efectivo / transferencia / mixto.
+    metodo_filtro = request.GET.get('metodo', '')
+    if metodo_filtro not in ('efectivo', 'transferencia', 'mixto'):
+        metodo_filtro = ''
 
     hoy = timezone.localdate()
     
@@ -1165,6 +1169,11 @@ def venta_lista(request):
 
     if empleado_filtro:
         ventas = ventas.filter(cajero__username=empleado_filtro)
+
+    # Al filtrar por tipo de pago también cambian los totales del resumen,
+    # para que el importe mostrado corresponda a las ventas listadas.
+    if metodo_filtro:
+        ventas = ventas.filter(metodo_pago=metodo_filtro)
 
     resumen = ventas.aggregate(
         total=Sum('total') or 0,
@@ -1214,6 +1223,8 @@ def venta_lista(request):
         'titulo': titulo,
         'empleado_filtro': empleado_filtro,
         'empleados': empleados,
+        'metodo_filtro': metodo_filtro,
+        'metodos_pago': Venta.METODOS_PAGO,
         'resumen_total': resumen['total'] or 0,
         'resumen_cantidad': resumen['cantidad'] or 0,
         'resumen_efectivo': (resumen_dinero['efectivo'] or 0) - (resumen_dinero['cambio'] or 0),
@@ -3098,7 +3109,12 @@ def venta_impresion(request, fecha=None):
     
     periodo = request.GET.get('periodo', 'dia')
     empleado_filtro = request.GET.get('empleado', '')
-    
+    # El PDF respeta el mismo filtro por tipo de operación que la lista.
+    metodo_filtro = request.GET.get('metodo', '')
+    if metodo_filtro not in ('efectivo', 'transferencia', 'mixto'):
+        metodo_filtro = ''
+    metodo_display = dict(Venta.METODOS_PAGO).get(metodo_filtro, '')
+
     fecha_dt = timezone.make_aware(timezone.datetime.combine(fecha, timezone.datetime.min.time()))
     fd = fecha_dt
     fh = fecha_dt + timedelta(days=1)
@@ -3123,7 +3139,10 @@ def venta_impresion(request, fecha=None):
     
     if empleado_filtro:
         ventas = ventas.filter(cajero__username=empleado_filtro)
-    
+
+    if metodo_filtro:
+        ventas = ventas.filter(metodo_pago=metodo_filtro)
+
     # Consecuencial Task 5: el PDF respeta el filtro ?pos= de la lista.
     pos_imp, _puntos_imp = _resolver_pos_filtro(request)
     if pos_imp is not None:
@@ -3191,6 +3210,8 @@ def venta_impresion(request, fecha=None):
         'ranking': ranking,
         'periodo': periodo,
         'empleado_filtro': empleado_filtro,
+        'metodo_filtro': metodo_filtro,
+        'metodo_display': metodo_display,
         'punto_venta': pos_imp,
     }
     

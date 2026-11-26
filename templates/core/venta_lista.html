@@ -16,7 +16,7 @@
            class="btn btn-success">
             <i class="bi bi-plus-circle me-1"></i> Nueva venta de este día
         </a>
-        <a href="{% url 'core:venta_impresion' %}?fecha={{ fecha }}&empleado={{ empleado_filtro }}{% if pos_actual %}&pos={{ pos_actual.pk }}{% endif %}" 
+        <a href="{% url 'core:venta_impresion' %}?fecha={{ fecha }}&empleado={{ empleado_filtro }}&metodo={{ metodo_filtro }}{% if pos_actual %}&pos={{ pos_actual.pk }}{% endif %}" 
            class="btn btn-primary">
             <i class="bi bi-printer me-1"></i> Imprimir
         </a>
@@ -27,11 +27,11 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-{% if es_multi_pos %}3{% else %}4{% endif %}">
+            <div class="col-md-{% if es_multi_pos %}2{% else %}3{% endif %}">
                 <label class="form-label">Fecha</label>
                 <input type="date" name="fecha" class="form-control" value="{{ fecha }}">
             </div>
-            <div class="col-md-{% if es_multi_pos %}3{% else %}4{% endif %}">
+            <div class="col-md-{% if es_multi_pos %}2{% else %}3{% endif %}">
                 <label class="form-label">Empleado</label>
                 <select name="empleado" class="form-select">
                     <option value="">Todos</option>
@@ -40,8 +40,17 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="col-md-{% if es_multi_pos %}2{% else %}3{% endif %}">
+                <label class="form-label">Tipo de operación</label>
+                <select name="metodo" class="form-select">
+                    <option value="">Todas</option>
+                    {% for value, label in metodos_pago %}
+                        <option value="{{ value }}" {% if metodo_filtro == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             {% if es_multi_pos %}
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Punto de venta</label>
                 <select name="pos" class="form-select">
                     <option value="">Todos</option>
@@ -51,7 +60,7 @@
                 </select>
             </div>
             {% endif %}
-            <div class="col-md-{% if es_multi_pos %}3{% else %}4{% endif %}">
+            <div class="col-md-{% if es_multi_pos %}2{% else %}3{% endif %}">
                 <button type="submit" class="btn btn-outline-primary w-100">
                     <i class="bi bi-search me-1"></i> Filtrar
                 </button>
